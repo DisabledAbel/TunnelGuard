@@ -108,6 +108,13 @@ class TunnelGuardVpnService : VpnService() {
         config.addLog("VpnService destroyed")
     }
 
+    override fun onRevoke() {
+        config.addLog("VpnService revoked by the system (another VPN started).")
+        closeVpnInterface()
+        checkAndRunVpnRouting()
+        super.onRevoke()
+    }
+
     private fun startForegroundServiceNotification() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -227,21 +234,16 @@ class TunnelGuardVpnService : VpnService() {
             for (network in networks) {
                 val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
 
-                // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    if (caps.ownerUid == Process.myUid()) {
-                        continue // Skip networks owned by this app
-                    }
-                } else {
-                    // Pre-Q fallback: use link properties / interface name check
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
                     val linkProperties = connectivityManager.getLinkProperties(network)
-                    val interfaceName = linkProperties?.interfaceName ?: ""
-                    if (interfaceName.contains("tun") && vpnInterface != null) {
+                    val addresses = linkProperties?.linkAddresses ?: emptyList()
+                    val isOurOwnVpn = addresses.any { it.address.hostAddress == "10.0.0.1" }
+
+                    if (isOurOwnVpn) {
                         continue // Skip our own local interface
                     }
-                }
 
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                     return true
                 }
             }

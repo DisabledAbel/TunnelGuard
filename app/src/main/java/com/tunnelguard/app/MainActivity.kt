@@ -7,6 +7,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -24,6 +28,8 @@ import androidx.recyclerview.widget.RecyclerView
 class MainActivity : AppCompatActivity() {
 
     private lateinit var config: TunnelGuardConfig
+    private var connectivityManager: ConnectivityManager? = null
+    private var mainNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private lateinit var layoutMain: ConstraintLayout
     private lateinit var tvVpnStatus: TextView
     private lateinit var tvProtectionStatus: TextView
@@ -50,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         config = TunnelGuardConfig(this)
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
         layoutMain = findViewById(R.id.main_layout)
         tvVpnStatus = findViewById(R.id.tv_vpn_status)
@@ -98,12 +105,42 @@ class MainActivity : AppCompatActivity() {
                 IntentFilter("com.tunnelguard.app.STATE_CHANGED")
             )
         }
+
+        // Register network callback to detect VPN on/off in real-time even when service is not running
+        try {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            mainNetworkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    runOnUiThread { updateUI() }
+                }
+                override fun onLost(network: Network) {
+                    runOnUiThread { updateUI() }
+                }
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    runOnUiThread { updateUI() }
+                }
+            }
+            connectivityManager?.registerNetworkCallback(request, mainNetworkCallback!!)
+        } catch (e: Exception) {
+            config.addLog("Error registering activity network callback: ${e.message}")
+        }
+
         updateUI()
     }
 
     override fun onPause() {
         super.onPause()
         unregisterReceiver(receiver)
+        mainNetworkCallback?.let {
+            try {
+                connectivityManager?.unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+                // Ignored
+            }
+            mainNetworkCallback = null
+        }
     }
 
     private fun toggleProtection() {
@@ -157,7 +194,43 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    private fun detectRealVpnCapabilitiesInActivity(): Boolean {
+        try {
+            val networks = connectivityManager?.allNetworks ?: return false
+            for (network in networks) {
+                val caps = connectivityManager?.getNetworkCapabilities(network) ?: continue
+
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
+                    val linkProperties = connectivityManager?.getLinkProperties(network)
+                    val addresses = linkProperties?.linkAddresses ?: emptyList()
+                    val isOurOwnVpn = addresses.any { it.address.hostAddress == "10.0.0.1" }
+
+                    if (isOurOwnVpn) {
+                        continue // Skip our own local interface
+                    }
+
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            config.addLog("Error detecting active VPN capabilities in Activity: ${e.message}")
+        }
+        return false
+    }
+
     private fun updateUI() {
+        // If the service is not running, check and update the real VPN state in config so the UI is accurate
+        if (!TunnelGuardVpnService.isServiceRunning) {
+            val isUpstreamVpnConnected = detectRealVpnCapabilitiesInActivity()
+            val currentVpnState = if (isUpstreamVpnConnected) {
+                VPNState.CONNECTED
+            } else {
+                VPNState.DISCONNECTED
+            }
+            config.setVPNState(currentVpnState)
+        }
+
         // Fetch current states
         val vpnState = config.getVPNState()
         val protectionState = config.getProtectionState()
