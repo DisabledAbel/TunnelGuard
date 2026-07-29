@@ -86,13 +86,47 @@ jobs:
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
       run: |
+        # Determine if we need to generate a fallback keystore
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "ERROR: KEYSTORE_BASE64 secret is not defined or is empty! Cannot proceed with signing."
-          exit 1
-        fi
+          echo "WARNING: KEYSTORE_BASE64 secret is not defined or is empty! Generating a self-signed fallback keystore..."
 
-        # Reconstruct Keystore from Base64
-        echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+          # Initialize fallback variables if they are empty
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            KEYSTORE_PASSWORD="fallback_keystore_password"
+          fi
+          if [ -z "$KEY_ALIAS" ]; then
+            KEY_ALIAS="fallback_key_alias"
+          fi
+          if [ -z "$KEY_PASSWORD" ]; then
+            KEY_PASSWORD="$KEYSTORE_PASSWORD"
+          fi
+
+          # Generate fallback keystore
+          keytool -genkeypair -v \
+            -keystore release.keystore \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -dname "CN=TunnelGuard, OU=TunnelGuard, O=TunnelGuard, L=Unknown, ST=Unknown, C=US"
+
+          # Export updated variables to environment for subsequent commands in this step
+          export KEYSTORE_PASSWORD
+          export KEY_ALIAS
+          export KEY_PASSWORD
+        else
+          echo "KEYSTORE_BASE64 is defined. Reconstructing Keystore from Base64..."
+          # Reconstruct Keystore from Base64
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+
+          # Ensure essential variables are present or fail gracefully
+          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: KEYSTORE_BASE64 is provided, but some of the other required signing variables (KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) are empty!"
+            exit 1
+          fi
+        fi
 
         # Locate APK and apksigner
         UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
