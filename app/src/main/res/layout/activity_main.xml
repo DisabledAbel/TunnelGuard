@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://tools.android.com/tools"
+    android:id="@+id/main_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="32dp">
+
+    <!-- Header Title -->
+    <TextView
+        android:id="@+id/title_tunnel_guard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="TunnelGuard"
+        android:textColor="@color/text_primary"
+        android:textSize="36sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Left side: Statuses & Action Buttons -->
+    <LinearLayout
+        android:id="@+id/status_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="24dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/guideline"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/title_tunnel_guard">
+
+        <!-- VPN Status Indicator -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VPN"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_vpn_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="● DISCONNECTED"
+            android:textColor="@color/status_disconnected"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <!-- Protection Status Indicator -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Protection"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_protection_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="● INACTIVE"
+            android:textColor="@color/status_inactive"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <!-- App count info -->
+        <TextView
+            android:id="@+id/tv_protected_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Protected Apps: 0"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <!-- Buttons section with focus styles -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btn_toggle_protection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusDown="@+id/btn_manage_apps"
+                android:padding="12dp"
+                android:text="Start Protection"
+                android:textColor="@color/text_primary" />
+
+            <Button
+                android:id="@+id/btn_manage_apps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_toggle_protection"
+                android:nextFocusDown="@+id/btn_settings"
+                android:padding="12dp"
+                android:text="Manage Apps"
+                android:textColor="@color/text_primary" />
+
+            <Button
+                android:id="@+id/btn_settings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_manage_apps"
+                android:padding="12dp"
+                android:text="Settings"
+                android:textColor="@color/text_primary" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Vertical Guideline separating Left side and Right side -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.5" />
+
+    <!-- Right side: List of protected apps showing active status -->
+    <LinearLayout
+        android:id="@+id/right_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="24dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/guideline"
+        app:layout_constraintTop_toBottomOf="@+id/title_tunnel_guard">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="App Protection Status"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_home_protected_apps"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="12dp"
+            android:focusable="false"
+            tools:listitem="@layout/item_home_app_status" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

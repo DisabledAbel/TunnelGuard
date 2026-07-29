@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">TunnelGuard</string>
+    <string name="title_home">TunnelGuard</string>
+    <string name="vpn_label">VPN Status</string>
+    <string name="protection_label">Protection Status</string>
+    <string name="protected_apps_label">Protected Apps</string>
+    <string name="action_start_protection">Start Protection</string>
+    <string name="action_stop_protection">Stop Protection</string>
+    <string name="action_manage_apps">Manage Protected Apps</string>
+    <string name="action_settings">Settings</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">TunnelGuard Settings</string>
+    <string name="pref_startup_title">Start on boot</string>
+    <string name="pref_startup_summary">Automatically enable protection when device boots</string>
+    <string name="pref_mock_vpn_title">Simulate VPN state changes</string>
+    <string name="pref_mock_vpn_summary">Use for testing/demonstration. Simulates when upstream VPN goes down</string>
+    <string name="pref_status_checking_title">VPN status checking interval</string>
+    <string name="pref_logging_title">Enable detailed debug logging</string>
+    <string name="pref_about_title">About TunnelGuard</string>
+    <string name="pref_about_summary">TunnelGuard v1.0.0. A D-pad optimized, fail-closed VPN protector for Android TV.</string>
+</resources>
