@@ -85,8 +85,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // SDK 34 compatibility: specify RECEIVER_NOT_EXPORTED flags dynamically
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        // SDK 33 compatibility: specify RECEIVER_NOT_EXPORTED flags dynamically on Tiramisu and above
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(
                 receiver,
                 IntentFilter("com.tunnelguard.app.STATE_CHANGED"),

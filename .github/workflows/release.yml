@@ -6,7 +6,7 @@ on:
       release_name:
         description: 'Name of the release (e.g., v1.0.0)'
         required: true
-        default: 'v1.0.0'
+        default: '1.0.0'
       release_description:
         description: 'Detailed description / release notes'
         required: true
@@ -22,6 +22,8 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -32,6 +34,16 @@ jobs:
 
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
+
+    - name: Validate Release Name Input
+      env:
+        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+      run: |
+        if [[ ! "$RELEASE_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ && ! "$RELEASE_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+          echo "ERROR: Invalid version tag format: $RELEASE_NAME. Must be a valid semver tag (e.g., 1.0.0 or v1.0.0)."
+          exit 1
+        fi
+        echo "Release version is valid: $RELEASE_NAME"
 
     - name: Run Release Unit Tests
       run: ./gradlew testReleaseUnitTest
@@ -45,6 +57,7 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        RELEASE_NAME: ${{ github.event.inputs.release_name }}
       run: |
         if [ -z "$KEYSTORE_BASE64" ]; then
           echo "ERROR: KEYSTORE_BASE64 secret is not defined or is empty! Cannot proceed with signing."
@@ -64,24 +77,27 @@ jobs:
         # Align the APK before signing
         $ANDROID_HOME/build-tools/34.0.0/zipalign -v 4 "$UNSIGNED_APK" TunnelGuard-release-aligned.apk
 
-        # Sign APK with apksigner
+        # Clean any potential leading 'v' for standard release name variable usage
+        CLEAN_VERSION_NAME=$(echo "$RELEASE_NAME" | sed 's/^v//')
+
+        # Sign APK with apksigner (no extra literal 'v' before version)
         $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
           --ks release.keystore \
           --ks-key-alias "$KEY_ALIAS" \
           --ks-pass pass:"$KEYSTORE_PASSWORD" \
           --key-pass pass:"$KEY_PASSWORD" \
-          --out TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk \
+          --out "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" \
           TunnelGuard-release-aligned.apk
 
         # Verify Signature
-        $ANDROID_HOME/build-tools/34.0.0/apksigner verify -v TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk
+        $ANDROID_HOME/build-tools/34.0.0/apksigner verify -v "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk"
 
         # Generate Checksums
-        sha256sum TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk > TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk.sha256
+        sha256sum "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" > "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk.sha256"
 
         # Write build metadata
         echo "Build Metadata" > metadata.txt
-        echo "Release Version: ${{ github.event.inputs.release_name }}" >> metadata.txt
+        echo "Release Version: ${CLEAN_VERSION_NAME}" >> metadata.txt
         echo "Commit SHA: ${{ github.sha }}" >> metadata.txt
         echo "Build Time: $(date -u)" >> metadata.txt
 
@@ -93,10 +109,15 @@ jobs:
     - name: Create GitHub Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        RELEASE_DESCRIPTION: ${{ github.event.inputs.release_description }}
       run: |
-        gh release create "${{ github.event.inputs.release_name }}" \
-          --title "${{ github.event.inputs.release_name }}" \
-          --notes "${{ github.event.inputs.release_description }}" \
-          TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk \
-          TunnelGuard-v${{ github.event.inputs.release_name }}-release.apk.sha256 \
+        CLEAN_VERSION_NAME=$(echo "$RELEASE_NAME" | sed 's/^v//')
+
+        # Use quoted shell variables
+        gh release create "v${CLEAN_VERSION_NAME}" \
+          --title "v${CLEAN_VERSION_NAME}" \
+          --notes "$RELEASE_DESCRIPTION" \
+          "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" \
+          "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk.sha256" \
           metadata.txt
