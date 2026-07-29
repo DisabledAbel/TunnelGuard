@@ -15,8 +15,12 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppsActivity : AppCompatActivity() {
 
@@ -65,50 +69,58 @@ class AppsActivity : AppCompatActivity() {
     }
 
     private fun loadInstalledApps() {
-        val pm = packageManager
-        val items = mutableListOf<AppItem>()
+        // Offload Package Manager querying & icon loading to the IO dispatcher
+        lifecycleScope.launch(Dispatchers.Main) {
+            val apps = withContext(Dispatchers.IO) {
+                val pm = packageManager
+                val items = mutableListOf<AppItem>()
 
-        // Query Leanback launcher apps (TV)
-        val tvIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
-        }
-        val tvApps = pm.queryIntentActivities(tvIntent, 0)
+                // Query Leanback launcher apps (TV)
+                val tvIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                }
+                val tvApps = pm.queryIntentActivities(tvIntent, 0)
 
-        // Query standard mobile launcher apps as fallback
-        val standardIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        val standardApps = pm.queryIntentActivities(standardIntent, 0)
+                // Query standard mobile launcher apps as fallback
+                val standardIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                val standardApps = pm.queryIntentActivities(standardIntent, 0)
 
-        val processedPackages = mutableSetOf<String>()
+                val processedPackages = mutableSetOf<String>()
 
-        // 1. Process Leanback Launcher Apps
-        for (resolveInfo in tvApps) {
-            val pkg = resolveInfo.activityInfo.packageName
-            if (!processedPackages.contains(pkg)) {
-                val name = resolveInfo.loadLabel(pm).toString()
-                val icon = resolveInfo.loadIcon(pm)
-                val isProtected = config.isAppProtected(pkg)
-                items.add(AppItem(name, pkg, icon, isProtected))
-                processedPackages.add(pkg)
+                // 1. Process Leanback Launcher Apps
+                for (resolveInfo in tvApps) {
+                    val pkg = resolveInfo.activityInfo.packageName
+                    if (!processedPackages.contains(pkg)) {
+                        val name = resolveInfo.loadLabel(pm).toString()
+                        val icon = resolveInfo.loadIcon(pm)
+                        val isProtected = config.isAppProtected(pkg)
+                        items.add(AppItem(name, pkg, icon, isProtected))
+                        processedPackages.add(pkg)
+                    }
+                }
+
+                // 2. Process Standard Launcher Apps
+                for (resolveInfo in standardApps) {
+                    val pkg = resolveInfo.activityInfo.packageName
+                    if (!processedPackages.contains(pkg)) {
+                        val name = resolveInfo.loadLabel(pm).toString()
+                        val icon = resolveInfo.loadIcon(pm)
+                        val isProtected = config.isAppProtected(pkg)
+                        items.add(AppItem(name, pkg, icon, isProtected))
+                        processedPackages.add(pkg)
+                    }
+                }
+
+                // Sort alphabetically
+                items.sortedBy { it.name.lowercase() }
             }
-        }
 
-        // 2. Process Standard Launcher Apps
-        for (resolveInfo in standardApps) {
-            val pkg = resolveInfo.activityInfo.packageName
-            if (!processedPackages.contains(pkg)) {
-                val name = resolveInfo.loadLabel(pm).toString()
-                val icon = resolveInfo.loadIcon(pm)
-                val isProtected = config.isAppProtected(pkg)
-                items.add(AppItem(name, pkg, icon, isProtected))
-                processedPackages.add(pkg)
-            }
+            // Return to Main thread to update state and update the adapter UI
+            allAppsList = apps
+            filterApps(etSearchApps.text.toString())
         }
-
-        // Sort alphabetically
-        allAppsList = items.sortedBy { it.name.lowercase() }
-        filterApps(etSearchApps.text.toString())
     }
 
     private fun filterApps(query: String) {

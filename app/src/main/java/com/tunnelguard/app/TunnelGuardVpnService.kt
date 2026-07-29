@@ -12,9 +12,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import java.io.IOException
 
@@ -23,7 +22,9 @@ class TunnelGuardVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private lateinit var config: TunnelGuardConfig
     private lateinit var connectivityManager: ConnectivityManager
-    private val handler = Handler(Looper.getMainLooper())
+
+    // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
+    private var isCallbackRegistered = false
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -73,14 +74,18 @@ class TunnelGuardVpnService : VpnService() {
         // Default or ACTION_START or ACTION_UPDATE: Establish/Update VPN interface
         startForegroundServiceNotification()
 
-        // Listen to connectivity changes to dynamic fail-closed blocking if not simulated
-        try {
-            val request = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-            connectivityManager.registerNetworkCallback(request, networkCallback)
-        } catch (e: Exception) {
-            config.addLog("Error registering network callback: ${e.message}")
+        // Listen to connectivity changes for dynamic fail-closed blocking only if NOT already registered
+        if (!isCallbackRegistered) {
+            try {
+                val request = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                connectivityManager.registerNetworkCallback(request, networkCallback)
+                isCallbackRegistered = true
+                config.addLog("Network callback registered successfully.")
+            } catch (e: Exception) {
+                config.addLog("Error registering network callback: ${e.message}")
+            }
         }
 
         checkAndRunVpnRouting()
@@ -91,10 +96,13 @@ class TunnelGuardVpnService : VpnService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        try {
-            connectivityManager.unregisterNetworkCallback(networkCallback)
-        } catch (e: Exception) {
-            // Ignored
+        if (isCallbackRegistered) {
+            try {
+                connectivityManager.unregisterNetworkCallback(networkCallback)
+                isCallbackRegistered = false
+            } catch (e: Exception) {
+                // Ignored
+            }
         }
         stopVpn()
         config.addLog("VpnService destroyed")
@@ -217,20 +225,23 @@ class TunnelGuardVpnService : VpnService() {
         try {
             val networks = connectivityManager.allNetworks
             for (network in networks) {
-                // Ignore ourselves when checking for other active VPNs to prevent self-detection feedback loops
-                val linkProperties = connectivityManager.getLinkProperties(network)
-                val interfaceName = linkProperties?.interfaceName ?: ""
-                if (interfaceName.contains("tun") && vpnInterface != null) {
-                    // This could be our own local tunnel, let's be careful
+                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+
+                // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (caps.ownerUid == Process.myUid()) {
+                        continue // Skip networks owned by this app
+                    }
+                } else {
+                    // Pre-Q fallback: use link properties / interface name check
+                    val linkProperties = connectivityManager.getLinkProperties(network)
+                    val interfaceName = linkProperties?.interfaceName ?: ""
+                    if (interfaceName.contains("tun") && vpnInterface != null) {
+                        continue // Skip our own local interface
+                    }
                 }
 
-                val caps = connectivityManager.getNetworkCapabilities(network)
-                if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    // Check if this VPN network is actually separate from ours
-                    if (vpnInterface != null) {
-                        // If we have a local interface, verify it's not the only VPN active
-                        // A simple heuristic or checking link properties can verify this.
-                    }
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                     return true
                 }
             }
@@ -251,7 +262,11 @@ class TunnelGuardVpnService : VpnService() {
 
     private fun stopVpn() {
         closeVpnInterface()
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            stopForeground(true)
+        }
         stopSelf()
     }
 }

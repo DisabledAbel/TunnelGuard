@@ -24,7 +24,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
    * If TunnelGuard's protection is running, starting an external VPN app will instantly terminate TunnelGuard.
    * **TunnelGuard does NOT fake or spoof third-party VPN control.** Instead, TunnelGuard implements a **Local Loopback Fail-Closed Firewall**.
 2. **How TunnelGuard's Fail-Closed Protection Works:**
-   * **When the Upstream VPN is Active (or Simulated Connected):** TunnelGuard stays out of the way (`closeVpnInterface()`). This allows your protected apps to use the standard network path (e.g. routed through your physical router's VPN, or simulated/real gateways).
+   * **When the Upstream VPN is Active (or Simulated Connected):** TunnelGuard stays out of the way (`closeVpnInterface()`). This allows your protected apps to use the standard network path (e.g. routed through simulated/real gateways).
    * **When the Upstream VPN fails / disconnects:** TunnelGuard instantly activates its local `VpnService` interface. Using Android's official `addAllowedApplication(packageName)` API, Android routes all outgoing traffic of your selected (protected) apps *exclusively* into TunnelGuard's local TUN interface. Since TunnelGuard acts as a local packet sink (blackhole) and **does not forward packets**, all network traffic from the protected apps is instantly dropped (fail-closed block).
    * This design achieves 100% reliable, system-level, non-root per-app internet blocking.
 
@@ -133,7 +133,7 @@ The workflow will:
 
 ## Known Limitations & Security Considerations
 
-1. **System-level restriction:** Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same time as a standard on-device VPN app like Proton VPN. It is designed to act as the firewall wrapper itself, or be used in environments where the VPN is configured upstream (e.g., on a router, or simulated via DNS check tools).
+1. **System-level restriction:** Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same time as a standard on-device VPN app like Proton VPN. It is designed to act as the firewall wrapper itself, or be used in environments where the VPN is configured or simulated via state simulation tools.
 2. **System Apps Bypass:** Certain system-level apps or Google Play Services may bypass VPN interfaces if specifically exempted by Android OS configurations.
 3. **IPv6 Leaks:** In IPv6-enabled networks, ensure that your VPN configuration handles IPv6 explicitly. TunnelGuard intercepts IPv4 by default; future updates will add custom IPv6 routing rules.
 
