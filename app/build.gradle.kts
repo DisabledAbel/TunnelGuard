@@ -7,12 +7,25 @@ android {
     namespace = "com.tunnelguard.app"
     compileSdk = 34
 
+    // Retrieve version info dynamically from project properties if passed (e.g. from CI/CD Release pipeline)
+    val verName = if (project.hasProperty("versionName")) {
+        project.property("versionName") as String
+    } else {
+        "1.0.0"
+    }
+
+    val verCode = if (project.hasProperty("versionCode")) {
+        (project.property("versionCode") as String).toInt()
+    } else {
+        1
+    }
+
     defaultConfig {
         applicationId = "com.tunnelguard.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = verCode
+        versionName = verName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
