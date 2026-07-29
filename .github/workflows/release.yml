@@ -35,7 +35,7 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
-    - name: Validate Release Name Input
+    - name: Validate Release Name Input and Calculate Version Metadata
       env:
         RELEASE_NAME: ${{ github.event.inputs.release_name }}
       run: |
@@ -43,13 +43,40 @@ jobs:
           echo "ERROR: Invalid version tag format: $RELEASE_NAME. Must be a valid semver tag (e.g., 1.0.0 or v1.0.0)."
           exit 1
         fi
-        echo "Release version is valid: $RELEASE_NAME"
+
+        # Clean leading 'v'
+        CLEAN_VERSION_NAME=$(echo "$RELEASE_NAME" | sed 's/^v//')
+
+        # Extract components for version code calculation
+        IFS='.' read -r -a parts <<< "$CLEAN_VERSION_NAME"
+        major="${parts[0]}"
+        minor="${parts[1]}"
+        patch="${parts[2]}"
+
+        # Remove any pre-release suffixes from patch component
+        patch_num=$(echo "$patch" | cut -d'-' -f1)
+
+        # Build-safe version code calculation
+        VERSION_CODE=$((major * 10000 + minor * 100 + patch_num))
+
+        echo "Valid SemVer version name: $CLEAN_VERSION_NAME"
+        echo "Calculated version code: $VERSION_CODE"
+
+        # Persist versions into GitHub environment
+        echo "CLEAN_VERSION_NAME=$CLEAN_VERSION_NAME" >> "$GITHUB_ENV"
+        echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
 
     - name: Run Release Unit Tests
-      run: ./gradlew testReleaseUnitTest
+      env:
+        CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
+        VERSION_CODE: ${{ env.VERSION_CODE }}
+      run: ./gradlew testReleaseUnitTest -PversionName="$CLEAN_VERSION_NAME" -PversionCode="$VERSION_CODE"
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease
+      env:
+        CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
+        VERSION_CODE: ${{ env.VERSION_CODE }}
+      run: ./gradlew assembleRelease -PversionName="$CLEAN_VERSION_NAME" -PversionCode="$VERSION_CODE"
 
     - name: Set up Android SDK and Sign Release APK
       env:
@@ -57,7 +84,7 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
       run: |
         if [ -z "$KEYSTORE_BASE64" ]; then
           echo "ERROR: KEYSTORE_BASE64 secret is not defined or is empty! Cannot proceed with signing."
@@ -76,9 +103,6 @@ jobs:
 
         # Align the APK before signing
         $ANDROID_HOME/build-tools/34.0.0/zipalign -v 4 "$UNSIGNED_APK" TunnelGuard-release-aligned.apk
-
-        # Clean any potential leading 'v' for standard release name variable usage
-        CLEAN_VERSION_NAME=$(echo "$RELEASE_NAME" | sed 's/^v//')
 
         # Sign APK with apksigner (no extra literal 'v' before version)
         $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
@@ -109,11 +133,9 @@ jobs:
     - name: Create GitHub Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
         RELEASE_DESCRIPTION: ${{ github.event.inputs.release_description }}
       run: |
-        CLEAN_VERSION_NAME=$(echo "$RELEASE_NAME" | sed 's/^v//')
-
         # Use quoted shell variables
         gh release create "v${CLEAN_VERSION_NAME}" \
           --title "v${CLEAN_VERSION_NAME}" \
