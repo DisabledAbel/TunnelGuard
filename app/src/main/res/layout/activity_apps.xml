@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://tools.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="32dp">
+
+    <TextView
+        android:id="@+id/tv_apps_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Protected Apps Management"
+        android:textColor="@color/text_primary"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Search/Filter Input -->
+    <EditText
+        android:id="@+id/et_search_apps"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/tv_input_selector"
+        android:hint="Search application..."
+        android:textColorHint="#888888"
+        android:textColor="@color/text_primary"
+        android:padding="12dp"
+        android:focusable="true"
+        android:singleLine="true"
+        android:imeOptions="actionSearch"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tv_apps_header" />
+
+    <!-- Application List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_apps_list"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:focusable="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/et_search_apps"
+        tools:listitem="@layout/item_app_toggle" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

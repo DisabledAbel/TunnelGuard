@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#1A1A2E</color>
+    <color name="colorPrimaryDark">#16213E</color>
+    <color name="colorAccent">#E94560</color>
+    <color name="background_dark">#121212</color>
+    <color name="surface_dark">#1E1E1E</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#8E8E8E</color>
+
+    <!-- Status colors -->
+    <color name="status_connected">#2ECC71</color>
+    <color name="status_disconnected">#E74C3C</color>
+    <color name="status_connecting">#F1C40F</color>
+    <color name="status_blocking">#E74C3C</color>
+    <color name="status_active">#2ECC71</color>
+    <color name="status_inactive">#95A5A6</color>
+
+    <!-- D-pad navigation colors -->
+    <color name="focus_highlight">#00ADB5</color>
+</resources>
