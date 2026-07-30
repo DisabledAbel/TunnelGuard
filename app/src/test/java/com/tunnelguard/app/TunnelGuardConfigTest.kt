@@ -153,13 +153,21 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testAppVersionName() {
-        // Mock packageName and getString when default is null
+        // Mock packageName, packageManager, and getPackageInfo successfully returning PackageInfo with versionName "1.0.0"
         whenever(mockContext.packageName).thenReturn("com.tunnelguard.app")
+
+        val mockPackageManager = mock(android.content.pm.PackageManager::class.java)
+        val mockPackageInfo = android.content.pm.PackageInfo().apply {
+            versionName = "1.0.0"
+        }
+        whenever(mockContext.packageManager).thenReturn(mockPackageManager)
+        whenever(mockPackageManager.getPackageInfo(eq("com.tunnelguard.app"), eq(0))).thenReturn(mockPackageInfo)
+
         whenever(mockPrefs.getString(eq("override_version_name"), eq(null))).thenAnswer {
             prefsStore["override_version_name"] as? String
         }
 
-        // Initially no override exists, so it should return the fallback / default version
+        // Initially no override exists, so it should return the fallback / default version from PackageManager lookup
         assertEquals("1.0.0", config.getAppVersionName())
 
         // Set an override version name

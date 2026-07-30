@@ -206,6 +206,7 @@ class TunnelGuardConfig(private val context: Context) {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             pInfo.versionName ?: "1.0.0"
         } catch (e: Exception) {
+            addLog("Failed package-info lookup: ${e.message}")
             "1.0.0"
         }
     }
