@@ -107,23 +107,13 @@ class SettingsActivity : AppCompatActivity() {
                 cbPrefMonitor.isChecked = newChecked
                 triggerVpnServiceUpdate()
             } else {
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Permission Required")
-                    .setMessage("To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.")
-                    .setPositiveButton("Settings") { dialog, _ ->
-                        dialog.dismiss()
-                        try {
-                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                        } catch (e: Exception) {
-                            config.addLog("Failed to launch ACTION_USAGE_ACCESS_SETTINGS: ${e.message}")
-                            // Fallback to general settings
-                            startActivity(Intent(Settings.ACTION_SETTINGS))
-                        }
-                    }
-                    .setNegativeButton("Cancel") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .show()
+                showPermissionRequiredDialog(
+                    "Permission Required",
+                    "To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.",
+                    Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
+                    Intent(Settings.ACTION_SETTINGS),
+                    "ACTION_USAGE_ACCESS_SETTINGS"
+                )
             }
         }
 
@@ -194,11 +184,41 @@ class SettingsActivity : AppCompatActivity() {
                 val label = pm.getApplicationLabel(appInfo).toString()
                 tvPrefVpnChoiceValue.text = "$label ($vpnPkg)"
             } catch (e: Exception) {
+                config.addLog("Error looking up VPN app of choice display label: ${e.message}")
                 tvPrefVpnChoiceValue.text = vpnPkg
             }
         } else {
             tvPrefVpnChoiceValue.text = "None (System Settings)"
         }
+    }
+
+    private fun showPermissionRequiredDialog(
+        title: String,
+        message: String,
+        primaryIntent: Intent,
+        fallbackIntent: Intent,
+        logErrorTag: String
+    ) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Settings") { dialog, _ ->
+                dialog.dismiss()
+                try {
+                    startActivity(primaryIntent)
+                } catch (e: Exception) {
+                    config.addLog("Failed to launch $logErrorTag: ${e.message}")
+                    try {
+                        startActivity(fallbackIntent)
+                    } catch (ex: Exception) {
+                        config.addLog("Failed to launch fallback settings: ${ex.message}")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun showVpnAppOfChoiceDialog() {
@@ -267,26 +287,15 @@ class SettingsActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!packageManager.canRequestPackageInstalls()) {
                 config.addLog("Install unknown apps permission is NOT granted.")
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Permission Required")
-                    .setMessage("To automatically download and install updates, TunnelGuard requires the 'Install unknown apps' permission.\n\nPlease enable 'Allow from this source' on the next screen, then try checking for updates again.")
-                    .setPositiveButton("Settings") { dialog, _ ->
-                        dialog.dismiss()
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                data = Uri.parse("package:$packageName")
-                            }
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            config.addLog("Failed to launch ACTION_MANAGE_UNKNOWN_APP_SOURCES: ${e.message}")
-                            // Fallback to general settings
-                            startActivity(Intent(Settings.ACTION_SETTINGS))
-                        }
-                    }
-                    .setNegativeButton("Cancel") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .show()
+                showPermissionRequiredDialog(
+                    "Permission Required",
+                    "To automatically download and install updates, TunnelGuard requires the 'Install unknown apps' permission.\n\nPlease enable 'Allow from this source' on the next screen, then try checking for updates again.",
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                    },
+                    Intent(Settings.ACTION_SETTINGS),
+                    "ACTION_MANAGE_UNKNOWN_APP_SOURCES"
+                )
                 return
             }
         }

@@ -57,6 +57,7 @@ class VpnWarningActivity : AppCompatActivity() {
             tvTargetAppName.text = pm.getApplicationLabel(appInfo).toString()
             ivTargetAppIcon.setImageDrawable(pm.getApplicationIcon(appInfo))
         } catch (e: Exception) {
+            config.addLog("Error loading target app details for $pkg: ${e.message}")
             tvTargetAppName.text = "Unknown Application"
             ivTargetAppIcon.setImageResource(android.R.drawable.sym_def_app_icon)
         }
@@ -68,6 +69,7 @@ class VpnWarningActivity : AppCompatActivity() {
                 val vpnAppInfo = pm.getApplicationInfo(vpnAppChoice, 0)
                 btnOpenVpn.text = "Open ${pm.getApplicationLabel(vpnAppInfo)}"
             } catch (e: Exception) {
+                config.addLog("Error loading VPN App of Choice details for $vpnAppChoice: ${e.message}")
                 btnOpenVpn.text = "Open VPN App ($vpnAppChoice)"
             }
         } else {
@@ -83,6 +85,18 @@ class VpnWarningActivity : AppCompatActivity() {
 
         btnCancelWarning.setOnClickListener {
             cancelCountdown()
+            targetPackage?.let { pkg ->
+                TunnelGuardVpnService.suppressPackage(pkg, 15000)
+            }
+            try {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(homeIntent)
+            } catch (e: Exception) {
+                config.addLog("Failed to navigate back to home screen: ${e.message}")
+            }
             finish()
         }
     }
@@ -138,6 +152,7 @@ class VpnWarningActivity : AppCompatActivity() {
                 val appLabel = pm.getApplicationLabel(pm.getApplicationInfo(choice, 0))
                 tvCountdownStatus.text = "Redirecting to $appLabel in $secondsLeft seconds..."
             } catch (e: Exception) {
+                config.addLog("Error loading countdown VPN app details: ${e.message}")
                 tvCountdownStatus.text = "Redirecting to VPN app in $secondsLeft seconds..."
             }
         } else {
@@ -184,7 +199,7 @@ class VpnWarningActivity : AppCompatActivity() {
         // Fallback to standard Android VPN settings
         try {
             config.addLog("Redirecting to Android system VPN settings.")
-            val intent = Intent("android.net.vpn.SETTINGS").apply {
+            val intent = Intent(android.provider.Settings.ACTION_VPN_SETTINGS).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             startActivity(intent)
