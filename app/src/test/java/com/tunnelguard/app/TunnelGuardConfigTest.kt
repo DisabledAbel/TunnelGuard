@@ -178,4 +178,9 @@ class TunnelGuardConfigTest {
         config.setAppVersionName("1.2.0")
         assertEquals("1.2.0", config.getAppVersionName())
     }
+
+    @Test
+    fun testTunnelAddressIsCorrect() {
+        assertEquals("10.0.0.1", TunnelGuardConfig.TUNNEL_ADDRESS)
+    }
 }
