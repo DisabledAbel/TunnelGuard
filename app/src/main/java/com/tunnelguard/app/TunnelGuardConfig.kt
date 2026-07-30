@@ -18,6 +18,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_LOGS = "debug_logs"
         private const val KEY_VPN_STATUS = "vpn_status" // To persist mocked/detected VPN state
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
+        private const val KEY_VERSION_NAME = "override_version_name"
 
         const val TUNNEL_ADDRESS = "172.31.255.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -191,5 +192,28 @@ class TunnelGuardConfig(private val context: Context) {
 
     fun clearLogs() {
         prefs.edit().remove(KEY_LOGS).apply()
+    }
+
+    /**
+     * Get the dynamic app version name. If no override exists, returns package manager's versionName.
+     */
+    fun getAppVersionName(): String {
+        val override = prefs.getString(KEY_VERSION_NAME, null)
+        if (override != null) {
+            return override
+        }
+        return try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+    }
+
+    /**
+     * Set/Override the dynamic app version name.
+     */
+    fun setAppVersionName(versionName: String) {
+        prefs.edit().putString(KEY_VERSION_NAME, versionName).apply()
     }
 }

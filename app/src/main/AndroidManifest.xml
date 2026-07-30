@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Declare Leanback support for Android TV/Google TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -63,6 +64,17 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- FileProvider for automatic update apk installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.tunnelguard.app.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
 
     </application>
 
