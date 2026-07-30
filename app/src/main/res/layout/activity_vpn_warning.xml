@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Card container in the center -->
+    <LinearLayout
+        android:layout_width="500dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/tv_item_selector"
+        android:clickable="true"
+        android:focusable="false"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:gravity="center_horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Error/Warning Icon -->
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@android:drawable/ic_dialog_alert"
+            app:tint="@color/status_disconnected"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Unprotected Connection Detected"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Description with App details -->
+        <TextView
+            android:id="@+id/tv_warning_desc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="You are opening a protected application, but your VPN is not connected. Internet access is currently blocked for this application."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Target app container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#15ffffff"
+            android:padding="12dp"
+            android:layout_marginBottom="24dp">
+
+            <ImageView
+                android:id="@+id/iv_target_app_icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="16dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_target_app_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="App Name"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_target_app_package"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="package.name"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Status/Auto-connect message -->
+        <TextView
+            android:id="@+id/tv_countdown_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Attempting to auto-connect VPN..."
+            android:textColor="@color/status_connecting"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Action Buttons -->
+        <Button
+            android:id="@+id/btn_open_vpn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tv_button_selector"
+            android:focusable="true"
+            android:nextFocusDown="@+id/btn_cancel_warning"
+            android:padding="12dp"
+            android:text="Open VPN App"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_cancel_warning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tv_button_selector"
+            android:focusable="true"
+            android:nextFocusUp="@+id/btn_open_vpn"
+            android:padding="12dp"
+            android:text="Go Back / Close"
+            android:textColor="@color/text_primary" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -232,4 +232,76 @@ class TunnelGuardConfigTest {
     fun testTunnelAddressIsCorrect() {
         assertEquals("10.0.0.1", TunnelGuardConfig.TUNNEL_ADDRESS)
     }
+
+    @Test
+    fun testAppMonitorPreferences() {
+        // Default should be false
+        assertFalse(config.isAppMonitorEnabled())
+
+        // Enable monitor
+        config.setAppMonitorEnabled(true)
+        assertTrue(config.isAppMonitorEnabled())
+
+        // Disable monitor
+        config.setAppMonitorEnabled(false)
+        assertFalse(config.isAppMonitorEnabled())
+    }
+
+    @Test
+    fun testVpnAppOfChoicePreference() {
+        // Default should be null
+        assertNull(config.getVpnAppOfChoice())
+
+        // Set VPN app of choice package name
+        config.setVpnAppOfChoice("com.protonvpn.android")
+        assertEquals("com.protonvpn.android", config.getVpnAppOfChoice())
+
+        // Clear VPN app of choice
+        config.setVpnAppOfChoice(null)
+        assertNull(config.getVpnAppOfChoice())
+    }
+
+    @Test
+    fun testUsageStatsPermissionCheck() {
+        val mockAppOpsManager = mock(android.app.AppOpsManager::class.java)
+        whenever(mockContext.getSystemService(eq(Context.APP_OPS_SERVICE))).thenReturn(mockAppOpsManager)
+        whenever(mockContext.packageName).thenReturn("com.tunnelguard.app")
+
+        val mockProcess = org.mockito.Mockito.mockStatic(android.os.Process::class.java)
+        try {
+            mockProcess.`when`<Int> { android.os.Process.myUid() }.thenReturn(10001)
+
+            // Mock allowed state
+            whenever(mockAppOpsManager.checkOpNoThrow(
+                eq(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS),
+                eq(10001),
+                eq("com.tunnelguard.app")
+            )).thenReturn(android.app.AppOpsManager.MODE_ALLOWED)
+
+            whenever(mockAppOpsManager.unsafeCheckOpNoThrow(
+                eq(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS),
+                eq(10001),
+                eq("com.tunnelguard.app")
+            )).thenReturn(android.app.AppOpsManager.MODE_ALLOWED)
+
+            assertTrue(config.hasUsageStatsPermission(mockContext))
+
+            // Mock ignored/denied state
+            whenever(mockAppOpsManager.checkOpNoThrow(
+                eq(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS),
+                eq(10001),
+                eq("com.tunnelguard.app")
+            )).thenReturn(android.app.AppOpsManager.MODE_IGNORED)
+
+            whenever(mockAppOpsManager.unsafeCheckOpNoThrow(
+                eq(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS),
+                eq(10001),
+                eq("com.tunnelguard.app")
+            )).thenReturn(android.app.AppOpsManager.MODE_IGNORED)
+
+            assertFalse(config.hasUsageStatsPermission(mockContext))
+        } finally {
+            mockProcess.close()
+        }
+    }
 }

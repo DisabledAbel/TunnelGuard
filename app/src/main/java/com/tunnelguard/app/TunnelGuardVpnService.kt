@@ -18,12 +18,21 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import androidx.core.app.NotificationCompat
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 
 class TunnelGuardVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private lateinit var config: TunnelGuardConfig
     private lateinit var connectivityManager: ConnectivityManager
+
+    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private var monitorJob: Job? = null
 
     // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
     private var isCallbackRegistered = false
@@ -75,6 +84,52 @@ class TunnelGuardVpnService : VpnService() {
         isServiceRunning = true
     }
 
+    private fun startMonitoring() {
+        if (monitorJob != null) return
+        monitorJob = serviceScope.launch {
+            var lastForegroundApp: String? = null
+            while (isActive) {
+                try {
+                    if (config.isAppMonitorEnabled() && config.hasUsageStatsPermission(this@TunnelGuardVpnService)) {
+                        val currentApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
+                        if (currentApp != null && currentApp != lastForegroundApp) {
+                            lastForegroundApp = currentApp
+
+                            // Check if the current app is a protected app
+                            if (config.isAppProtected(currentApp) && currentApp != packageName) {
+                                // Check if VPN is connected
+                                val isVpnOn = if (config.isSimulatedVpnEnabled()) {
+                                    val state = config.getVPNState()
+                                    state == VPNState.CONNECTED || state == VPNState.PROTECTED
+                                } else {
+                                    config.detectRealVpnCapabilities(connectivityManager)
+                                }
+
+                                if (!isVpnOn) {
+                                    config.addLog("Protected app opened without VPN: $currentApp. Triggering pop-up.")
+                                    // Launch warning activity
+                                    val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                        putExtra("target_package", currentApp)
+                                    }
+                                    startActivity(warningIntent)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    config.addLog("Error in app monitor loop: ${e.message}")
+                }
+                delay(1000) // Poll every 1 second
+            }
+        }
+    }
+
+    private fun stopMonitoring() {
+        monitorJob?.cancel()
+        monitorJob = null
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         config.addLog("VpnService received action: $action")
@@ -86,6 +141,8 @@ class TunnelGuardVpnService : VpnService() {
 
         // Default or ACTION_START or ACTION_UPDATE: Establish/Update VPN interface
         startForegroundServiceNotification()
+
+        startMonitoring()
 
         // Listen to connectivity changes for dynamic fail-closed blocking only if NOT already registered
         if (!isCallbackRegistered) {
@@ -124,6 +181,7 @@ class TunnelGuardVpnService : VpnService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        stopMonitoring()
         if (isCallbackRegistered) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback)
@@ -289,6 +347,7 @@ class TunnelGuardVpnService : VpnService() {
     }
 
     private fun stopVpn() {
+        stopMonitoring()
         closeVpnInterface()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)

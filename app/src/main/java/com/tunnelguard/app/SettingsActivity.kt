@@ -27,6 +27,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var layoutPrefSimulation: LinearLayout
     private lateinit var cbPrefSimulation: CheckBox
 
+    private lateinit var layoutPrefMonitor: LinearLayout
+    private lateinit var cbPrefMonitor: CheckBox
+
+    private lateinit var layoutPrefVpnChoice: LinearLayout
+    private lateinit var tvPrefVpnChoiceValue: TextView
+
     private lateinit var btnSimulateConnected: Button
     private lateinit var btnSimulateDisconnected: Button
     private lateinit var btnClearLogs: Button
@@ -53,6 +59,12 @@ class SettingsActivity : AppCompatActivity() {
         layoutPrefSimulation = findViewById(R.id.layout_pref_simulation)
         cbPrefSimulation = findViewById(R.id.cb_pref_simulation)
 
+        layoutPrefMonitor = findViewById(R.id.layout_pref_monitor)
+        cbPrefMonitor = findViewById(R.id.cb_pref_monitor)
+
+        layoutPrefVpnChoice = findViewById(R.id.layout_pref_vpn_choice)
+        tvPrefVpnChoiceValue = findViewById(R.id.tv_pref_vpn_choice_value)
+
         btnSimulateConnected = findViewById(R.id.btn_simulate_connected)
         btnSimulateDisconnected = findViewById(R.id.btn_simulate_disconnected)
         btnClearLogs = findViewById(R.id.btn_clear_logs)
@@ -64,9 +76,11 @@ class SettingsActivity : AppCompatActivity() {
         // Initialize state
         cbPrefBoot.isChecked = config.isStartOnBootEnabled()
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
+        cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
 
         // Update version string with the current stored version name
         updateVersionDisplay()
+        updateVpnAppOfChoiceDisplay()
 
         // Toggle behaviors
         layoutPrefBoot.setOnClickListener {
@@ -84,6 +98,37 @@ class SettingsActivity : AppCompatActivity() {
 
             // Notify VpnService of connectivity check methodology change
             triggerVpnServiceUpdate()
+        }
+
+        layoutPrefMonitor.setOnClickListener {
+            if (config.hasUsageStatsPermission(this)) {
+                val newChecked = !config.isAppMonitorEnabled()
+                config.setAppMonitorEnabled(newChecked)
+                cbPrefMonitor.isChecked = newChecked
+                triggerVpnServiceUpdate()
+            } else {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.")
+                    .setPositiveButton("Settings") { dialog, _ ->
+                        dialog.dismiss()
+                        try {
+                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        } catch (e: Exception) {
+                            config.addLog("Failed to launch ACTION_USAGE_ACCESS_SETTINGS: ${e.message}")
+                            // Fallback to general settings
+                            startActivity(Intent(Settings.ACTION_SETTINGS))
+                        }
+                    }
+                    .setNegativeButton("Cancel") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .show()
+            }
+        }
+
+        layoutPrefVpnChoice.setOnClickListener {
+            showVpnAppOfChoiceDialog()
         }
 
         btnSimulateConnected.setOnClickListener {
@@ -121,9 +166,95 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Check if usage stats permission was granted and update state
+        if (config.hasUsageStatsPermission(this)) {
+            cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
+        } else {
+            cbPrefMonitor.isChecked = false
+            if (config.isAppMonitorEnabled()) {
+                config.setAppMonitorEnabled(false)
+                triggerVpnServiceUpdate()
+            }
+        }
+    }
+
     private fun updateVersionDisplay() {
         val currentVersion = config.getAppVersionName()
         tvAboutVersion.text = "Version: $currentVersion\nDeveloper: Jules (TunnelGuard Team)\nDesigned for Android TV / Google TV."
+    }
+
+    private fun updateVpnAppOfChoiceDisplay() {
+        val vpnPkg = config.getVpnAppOfChoice()
+        if (vpnPkg != null) {
+            try {
+                val pm = packageManager
+                val appInfo = pm.getApplicationInfo(vpnPkg, 0)
+                val label = pm.getApplicationLabel(appInfo).toString()
+                tvPrefVpnChoiceValue.text = "$label ($vpnPkg)"
+            } catch (e: Exception) {
+                tvPrefVpnChoiceValue.text = vpnPkg
+            }
+        } else {
+            tvPrefVpnChoiceValue.text = "None (System Settings)"
+        }
+    }
+
+    private fun showVpnAppOfChoiceDialog() {
+        val pm = packageManager
+        val standardIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val launcherApps = pm.queryIntentActivities(standardIntent, 0)
+
+        val tvIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+        }
+        val tvLauncherApps = pm.queryIntentActivities(tvIntent, 0)
+
+        val appsMap = mutableMapOf<String, String>()
+
+        for (resolveInfo in launcherApps) {
+            val pkg = resolveInfo.activityInfo.packageName
+            if (pkg != packageName) {
+                val label = resolveInfo.loadLabel(pm).toString()
+                appsMap[pkg] = label
+            }
+        }
+        for (resolveInfo in tvLauncherApps) {
+            val pkg = resolveInfo.activityInfo.packageName
+            if (pkg != packageName) {
+                val label = resolveInfo.loadLabel(pm).toString()
+                appsMap[pkg] = label
+            }
+        }
+
+        val sortedList = appsMap.toList().sortedBy { it.second.lowercase() }
+
+        val options = mutableListOf<String>()
+        options.add("None (System Settings)")
+
+        sortedList.forEach {
+            options.add("${it.second} (${it.first})")
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Select VPN App of Choice")
+            .setItems(options.toTypedArray()) { dialog, which ->
+                if (which == 0) {
+                    config.setVpnAppOfChoice(null)
+                } else {
+                    val selected = sortedList[which - 1]
+                    config.setVpnAppOfChoice(selected.first)
+                }
+                updateVpnAppOfChoiceDisplay()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun checkForUpdatesFlow() {
