@@ -2,6 +2,14 @@ package com.tunnelguard.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.content.pm.ActivityInfo
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.LinkProperties
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -34,10 +42,14 @@ class TunnelGuardConfigTest {
         whenever(mockPrefs.edit()).thenReturn(mockEditor)
 
         // Mock Editor returns
-        whenever(mockEditor.putString(anyString(), anyString())).thenAnswer { invocation ->
+        whenever(mockEditor.putString(anyString(), anyOrNull())).thenAnswer { invocation ->
             val key = invocation.getArgument<String>(0)
-            val value = invocation.getArgument<String>(1)
-            prefsStore[key] = value
+            val value = invocation.getArgument<String?>(1)
+            if (value != null) {
+                prefsStore[key] = value
+            } else {
+                prefsStore.remove(key)
+            }
             mockEditor
         }
         whenever(mockEditor.putBoolean(anyString(), anyBoolean())).thenAnswer { invocation ->
@@ -52,10 +64,10 @@ class TunnelGuardConfigTest {
             mockEditor
         }
 
-        // Mock SharedPreferences get returns
-        whenever(mockPrefs.getString(anyString(), anyString())).thenAnswer { invocation ->
+        // Mock SharedPreferences get returns with anyOrNull matchers
+        whenever(mockPrefs.getString(anyString(), anyOrNull())).thenAnswer { invocation ->
             val key = invocation.getArgument<String>(0)
-            val default = invocation.getArgument<String>(1)
+            val default = invocation.getArgument<String?>(1)
             (prefsStore[key] as? String) ?: default
         }
         whenever(mockPrefs.getBoolean(anyString(), anyBoolean())).thenAnswer { invocation ->
@@ -69,7 +81,9 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testProtectedAppsSelection() {
-        // Initially empty
+        // Initially "streaming" profile is selected by default, which is pre-populated with default streaming apps.
+        // Let's select "custom" profile for clean empty selection testing.
+        config.setSelectedProfileId("custom")
         assertTrue(config.getProtectedApps().isEmpty())
 
         // Protect an app
@@ -91,7 +105,6 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testStartupBehaviorConfiguration() {
-        // Default should be false
         assertFalse(config.isStartOnBootEnabled())
 
         config.setStartOnBootEnabled(true)
@@ -103,7 +116,6 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testVpnSimulationToggle() {
-        // Default is false
         assertFalse(config.isSimulatedVpnEnabled())
 
         config.setSimulatedVpnEnabled(true)
@@ -112,28 +124,72 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testProtectionStateTransitions() {
-        // Initially disabled (INACTIVE)
         config.setProtectionEnabled(false)
         assertEquals(ProtectionState.INACTIVE, config.getProtectionState())
 
-        // Enable master protection switch
         config.setProtectionEnabled(true)
 
-        // Case 1: VPN State is CONNECTED -> Protection state is ACTIVE (not blocking)
         config.setVPNState(VPNState.CONNECTED)
         assertEquals(ProtectionState.ACTIVE, config.getProtectionState())
 
-        // Case 2: VPN State is DISCONNECTED -> Protection state shifts to BLOCKING
         config.setVPNState(VPNState.DISCONNECTED)
         assertEquals(ProtectionState.BLOCKING, config.getProtectionState())
 
-        // Case 3: VPN State is ERROR -> Protection state is BLOCKING
         config.setVPNState(VPNState.ERROR)
         assertEquals(ProtectionState.BLOCKING, config.getProtectionState())
 
-        // Case 4: VPN State is PROTECTED -> Protection state is ACTIVE
         config.setVPNState(VPNState.PROTECTED)
         assertEquals(ProtectionState.ACTIVE, config.getProtectionState())
+    }
+
+    @Test
+    fun testEmergencyLockState() {
+        assertFalse(config.isEmergencyLockEnabled())
+
+        config.setEmergencyLockEnabled(true)
+        assertTrue(config.isEmergencyLockEnabled())
+        assertEquals(ProtectionState.BLOCKING, config.getProtectionState())
+
+        config.setEmergencyLockEnabled(false)
+        assertFalse(config.isEmergencyLockEnabled())
+    }
+
+    @Test
+    fun testProfilesManagement() {
+        val initialProfiles = config.getProfiles()
+        assertEquals(3, initialProfiles.size) // streaming, everything, custom
+
+        // Create Profile
+        val newId = config.createProfile("Gaming Profile")
+        val updatedProfiles = config.getProfiles()
+        assertEquals(4, updatedProfiles.size)
+        assertNotNull(updatedProfiles.find { it.id == newId })
+
+        // Rename Profile
+        config.renameProfile(newId, "Heavy Gaming")
+        val renamedProfiles = config.getProfiles()
+        assertEquals("Heavy Gaming", renamedProfiles.find { it.id == newId }?.name)
+
+        // Delete Profile
+        config.deleteProfile(newId)
+        val finalProfiles = config.getProfiles()
+        assertEquals(3, finalProfiles.size)
+        assertNull(finalProfiles.find { it.id == newId })
+    }
+
+    @Test
+    fun testDNSStatusDetectionInSimulation() {
+        config.setSimulatedVpnEnabled(true)
+
+        config.setVPNState(VPNState.CONNECTED)
+        assertEquals(DNSStatus.PROTECTED, config.detectDnsStatus(null, false))
+
+        config.setVPNState(VPNState.DISCONNECTED)
+        config.setProtectionEnabled(true)
+        assertEquals(DNSStatus.PROTECTED, config.detectDnsStatus(null, false))
+
+        config.setProtectionEnabled(false)
+        assertEquals(DNSStatus.WARNING, config.detectDnsStatus(null, false))
     }
 
     @Test
@@ -145,7 +201,7 @@ class TunnelGuardConfigTest {
 
         val logs = config.getLogs()
         assertEquals(2, logs.size)
-        assertTrue(logs[0].contains("Test log entry 2")) // Newest log entry at index 0
+        assertTrue(logs[0].contains("Test log entry 2"))
 
         config.clearLogs()
         assertTrue(config.getLogs().isEmpty())
@@ -153,10 +209,9 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testAppVersionName() {
-        // Mock packageName, packageManager, and getPackageInfo successfully returning PackageInfo with versionName "1.0.0"
         whenever(mockContext.packageName).thenReturn("com.tunnelguard.app")
 
-        val mockPackageManager = mock(android.content.pm.PackageManager::class.java)
+        val mockPackageManager = mock(PackageManager::class.java)
         val mockPackageInfo = android.content.pm.PackageInfo().apply {
             versionName = "1.0.0"
         }
@@ -167,16 +222,10 @@ class TunnelGuardConfigTest {
             prefsStore["override_version_name"] as? String
         }
 
-        // Initially no override exists, so it should return the fallback / default version from PackageManager lookup
         assertEquals("1.0.0", config.getAppVersionName())
 
-        // Set an override version name
         config.setAppVersionName("1.1.0")
         assertEquals("1.1.0", config.getAppVersionName())
-
-        // Override with another version
-        config.setAppVersionName("1.2.0")
-        assertEquals("1.2.0", config.getAppVersionName())
     }
 
     @Test

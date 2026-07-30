@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import org.json.JSONArray
+import org.json.JSONObject
 
 class TunnelGuardConfig(private val context: Context) {
 
@@ -25,6 +26,16 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     /**
+     * Profile data class definition
+     */
+    data class ProtectionProfile(
+        val id: String,
+        val name: String,
+        val appPackages: Set<String>,
+        val isSystem: Boolean = false
+    )
+
+    /**
      * Consolidate VPN capability detection helper.
      */
     fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): Boolean {
@@ -38,9 +49,8 @@ class TunnelGuardConfig(private val context: Context) {
                     // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
                     val linkProperties = connectivityManager.getLinkProperties(network)
                     val addresses = linkProperties?.linkAddresses ?: emptyList()
-                    val isOurOwnVpn = addresses.any { it.address.hostAddress == TUNNEL_ADDRESS }
 
-                    if (isOurOwnVpn) {
+                    if (isOurOurVpn(addresses)) {
                         continue // Skip our own local interface
                     }
 
@@ -53,30 +63,175 @@ class TunnelGuardConfig(private val context: Context) {
         return false
     }
 
+    private fun isOurOurVpn(addresses: List<android.net.LinkAddress>): Boolean {
+        return addresses.any { it.address.hostAddress == TUNNEL_ADDRESS || it.address.hostAddress == "2001:db8::1" }
+    }
+
+    /**
+     * Profile Management
+     */
+    fun getProfiles(): List<ProtectionProfile> {
+        val jsonStr = prefs.getString("protection_profiles", null)
+        if (jsonStr == null) {
+            // Prepopulate default profiles
+            val list = listOf(
+                ProtectionProfile("streaming", "Streaming", setOf("com.tivimate.app", "org.xbmc.kodi", "com.netflix.mediaclient", "com.amazon.amazonvideo.livingroom", "com.google.android.youtube.tv", "org.courville.nova"), true),
+                ProtectionProfile("everything", "Everything", emptySet(), true),
+                ProtectionProfile("custom", "Custom", emptySet(), true)
+            )
+            saveProfiles(list)
+            return list
+        }
+        val list = mutableListOf<ProtectionProfile>()
+        try {
+            val arr = JSONArray(jsonStr)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val id = obj.getString("id")
+                val name = obj.getString("name")
+                val isSystem = obj.optBoolean("isSystem", false)
+                val appsArr = obj.getJSONArray("apps")
+                val apps = mutableSetOf<String>()
+                for (j in 0 until appsArr.length()) {
+                    apps.add(appsArr.getString(j))
+                }
+                list.add(ProtectionProfile(id, name, apps, isSystem))
+            }
+        } catch (e: Exception) {
+            addLog("Error parsing profiles: ${e.message}")
+        }
+        return list
+    }
+
+    fun saveProfiles(profiles: List<ProtectionProfile>) {
+        val arr = JSONArray()
+        for (profile in profiles) {
+            val obj = JSONObject()
+            obj.put("id", profile.id)
+            obj.put("name", profile.name)
+            obj.put("isSystem", profile.isSystem)
+            val appsArr = JSONArray()
+            profile.appPackages.forEach { appsArr.put(it) }
+            obj.put("apps", appsArr)
+            arr.put(obj)
+        }
+        prefs.edit().putString("protection_profiles", arr.toString()).apply()
+    }
+
+    fun getSelectedProfileId(): String {
+        return prefs.getString("selected_profile_id", "streaming") ?: "streaming"
+    }
+
+    fun setSelectedProfileId(id: String) {
+        prefs.edit().putString("selected_profile_id", id).apply()
+        addLog("Selected profile changed to: $id")
+    }
+
+    fun getDefaultProfileId(): String {
+        return prefs.getString("default_profile_id", "streaming") ?: "streaming"
+    }
+
+    fun setDefaultProfileId(id: String) {
+        prefs.edit().putString("default_profile_id", id).apply()
+        addLog("Default profile changed to: $id")
+    }
+
+    fun createProfile(name: String): String {
+        val id = "custom_" + java.util.UUID.randomUUID().toString().take(8)
+        val profiles = getProfiles().toMutableList()
+        profiles.add(ProtectionProfile(id, name, emptySet(), false))
+        saveProfiles(profiles)
+        addLog("Created custom profile: $name ($id)")
+        return id
+    }
+
+    fun renameProfile(id: String, newName: String) {
+        val profiles = getProfiles().map {
+            if (it.id == id && !it.isSystem) {
+                it.copy(name = newName)
+            } else {
+                it
+            }
+        }
+        saveProfiles(profiles)
+        addLog("Renamed profile $id -> $newName")
+    }
+
+    fun deleteProfile(id: String) {
+        val profiles = getProfiles().filter { it.id != id || it.isSystem }
+        saveProfiles(profiles)
+        addLog("Deleted profile $id")
+        if (getSelectedProfileId() == id) {
+            setSelectedProfileId("streaming")
+        }
+        if (getDefaultProfileId() == id) {
+            setDefaultProfileId("streaming")
+        }
+    }
+
+    fun getAllLauncherApps(): Set<String> {
+        val set = mutableSetOf<String>()
+        try {
+            val pm = context.packageManager
+            // Query Leanback launcher apps
+            val tvIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
+                addCategory(android.content.Intent.CATEGORY_LEANBACK_LAUNCHER)
+            }
+            val tvApps = pm.queryIntentActivities(tvIntent, 0)
+            for (resolveInfo in tvApps) {
+                val pkg = resolveInfo.activityInfo.packageName
+                if (pkg != context.packageName) {
+                    set.add(pkg)
+                }
+            }
+
+            // Query standard launcher apps
+            val standardIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
+                addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+            }
+            val standardApps = pm.queryIntentActivities(standardIntent, 0)
+            for (resolveInfo in standardApps) {
+                val pkg = resolveInfo.activityInfo.packageName
+                if (pkg != context.packageName) {
+                    set.add(pkg)
+                }
+            }
+        } catch (e: Exception) {
+            addLog("Error querying launcher apps: ${e.message}")
+        }
+        return set
+    }
+
     /**
      * Get the set of package names of selected apps to protect.
      */
     fun getProtectedApps(): Set<String> {
-        val jsonStr = prefs.getString(KEY_PROTECTED_APPS, "[]") ?: "[]"
-        val set = mutableSetOf<String>()
-        try {
-            val arr = JSONArray(jsonStr)
-            for (i in 0 until arr.length()) {
-                set.add(arr.getString(i))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        val activeId = getSelectedProfileId()
+        if (activeId == "everything") {
+            return getAllLauncherApps()
         }
-        return set
+        val profiles = getProfiles()
+        val activeProfile = profiles.find { it.id == activeId }
+        return activeProfile?.appPackages ?: emptySet()
     }
 
     /**
      * Save the set of package names of selected apps to protect.
      */
     fun setProtectedApps(apps: Set<String>) {
-        val arr = JSONArray()
-        apps.forEach { arr.put(it) }
-        prefs.edit().putString(KEY_PROTECTED_APPS, arr.toString()).apply()
+        val activeId = getSelectedProfileId()
+        if (activeId == "everything") {
+            // Cannot edit "everything" profile apps directly since it dynamically returns all launcher apps.
+            return
+        }
+        val profiles = getProfiles().map {
+            if (it.id == activeId) {
+                it.copy(appPackages = apps)
+            } else {
+                it
+            }
+        }
+        saveProfiles(profiles)
     }
 
     /**
@@ -149,6 +304,9 @@ class TunnelGuardConfig(private val context: Context) {
      * Helper to get computed Protection State based on Master Switch and VPN State.
      */
     fun getProtectionState(): ProtectionState {
+        if (isEmergencyLockEnabled()) {
+            return ProtectionState.BLOCKING
+        }
         if (!isProtectionEnabled()) {
             return ProtectionState.INACTIVE
         }
@@ -157,6 +315,73 @@ class TunnelGuardConfig(private val context: Context) {
             ProtectionState.ACTIVE
         } else {
             ProtectionState.BLOCKING
+        }
+    }
+
+    /**
+     * Emergency Lock Option
+     */
+    fun isEmergencyLockEnabled(): Boolean {
+        return prefs.getBoolean("emergency_lock_enabled", false)
+    }
+
+    fun setEmergencyLockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("emergency_lock_enabled", enabled).apply()
+        addLog("Emergency Lock set to: $enabled")
+    }
+
+    /**
+     * DNS Protection/Status detection
+     */
+    fun detectDnsStatus(connectivityManager: ConnectivityManager?, isServiceRunning: Boolean): DNSStatus {
+        if (isEmergencyLockEnabled()) {
+            return DNSStatus.PROTECTED
+        }
+        if (isSimulatedVpnEnabled()) {
+            val state = getVPNState()
+            return if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) {
+                DNSStatus.PROTECTED
+            } else {
+                if (isProtectionEnabled()) DNSStatus.PROTECTED else DNSStatus.WARNING
+            }
+        }
+
+        if (connectivityManager == null) return DNSStatus.UNKNOWN
+
+        try {
+            if (isProtectionEnabled() && getProtectionState() == ProtectionState.BLOCKING && isServiceRunning) {
+                return DNSStatus.PROTECTED
+            }
+
+            val networks = connectivityManager.allNetworks
+            var vpnActive = false
+            var vpnHasDns = false
+
+            for (network in networks) {
+                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    val linkProperties = connectivityManager.getLinkProperties(network)
+                    val addresses = linkProperties?.linkAddresses ?: emptyList()
+                    if (isOurOurVpn(addresses)) {
+                        continue
+                    }
+                    vpnActive = true
+                    val dnsServers = linkProperties?.dnsServers ?: emptyList()
+                    if (dnsServers.isNotEmpty()) {
+                        vpnHasDns = true
+                    }
+                }
+            }
+
+            return when {
+                vpnActive && vpnHasDns -> DNSStatus.PROTECTED
+                vpnActive -> DNSStatus.UNKNOWN
+                isProtectionEnabled() -> DNSStatus.WARNING
+                else -> DNSStatus.WARNING
+            }
+        } catch (e: Exception) {
+            addLog("Error detecting DNS status: ${e.message}")
+            return DNSStatus.UNKNOWN
         }
     }
 
