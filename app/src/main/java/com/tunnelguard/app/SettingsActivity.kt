@@ -2,7 +2,10 @@ package com.tunnelguard.app
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -127,6 +130,34 @@ class SettingsActivity : AppCompatActivity() {
         if (isUpdateChecking) {
             config.addLog("Update check already in progress.")
             return
+        }
+
+        // Check if the permission to install unknown apps is granted (Android 8.0+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                config.addLog("Install unknown apps permission is NOT granted.")
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("To automatically download and install updates, TunnelGuard requires the 'Install unknown apps' permission.\n\nPlease enable 'Allow from this source' on the next screen, then try checking for updates again.")
+                    .setPositiveButton("Settings") { dialog, _ ->
+                        dialog.dismiss()
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            config.addLog("Failed to launch ACTION_MANAGE_UNKNOWN_APP_SOURCES: ${e.message}")
+                            // Fallback to general settings
+                            startActivity(Intent(Settings.ACTION_SETTINGS))
+                        }
+                    }
+                    .setNegativeButton("Cancel") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .show()
+                return
+            }
         }
 
         isUpdateChecking = true

@@ -14,6 +14,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -43,7 +44,21 @@ class AppsActivity : AppCompatActivity() {
 
         rvAppsList.layoutManager = LinearLayoutManager(this)
         adapter = AppsAdapter(this, emptyList()) { app, isChecked ->
-            config.setAppProtected(app.packageName, isChecked)
+            if (config.getSelectedProfileId() == "everything") {
+                // Automatically switch to custom profile to allow edits
+                config.setSelectedProfileId("custom")
+                val allApps = config.getAllLauncherApps().toMutableSet()
+                if (isChecked) {
+                    allApps.add(app.packageName)
+                } else {
+                    allApps.remove(app.packageName)
+                }
+                config.setProtectedApps(allApps)
+                Toast.makeText(this, "Switched to Custom profile to modify protected apps.", Toast.LENGTH_SHORT).show()
+                config.addLog("Automatically switched from 'everything' to 'custom' profile for custom app selection.")
+            } else {
+                config.setAppProtected(app.packageName, isChecked)
+            }
             config.addLog("Updated app protection: ${app.name} (${app.packageName}) -> $isChecked")
 
             // Notify VpnService to update routing table dynamically
