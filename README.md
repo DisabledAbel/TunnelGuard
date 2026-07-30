@@ -75,14 +75,6 @@ By adding only the package names of selected apps to the builder, Android routes
 
 ---
 
-## Future Roadmap
-
-1. **Embedded WireGuard Protocol:** Integrate an embedded compatible WireGuard client directly inside TunnelGuard. This will allow the application to act *both* as the secure VPN tunnel client AND enforce fail-closed blocking inside a single VPN slot.
-2. **Auto-Launch App on Boot:** Optionally start a designated protected application immediately upon booting up.
-3. **IPv6 Support:** Add comprehensive IPv6 route blackholing (`::/0`).
-
----
-
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
