@@ -20,7 +20,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
         private const val KEY_VERSION_NAME = "override_version_name"
 
-        const val TUNNEL_ADDRESS = "172.31.255.1"
+        const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
     }
 
