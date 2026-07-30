@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
+import android.os.Build
+import android.os.Process
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -441,5 +446,59 @@ class TunnelGuardConfig(private val context: Context) {
      */
     fun setAppVersionName(versionName: String) {
         prefs.edit().putString(KEY_VERSION_NAME, versionName).apply()
+    }
+
+    /**
+     * App Monitor preferences and utilities
+     */
+    fun isAppMonitorEnabled(): Boolean {
+        return prefs.getBoolean("app_monitor_enabled", false)
+    }
+
+    fun setAppMonitorEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("app_monitor_enabled", enabled).apply()
+        addLog("App Monitor enabled set to: $enabled")
+    }
+
+    fun getVpnAppOfChoice(): String? {
+        return prefs.getString("vpn_app_of_choice", null)
+    }
+
+    fun setVpnAppOfChoice(packageName: String?) {
+        prefs.edit().putString("vpn_app_of_choice", packageName).apply()
+        addLog("VPN App of Choice set to: $packageName")
+    }
+
+    fun hasUsageStatsPermission(ctx: Context): Boolean {
+        val appOps = ctx.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                ctx.packageName
+            )
+        } else {
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                ctx.packageName
+            )
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    fun getForegroundPackageName(ctx: Context): String? {
+        val usageStatsManager = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
+        val time = System.currentTimeMillis()
+        val events = usageStatsManager.queryEvents(time - 10000, time) ?: return null
+        val event = UsageEvents.Event()
+        var lastForegroundApp: String? = null
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                lastForegroundApp = event.packageName
+            }
+        }
+        return lastForegroundApp
     }
 }

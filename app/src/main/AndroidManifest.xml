@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Permissions required for VPN service and general network state -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -9,6 +10,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <!-- Declare Leanback support for Android TV/Google TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -54,6 +56,11 @@
             android:name=".TestActivity"
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard" />
+
+        <activity
+            android:name=".VpnWarningActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard.TranslucentDialog" />
 
         <!-- TunnelGuard VpnService declaration with FGS Type SystemExempted -->
         <service
