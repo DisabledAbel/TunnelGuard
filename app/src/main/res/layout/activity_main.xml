@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background_dark"
-    android:padding="32dp">
+    android:padding="24dp">
 
     <!-- Header Title -->
     <TextView
@@ -20,113 +20,262 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Left side: Statuses & Action Buttons -->
-    <LinearLayout
-        android:id="@+id/status_container"
+    <!-- Left side: Scrollable Controls & Statuses -->
+    <ScrollView
+        android:id="@+id/left_scroll_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="24dp"
-        android:orientation="vertical"
+        android:layout_marginTop="16dp"
+        android:focusable="false"
+        android:scrollbars="none"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/guideline"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_tunnel_guard">
 
-        <!-- VPN Status Indicator -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="VPN"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tv_vpn_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="● DISCONNECTED"
-            android:textColor="@color/status_disconnected"
-            android:textSize="24sp"
-            android:textStyle="bold" />
-
-        <!-- Protection Status Indicator -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Protection"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tv_protection_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="● INACTIVE"
-            android:textColor="@color/status_inactive"
-            android:textSize="24sp"
-            android:textStyle="bold" />
-
-        <!-- App count info -->
-        <TextView
-            android:id="@+id/tv_protected_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Protected Apps: 0"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
-
-        <!-- Buttons section with focus styles -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
             android:orientation="vertical">
 
+            <!-- PROTECTION STATUS BANNER -->
+            <TextView
+                android:id="@+id/tv_protection_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="● PROTECTION ACTIVE"
+                android:textColor="@color/status_active"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp" />
+
+            <!-- NETWORK & PROTOCOL STATUS CARD -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_input_selector"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="VPN Connection"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_vpn_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="● Connected"
+                        android:textColor="@color/status_connected"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="IPv4 Protection"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_ipv4_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Protected"
+                        android:textColor="@color/status_active"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="IPv6 Protection"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_ipv6_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Protected"
+                        android:textColor="@color/status_active"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="DNS Protection"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_dns_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Protected"
+                        android:textColor="@color/status_active"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Active Profile"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_active_profile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Streaming"
+                        android:textColor="@color/focus_highlight"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Protected Apps"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/tv_protected_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="3"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- TOGGLE BUTTONS & MENUS -->
             <Button
                 android:id="@+id/btn_toggle_protection"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusDown="@+id/btn_manage_apps"
+                android:nextFocusDown="@+id/btn_toggle_emergency"
                 android:padding="12dp"
                 android:text="Start Protection"
-                android:textColor="@color/text_primary" />
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_toggle_emergency"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_toggle_protection"
+                android:nextFocusDown="@+id/btn_manage_apps"
+                android:padding="12dp"
+                android:text="Emergency Lock"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
 
             <Button
                 android:id="@+id/btn_manage_apps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_toggle_protection"
-                android:nextFocusDown="@+id/btn_settings"
+                android:nextFocusUp="@+id/btn_toggle_emergency"
+                android:nextFocusDown="@+id/btn_manage_profiles"
                 android:padding="12dp"
                 android:text="Manage Apps"
-                android:textColor="@color/text_primary" />
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_manage_profiles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_manage_apps"
+                android:nextFocusDown="@+id/btn_test_protection"
+                android:padding="12dp"
+                android:text="Manage Profiles"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_test_protection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_manage_profiles"
+                android:nextFocusDown="@+id/btn_settings"
+                android:padding="12dp"
+                android:text="Test Protection"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
 
             <Button
                 android:id="@+id/btn_settings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_manage_apps"
+                android:nextFocusUp="@+id/btn_test_protection"
                 android:padding="12dp"
                 android:text="Settings"
-                android:textColor="@color/text_primary" />
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
 
         </LinearLayout>
-
-    </LinearLayout>
+    </ScrollView>
 
     <!-- Vertical Guideline separating Left side and Right side -->
     <androidx.constraintlayout.widget.Guideline
@@ -142,7 +291,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginStart="24dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -152,7 +301,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="App Protection Status"
+            android:text="Protected Applications Status"
             android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold" />

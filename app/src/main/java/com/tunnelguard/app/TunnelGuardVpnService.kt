@@ -4,8 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -29,11 +31,13 @@ class TunnelGuardVpnService : VpnService() {
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
+            config.addLog("Network Callback: onAvailable. Re-evaluating routing.")
             checkAndRunVpnRouting()
         }
 
         override fun onLost(network: Network) {
             super.onLost(network)
+            config.addLog("Network Callback: onLost. Re-evaluating routing.")
             checkAndRunVpnRouting()
         }
 
@@ -42,6 +46,15 @@ class TunnelGuardVpnService : VpnService() {
             checkAndRunVpnRouting()
         }
     }
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            config.addLog("Screen/Wake event: ${intent.action}. Re-evaluating protection.")
+            checkAndRunVpnRouting()
+        }
+    }
+
+    private var isScreenReceiverRegistered = false
 
     companion object {
         const val ACTION_START = "com.tunnelguard.app.START"
@@ -88,6 +101,21 @@ class TunnelGuardVpnService : VpnService() {
             }
         }
 
+        if (!isScreenReceiverRegistered) {
+            try {
+                val screenFilter = IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_ON)
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_USER_PRESENT)
+                }
+                registerReceiver(screenReceiver, screenFilter)
+                isScreenReceiverRegistered = true
+                config.addLog("Screen/Wake receiver registered successfully.")
+            } catch (e: Exception) {
+                config.addLog("Error registering screen receiver: ${e.message}")
+            }
+        }
+
         checkAndRunVpnRouting()
 
         return START_STICKY
@@ -100,6 +128,14 @@ class TunnelGuardVpnService : VpnService() {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback)
                 isCallbackRegistered = false
+            } catch (e: Exception) {
+                // Ignored
+            }
+        }
+        if (isScreenReceiverRegistered) {
+            try {
+                unregisterReceiver(screenReceiver)
+                isScreenReceiverRegistered = false
             } catch (e: Exception) {
                 // Ignored
             }
@@ -181,22 +217,25 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         // --- PREVENT UNCONDITIONAL VPN TAKEOVER ---
-        // If the upstream VPN is active/connected, we MUST NOT establish our local VpnService.
-        // Doing so would terminate the other active VPN connection.
-        // Instead, we close our local block interface to allow the apps' traffic to flow freely
-        // through the active upstream VPN!
-        if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
+        // If the upstream VPN is active/connected, we MUST NOT establish our local VpnService
+        // unless Emergency Lock is enabled!
+        val isEmergencyLock = config.isEmergencyLockEnabled()
+        if (isEmergencyLock) {
+            config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
+        } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
             return
         }
 
-        // If upstream is DISCONNECTED/BLOCKING, establish local VpnService and direct all packets
+        // If upstream is DISCONNECTED/BLOCKING or Emergency Lock is active, establish local VpnService and direct all packets
         // of allowed (protected) apps into it without forwarding them (blackholing/fail-closed block).
         val builder = Builder()
             .setSession("TunnelGuardFailClosedTunnel")
             .addAddress(TunnelGuardConfig.TUNNEL_ADDRESS, TunnelGuardConfig.TUNNEL_PREFIX_LENGTH)
+            .addAddress("2001:db8::1", 128)
             .addRoute("0.0.0.0", 0) // Capture all IPv4 traffic of the allowed applications
+            .addRoute("::", 0) // Capture all IPv6 traffic (::/0) of the allowed applications
             .setMtu(1500)
 
         // Add each protected application to the VPN tunnel

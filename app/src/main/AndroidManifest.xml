@@ -45,6 +45,16 @@
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard" />
 
+        <activity
+            android:name=".ProfilesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard" />
+
+        <activity
+            android:name=".TestActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard" />
+
         <!-- TunnelGuard VpnService declaration with FGS Type SystemExempted -->
         <service
             android:name=".TunnelGuardVpnService"

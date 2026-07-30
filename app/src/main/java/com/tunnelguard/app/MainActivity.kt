@@ -33,9 +33,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutMain: ConstraintLayout
     private lateinit var tvVpnStatus: TextView
     private lateinit var tvProtectionStatus: TextView
+    private lateinit var tvIpv4Status: TextView
+    private lateinit var tvIpv6Status: TextView
+    private lateinit var tvDnsStatus: TextView
+    private lateinit var tvActiveProfile: TextView
     private lateinit var tvProtectedCount: TextView
+
     private lateinit var btnToggleProtection: Button
+    private lateinit var btnToggleEmergency: Button
     private lateinit var btnManageApps: Button
+    private lateinit var btnManageProfiles: Button
+    private lateinit var btnTestProtection: Button
     private lateinit var btnSettings: Button
     private lateinit var rvProtectedApps: RecyclerView
 
@@ -61,21 +69,40 @@ class MainActivity : AppCompatActivity() {
         layoutMain = findViewById(R.id.main_layout)
         tvVpnStatus = findViewById(R.id.tv_vpn_status)
         tvProtectionStatus = findViewById(R.id.tv_protection_status)
+        tvIpv4Status = findViewById(R.id.tv_ipv4_status)
+        tvIpv6Status = findViewById(R.id.tv_ipv6_status)
+        tvDnsStatus = findViewById(R.id.tv_dns_status)
+        tvActiveProfile = findViewById(R.id.tv_active_profile)
         tvProtectedCount = findViewById(R.id.tv_protected_count)
+
         btnToggleProtection = findViewById(R.id.btn_toggle_protection)
+        btnToggleEmergency = findViewById(R.id.btn_toggle_emergency)
         btnManageApps = findViewById(R.id.btn_manage_apps)
+        btnManageProfiles = findViewById(R.id.btn_manage_profiles)
+        btnTestProtection = findViewById(R.id.btn_test_protection)
         btnSettings = findViewById(R.id.btn_settings)
         rvProtectedApps = findViewById(R.id.rv_home_protected_apps)
 
-        // Remote Navigation Hookups
         btnToggleProtection.requestFocus()
 
         btnToggleProtection.setOnClickListener {
             toggleProtection()
         }
 
+        btnToggleEmergency.setOnClickListener {
+            toggleEmergencyLock()
+        }
+
         btnManageApps.setOnClickListener {
             startActivity(Intent(this, AppsActivity::class.java))
+        }
+
+        btnManageProfiles.setOnClickListener {
+            startActivity(Intent(this, ProfilesActivity::class.java))
+        }
+
+        btnTestProtection.setOnClickListener {
+            startActivity(Intent(this, TestActivity::class.java))
         }
 
         btnSettings.setOnClickListener {
@@ -92,7 +119,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // SDK 33 compatibility: specify RECEIVER_NOT_EXPORTED flags dynamically on Tiramisu and above
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(
                 receiver,
@@ -106,7 +132,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // Register network callback to detect VPN on/off in real-time even when service is not running
         try {
             val request = NetworkRequest.Builder()
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -146,13 +171,11 @@ class MainActivity : AppCompatActivity() {
     private fun toggleProtection() {
         val isEnabled = config.isProtectionEnabled()
         if (isEnabled) {
-            // Stop Protection
             config.setProtectionEnabled(false)
             config.addLog("User stopped protection.")
             stopVpnService()
             updateUI()
         } else {
-            // Start Protection - Requires VpnService preparation first
             val intent = VpnService.prepare(this)
             if (intent != null) {
                 config.addLog("VpnService.prepare requires user approval. Launching permission request.")
@@ -161,6 +184,31 @@ class MainActivity : AppCompatActivity() {
                 onActivityResult(REQUEST_VPN_PREPARE, Activity.RESULT_OK, null)
             }
         }
+    }
+
+    private fun toggleEmergencyLock() {
+        val isLocked = config.isEmergencyLockEnabled()
+        val nextLockState = !isLocked
+        config.setEmergencyLockEnabled(nextLockState)
+
+        if (nextLockState) {
+            Toast.makeText(this, "Emergency Lock ENGAGED. All protected traffic BLOCKED.", Toast.LENGTH_LONG).show()
+            // Make sure service runs to hold the block
+            if (!TunnelGuardVpnService.isServiceRunning) {
+                val intent = VpnService.prepare(this)
+                if (intent == null) {
+                    startVpnService()
+                }
+            } else {
+                triggerVpnServiceUpdate()
+            }
+        } else {
+            Toast.makeText(this, "Emergency Lock DISENGAGED.", Toast.LENGTH_SHORT).show()
+            if (TunnelGuardVpnService.isServiceRunning) {
+                triggerVpnServiceUpdate()
+            }
+        }
+        updateUI()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -194,8 +242,14 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    private fun triggerVpnServiceUpdate() {
+        val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
+            action = TunnelGuardVpnService.ACTION_UPDATE
+        }
+        startService(intent)
+    }
+
     private fun updateUI() {
-        // If the service is not running, check and update the real VPN state in config so the UI is accurate
         if (!TunnelGuardVpnService.isServiceRunning) {
             val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             val currentVpnState = if (isUpstreamVpnConnected) {
@@ -206,9 +260,9 @@ class MainActivity : AppCompatActivity() {
             config.setVPNState(currentVpnState)
         }
 
-        // Fetch current states
         val vpnState = config.getVPNState()
         val protectionState = config.getProtectionState()
+        val isLocked = config.isEmergencyLockEnabled()
         val protectedApps = config.getProtectedApps().toList()
 
         // 1. Update VPN status display
@@ -226,32 +280,83 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 2. Update Protection status display
-        tvProtectionStatus.text = "● ${protectionState.name}"
-        when (protectionState) {
-            ProtectionState.ACTIVE -> {
-                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
-                btnToggleProtection.text = "Stop Protection"
-                // Change layout background subtle design or theme colors on state changes
-                layoutMain.setBackgroundColor(resources.getColor(R.color.background_dark))
-            }
-            ProtectionState.BLOCKING -> {
-                tvProtectionStatus.text = "● BLOCKING"
-                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_blocking))
-                btnToggleProtection.text = "Stop Protection"
-                // Security focus block state: subtle reddish highlight background
-                layoutMain.setBackgroundColor(resources.getColor(R.color.background_dark))
-            }
-            ProtectionState.INACTIVE -> {
-                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_inactive))
-                btnToggleProtection.text = "Start Protection"
-                layoutMain.setBackgroundColor(resources.getColor(R.color.background_dark))
+        if (isLocked) {
+            tvProtectionStatus.text = "● EMERGENCY LOCK ACTIVE"
+            tvProtectionStatus.setTextColor(resources.getColor(R.color.status_disconnected))
+            btnToggleProtection.text = "Start Protection"
+            btnToggleEmergency.text = "Unlock Network"
+        } else {
+            btnToggleEmergency.text = "Emergency Lock"
+            when (protectionState) {
+                ProtectionState.ACTIVE -> {
+                    tvProtectionStatus.text = "● PROTECTION ACTIVE"
+                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
+                    btnToggleProtection.text = "Stop Protection"
+                }
+                ProtectionState.BLOCKING -> {
+                    tvProtectionStatus.text = "● PROTECTION BLOCKED"
+                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_blocking))
+                    btnToggleProtection.text = "Stop Protection"
+                }
+                ProtectionState.INACTIVE -> {
+                    tvProtectionStatus.text = "● PROTECTION INACTIVE"
+                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_inactive))
+                    btnToggleProtection.text = "Start Protection"
+                }
             }
         }
 
-        // 3. Count protected apps
-        tvProtectedCount.text = "Protected Apps: ${protectedApps.size}"
+        // 3. Update IPv4 & IPv6 Protection Status
+        if (isLocked) {
+            tvIpv4Status.text = "LOCKED (BLOCKED)"
+            tvIpv4Status.setTextColor(resources.getColor(R.color.status_disconnected))
+            tvIpv6Status.text = "LOCKED (BLOCKED)"
+            tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
+        } else if (config.isProtectionEnabled()) {
+            if (vpnState == VPNState.CONNECTED || vpnState == VPNState.PROTECTED) {
+                tvIpv4Status.text = "Protected (VPN Routing)"
+                tvIpv4Status.setTextColor(resources.getColor(R.color.status_active))
+                tvIpv6Status.text = "Protected (VPN Routing)"
+                tvIpv6Status.setTextColor(resources.getColor(R.color.status_active))
+            } else {
+                tvIpv4Status.text = "Blocked (Fail-Closed)"
+                tvIpv4Status.setTextColor(resources.getColor(R.color.status_blocking))
+                tvIpv6Status.text = "Blocked (Fail-Closed)"
+                tvIpv6Status.setTextColor(resources.getColor(R.color.status_blocking))
+            }
+        } else {
+            tvIpv4Status.text = "Unprotected"
+            tvIpv4Status.setTextColor(resources.getColor(R.color.text_secondary))
+            tvIpv6Status.text = "Unprotected"
+            tvIpv6Status.setTextColor(resources.getColor(R.color.text_secondary))
+        }
 
-        // 4. Update the adapter list
+        // 4. Update DNS Protection Status
+        val dnsStatus = config.detectDnsStatus(connectivityManager, TunnelGuardVpnService.isServiceRunning)
+        when (dnsStatus) {
+            DNSStatus.PROTECTED -> {
+                tvDnsStatus.text = "Protected"
+                tvDnsStatus.setTextColor(resources.getColor(R.color.status_active))
+            }
+            DNSStatus.WARNING -> {
+                tvDnsStatus.text = "Warning (Leaks Possible)"
+                tvDnsStatus.setTextColor(resources.getColor(R.color.status_disconnected))
+            }
+            DNSStatus.UNKNOWN -> {
+                tvDnsStatus.text = "Unknown"
+                tvDnsStatus.setTextColor(resources.getColor(R.color.text_secondary))
+            }
+        }
+
+        // 5. Update Active Profile Status
+        val selectedProfileId = config.getSelectedProfileId()
+        val profile = config.getProfiles().find { it.id == selectedProfileId }
+        tvActiveProfile.text = profile?.name ?: "Streaming"
+
+        // 6. Count protected apps
+        tvProtectedCount.text = "${protectedApps.size}"
+
+        // 7. Update the adapter list
         val appInfos = mutableListOf<AppStatusInfo>()
         val pm = packageManager
         for (pkg in protectedApps) {
@@ -259,7 +364,9 @@ class MainActivity : AppCompatActivity() {
                 val appInfo = pm.getApplicationInfo(pkg, 0)
                 val label = pm.getApplicationLabel(appInfo).toString()
                 val icon = pm.getApplicationIcon(appInfo)
-                val statusText = if (protectionState == ProtectionState.BLOCKING) {
+                val statusText = if (isLocked) {
+                    "EMERGENCY BLOCKED"
+                } else if (protectionState == ProtectionState.BLOCKING) {
                     "INTERNET BLOCKED"
                 } else if (protectionState == ProtectionState.ACTIVE) {
                     "PROTECTED"
@@ -268,7 +375,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 appInfos.add(AppStatusInfo(label, pkg, icon, statusText))
             } catch (e: Exception) {
-                // Application uninstalled but still in config list
                 appInfos.add(AppStatusInfo(pkg, pkg, resources.getDrawable(android.R.drawable.sym_def_app_icon), "UNKNOWN"))
             }
         }
@@ -306,7 +412,7 @@ class MainActivity : AppCompatActivity() {
             holder.pkg.text = item.packageName
             holder.status.text = item.statusText
 
-            if (item.statusText == "INTERNET BLOCKED") {
+            if (item.statusText == "INTERNET BLOCKED" || item.statusText == "EMERGENCY BLOCKED") {
                 holder.status.setTextColor(context.resources.getColor(R.color.status_blocking))
             } else if (item.statusText == "PROTECTED") {
                 holder.status.setTextColor(context.resources.getColor(R.color.status_active))
