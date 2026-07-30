@@ -34,6 +34,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var logsAdapter: LogsAdapter
 
+    private var isUpdateChecking = false
+    private var updatePendingRunnable: Runnable? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -121,26 +124,27 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun checkForUpdatesFlow() {
+        if (isUpdateChecking) {
+            config.addLog("Update check already in progress.")
+            return
+        }
+
+        isUpdateChecking = true
+        btnCheckUpdates.isEnabled = false
+
         val currentVersion = config.getAppVersionName()
-        val nextVersion = when (currentVersion) {
-            "1.0.0" -> "1.1.0"
-            "1.1.0" -> "1.2.0"
-            "1.2.0" -> "1.3.0"
-            else -> {
-                // Parse and increment the minor version or patch version
-                try {
-                    val parts = currentVersion.split(".")
-                    if (parts.size >= 2) {
-                        val major = parts[0]
-                        val minor = parts[1].toInt() + 1
-                        "$major.$minor.0"
-                    } else {
-                        "1.0.0"
-                    }
-                } catch (e: Exception) {
-                    "1.0.0"
-                }
+        val nextVersion = try {
+            val parts = currentVersion.split(".")
+            if (parts.size >= 2) {
+                val major = parts[0]
+                val minor = parts[1].toInt() + 1
+                "$major.$minor.0"
+            } else {
+                "1.0.0"
             }
+        } catch (e: Exception) {
+            config.addLog("Error calculating next version name: ${e.message}")
+            "1.0.0"
         }
 
         config.addLog("Checking for updates... Current version: $currentVersion")
@@ -153,9 +157,14 @@ class SettingsActivity : AppCompatActivity() {
         val progressDialog = builder.create()
         progressDialog.show()
 
-        // Simulate network download and background installation
-        btnCheckUpdates.postDelayed({
+        val runnable = Runnable {
+            if (isFinishing || isDestroyed) {
+                isUpdateChecking = false
+                return@Runnable
+            }
             progressDialog.dismiss()
+            isUpdateChecking = false
+            btnCheckUpdates.isEnabled = true
 
             // Automatically update version ID in app config
             config.setAppVersionName(nextVersion)
@@ -173,21 +182,24 @@ class SettingsActivity : AppCompatActivity() {
                     dialog.dismiss()
                 }
                 .show()
+        }
 
-        }, 2000)
+        updatePendingRunnable = runnable
+        btnCheckUpdates.postDelayed(runnable, 2000)
     }
 
     private fun installMockApk(versionName: String) {
         try {
-            // Write a dummy apk file in the cache directory
-            val updateApkFile = java.io.File(cacheDir, "TunnelGuard-v$versionName-update.apk")
-            if (!updateApkFile.exists()) {
-                updateApkFile.createNewFile()
+            val updatesDir = java.io.File(cacheDir, "updates")
+            if (!updatesDir.exists()) {
+                updatesDir.mkdirs()
             }
-            // Populate with mock bytes
-            val outputStream = java.io.FileOutputStream(updateApkFile)
-            outputStream.write("MOCK_APK_BYTES".toByteArray())
-            outputStream.close()
+            val updateApkFile = java.io.File(updatesDir, "TunnelGuard-v$versionName-update.apk")
+
+            // Use Kotlin's .use extension to write the bytes and ensure closed
+            java.io.FileOutputStream(updateApkFile).use { outputStream ->
+                outputStream.write("MOCK_APK_BYTES".toByteArray())
+            }
 
             config.addLog("Generated mock update APK at: ${updateApkFile.absolutePath}")
 
@@ -210,6 +222,13 @@ class SettingsActivity : AppCompatActivity() {
         } catch (e: Exception) {
             config.addLog("Failed to auto-install mock APK: ${e.message}")
         }
+    }
+
+    override fun onDestroy() {
+        updatePendingRunnable?.let {
+            btnCheckUpdates.removeCallbacks(it)
+        }
+        super.onDestroy()
     }
 
     private fun triggerVpnServiceUpdate() {
