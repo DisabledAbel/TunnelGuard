@@ -304,19 +304,7 @@ class SettingsActivity : AppCompatActivity() {
         btnCheckUpdates.isEnabled = false
 
         val currentVersion = config.getAppVersionName()
-        val nextVersion = try {
-            val parts = currentVersion.split(".")
-            if (parts.size >= 2) {
-                val major = parts[0]
-                val minor = parts[1].toInt() + 1
-                "$major.$minor.0"
-            } else {
-                "1.0.0"
-            }
-        } catch (e: Exception) {
-            config.addLog("Error calculating next version name: ${e.message}")
-            "1.0.0"
-        }
+        val nextVersion = calculateNextVersion(currentVersion)
 
         config.addLog("Checking for updates... Current version: $currentVersion")
 
@@ -408,6 +396,28 @@ class SettingsActivity : AppCompatActivity() {
                 action = TunnelGuardVpnService.ACTION_UPDATE
             }
             startService(serviceIntent)
+        }
+    }
+
+    companion object {
+        fun calculateNextVersion(currentVersion: String): String {
+            return try {
+                val parts = currentVersion.split(".")
+                if (parts.size >= 3) {
+                    val major = parts[0]
+                    val minor = parts[1]
+                    val patch = (parts[2].toIntOrNull() ?: 0) + 1
+                    "$major.$minor.$patch"
+                } else if (parts.size == 2) {
+                    val major = parts[0]
+                    val minor = parts[1]
+                    "$major.$minor.1"
+                } else {
+                    "1.0.1"
+                }
+            } catch (e: Exception) {
+                "1.0.1"
+            }
         }
     }
 
