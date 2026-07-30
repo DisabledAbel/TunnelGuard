@@ -150,4 +150,24 @@ class TunnelGuardConfigTest {
         config.clearLogs()
         assertTrue(config.getLogs().isEmpty())
     }
+
+    @Test
+    fun testAppVersionName() {
+        // Mock packageName and getString when default is null
+        whenever(mockContext.packageName).thenReturn("com.tunnelguard.app")
+        whenever(mockPrefs.getString(eq("override_version_name"), eq(null))).thenAnswer {
+            prefsStore["override_version_name"] as? String
+        }
+
+        // Initially no override exists, so it should return the fallback / default version
+        assertEquals("1.0.0", config.getAppVersionName())
+
+        // Set an override version name
+        config.setAppVersionName("1.1.0")
+        assertEquals("1.1.0", config.getAppVersionName())
+
+        // Override with another version
+        config.setAppVersionName("1.2.0")
+        assertEquals("1.2.0", config.getAppVersionName())
+    }
 }

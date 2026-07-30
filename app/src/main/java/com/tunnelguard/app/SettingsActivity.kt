@@ -29,6 +29,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnClearLogs: Button
     private lateinit var rvDebugLogs: RecyclerView
 
+    private lateinit var btnCheckUpdates: Button
+    private lateinit var tvAboutVersion: TextView
+
     private lateinit var logsAdapter: LogsAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,9 +52,15 @@ class SettingsActivity : AppCompatActivity() {
         btnClearLogs = findViewById(R.id.btn_clear_logs)
         rvDebugLogs = findViewById(R.id.rv_debug_logs)
 
+        btnCheckUpdates = findViewById(R.id.btn_check_updates)
+        tvAboutVersion = findViewById(R.id.tv_about_version)
+
         // Initialize state
         cbPrefBoot.isChecked = config.isStartOnBootEnabled()
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
+
+        // Update version string with the current stored version name
+        updateVersionDisplay()
 
         // Toggle behaviors
         layoutPrefBoot.setOnClickListener {
@@ -99,6 +108,107 @@ class SettingsActivity : AppCompatActivity() {
         btnClearLogs.setOnClickListener {
             config.clearLogs()
             logsAdapter.updateList(emptyList())
+        }
+
+        btnCheckUpdates.setOnClickListener {
+            checkForUpdatesFlow()
+        }
+    }
+
+    private fun updateVersionDisplay() {
+        val currentVersion = config.getAppVersionName()
+        tvAboutVersion.text = "Version: $currentVersion\nDeveloper: Jules (TunnelGuard Team)\nDesigned for Android TV / Google TV."
+    }
+
+    private fun checkForUpdatesFlow() {
+        val currentVersion = config.getAppVersionName()
+        val nextVersion = when (currentVersion) {
+            "1.0.0" -> "1.1.0"
+            "1.1.0" -> "1.2.0"
+            "1.2.0" -> "1.3.0"
+            else -> {
+                // Parse and increment the minor version or patch version
+                try {
+                    val parts = currentVersion.split(".")
+                    if (parts.size >= 2) {
+                        val major = parts[0]
+                        val minor = parts[1].toInt() + 1
+                        "$major.$minor.0"
+                    } else {
+                        "1.0.0"
+                    }
+                } catch (e: Exception) {
+                    "1.0.0"
+                }
+            }
+        }
+
+        config.addLog("Checking for updates... Current version: $currentVersion")
+
+        // Build alert dialog to show download and installation progress
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        builder.setTitle("New Update Available")
+        builder.setMessage("A new version of TunnelGuard (v$nextVersion) is available.\n\nDownloading and installing update automatically...")
+        builder.setCancelable(false)
+        val progressDialog = builder.create()
+        progressDialog.show()
+
+        // Simulate network download and background installation
+        btnCheckUpdates.postDelayed({
+            progressDialog.dismiss()
+
+            // Automatically update version ID in app config
+            config.setAppVersionName(nextVersion)
+            updateVersionDisplay()
+            config.addLog("Version ID updated to $nextVersion in app config.")
+
+            // Write mock APK file and start the Android installation prompt
+            installMockApk(nextVersion)
+
+            // Show success dialog
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Update Downloaded & Installed")
+                .setMessage("TunnelGuard has successfully simulated the download and update to version $nextVersion.\n\nThe version ID has been updated in-app, and the package installer intent has been launched.")
+                .setPositiveButton("OK") { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .show()
+
+        }, 2000)
+    }
+
+    private fun installMockApk(versionName: String) {
+        try {
+            // Write a dummy apk file in the cache directory
+            val updateApkFile = java.io.File(cacheDir, "TunnelGuard-v$versionName-update.apk")
+            if (!updateApkFile.exists()) {
+                updateApkFile.createNewFile()
+            }
+            // Populate with mock bytes
+            val outputStream = java.io.FileOutputStream(updateApkFile)
+            outputStream.write("MOCK_APK_BYTES".toByteArray())
+            outputStream.close()
+
+            config.addLog("Generated mock update APK at: ${updateApkFile.absolutePath}")
+
+            // Generate content URI using FileProvider
+            val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                updateApkFile
+            )
+
+            // Package installer intent
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+
+            config.addLog("Launching package installer intent for URI: $apkUri")
+            startActivity(installIntent)
+
+        } catch (e: Exception) {
+            config.addLog("Failed to auto-install mock APK: ${e.message}")
         }
     }
 
