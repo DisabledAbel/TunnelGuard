@@ -71,6 +71,7 @@ class TunnelGuardVpnService : VpnService() {
         const val ACTION_UPDATE = "com.tunnelguard.app.UPDATE"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "TunnelGuardVpnChannel"
+        private const val ALERT_CHANNEL_ID = "TunnelGuardAlertChannel"
 
         // Global check utility to find if VpnService is active (for UI binding)
         var isServiceRunning = false
@@ -121,13 +122,41 @@ class TunnelGuardVpnService : VpnService() {
                                 }
 
                                 if (!isVpnOn && !isPackageSuppressed(currentApp)) {
-                                    config.addLog("Protected app opened without VPN: $currentApp. Triggering pop-up.")
-                                    // Launch warning activity
+                                    config.addLog("Protected app opened without VPN: $currentApp. Triggering alert notification.")
+
                                     val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
                                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                                         putExtra("target_package", currentApp)
                                     }
-                                    startActivity(warningIntent)
+
+                                    val pendingIntent = PendingIntent.getActivity(
+                                        this@TunnelGuardVpnService,
+                                        1002,
+                                        warningIntent,
+                                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                                    )
+
+                                    var appLabel = currentApp
+                                    try {
+                                        val pm = packageManager
+                                        val appInfo = pm.getApplicationInfo(currentApp, 0)
+                                        appLabel = pm.getApplicationLabel(appInfo).toString()
+                                    } catch (e: Exception) {
+                                        // Ignore
+                                    }
+
+                                    val warningNotification = NotificationCompat.Builder(this@TunnelGuardVpnService, ALERT_CHANNEL_ID)
+                                        .setContentTitle("Security Warning")
+                                        .setContentText("$appLabel opened without an active VPN connection!")
+                                        .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                        .setCategory(NotificationCompat.CATEGORY_ALARM)
+                                        .setAutoCancel(true)
+                                        .setContentIntent(pendingIntent)
+                                        .build()
+
+                                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                    manager.notify(1002, warningNotification)
                                 }
                             }
                         }
@@ -231,8 +260,16 @@ class TunnelGuardVpnService : VpnService() {
                 "TunnelGuard Service Channel",
                 NotificationManager.IMPORTANCE_LOW
             )
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "TunnelGuard Security Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "High priority security alert notifications when protected applications are opened without VPN."
+            }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(alertChannel)
         }
 
         val notificationIntent = Intent(this, MainActivity::class.java)
