@@ -158,7 +158,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
-            val isUpstreamVpnConnected = detectRealVpnCapabilities()
+            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.CONNECTED
             } else {
@@ -195,7 +195,7 @@ class TunnelGuardVpnService : VpnService() {
         // of allowed (protected) apps into it without forwarding them (blackholing/fail-closed block).
         val builder = Builder()
             .setSession("TunnelGuardFailClosedTunnel")
-            .addAddress("10.0.0.1", 24)
+            .addAddress(TunnelGuardConfig.TUNNEL_ADDRESS, TunnelGuardConfig.TUNNEL_PREFIX_LENGTH)
             .addRoute("0.0.0.0", 0) // Capture all IPv4 traffic of the allowed applications
             .setMtu(1500)
 
@@ -220,37 +220,24 @@ class TunnelGuardVpnService : VpnService() {
         closeVpnInterface()
 
         try {
-            vpnInterface = builder.establish()
+            val pfd = builder.establish()
+            if (pfd == null) {
+                config.addLog("Failed to establish VPN Interface: builder.establish() returned null. Setup/permission error.")
+                config.setVPNState(VPNState.ERROR)
+                val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+                sendBroadcast(failureBroadcastIntent)
+                closeVpnInterface()
+                return
+            }
+            vpnInterface = pfd
             config.addLog("Local block interface established successfully. Fail-closed ACTIVE for protected apps.")
         } catch (e: Exception) {
             config.addLog("Failed to establish VPN Interface: ${e.message}")
             config.setVPNState(VPNState.ERROR)
+            val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+            sendBroadcast(failureBroadcastIntent)
+            closeVpnInterface()
         }
-    }
-
-    private fun detectRealVpnCapabilities(): Boolean {
-        try {
-            val networks = connectivityManager.allNetworks
-            for (network in networks) {
-                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
-
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
-                    val linkProperties = connectivityManager.getLinkProperties(network)
-                    val addresses = linkProperties?.linkAddresses ?: emptyList()
-                    val isOurOwnVpn = addresses.any { it.address.hostAddress == "10.0.0.1" }
-
-                    if (isOurOwnVpn) {
-                        continue // Skip our own local interface
-                    }
-
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            config.addLog("Error detecting active VPN capabilities: ${e.message}")
-        }
-        return false
     }
 
     private fun closeVpnInterface() {

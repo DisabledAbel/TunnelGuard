@@ -2,6 +2,8 @@ package com.tunnelguard.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import org.json.JSONArray
 
 class TunnelGuardConfig(private val context: Context) {
@@ -16,6 +18,38 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_LOGS = "debug_logs"
         private const val KEY_VPN_STATUS = "vpn_status" // To persist mocked/detected VPN state
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
+
+        const val TUNNEL_ADDRESS = "172.31.255.1"
+        const val TUNNEL_PREFIX_LENGTH = 24
+    }
+
+    /**
+     * Consolidate VPN capability detection helper.
+     */
+    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): Boolean {
+        if (connectivityManager == null) return false
+        try {
+            val networks = connectivityManager.allNetworks
+            for (network in networks) {
+                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
+                    val linkProperties = connectivityManager.getLinkProperties(network)
+                    val addresses = linkProperties?.linkAddresses ?: emptyList()
+                    val isOurOwnVpn = addresses.any { it.address.hostAddress == TUNNEL_ADDRESS }
+
+                    if (isOurOwnVpn) {
+                        continue // Skip our own local interface
+                    }
+
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            addLog("Error detecting active VPN capabilities: ${e.message}")
+        }
+        return false
     }
 
     /**
