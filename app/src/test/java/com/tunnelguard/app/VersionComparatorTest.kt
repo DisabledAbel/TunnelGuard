@@ -6,6 +6,28 @@ import org.junit.Test
 class VersionComparatorTest {
 
     @Test
+    fun testValidateAndNormalizeVersion() {
+        // Valid cases: exactly 2 or 3 components, all numeric
+        assertEquals("1.0", VersionComparator.validateAndNormalizeVersion("1.0"))
+        assertEquals("1.0.5", VersionComparator.validateAndNormalizeVersion("1.0.5"))
+        assertEquals("1.0.5", VersionComparator.validateAndNormalizeVersion("v1.0.5"))
+        assertEquals("1.0.5", VersionComparator.validateAndNormalizeVersion("V1.0.5"))
+        assertEquals("2.0.0", VersionComparator.validateAndNormalizeVersion(" 2.0.0 "))
+
+        // Required fallback "1.0.1" for invalid/malformed cases
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("2.5.beta"))
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("abc.0.5"))
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("1.0.5.1"))
+
+        // Other invalid cases
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("1")) // only 1 component
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("1.2.3.4.5")) // more than 3 components
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("1.o.5")) // letter 'o' instead of zero
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("")) // empty string
+        assertEquals("1.0.1", VersionComparator.validateAndNormalizeVersion("1..5")) // empty component
+    }
+
+    @Test
     fun testIsNewerVersion() {
         // Simple major/minor/patch comparison
         assertTrue(VersionComparator.isNewerVersion("1.0", "1.0.5"))

@@ -3,6 +3,25 @@ package com.tunnelguard.app
 object VersionComparator {
 
     /**
+     * Validates that the version has exactly two or three numeric components.
+     * Returns "1.0.1" as fallback for malformed components, non-numeric values,
+     * or versions with any other number of parts. Otherwise, returns the cleaned version.
+     */
+    fun validateAndNormalizeVersion(version: String): String {
+        val clean = version.trim().removePrefix("v").removePrefix("V")
+        val parts = clean.split(".")
+        if (parts.size != 2 && parts.size != 3) {
+            return "1.0.1"
+        }
+        for (part in parts) {
+            if (part.isEmpty() || !part.all { it.isDigit() }) {
+                return "1.0.1"
+            }
+        }
+        return clean
+    }
+
+    /**
      * Compares two semantic version strings (e.g. "1.0", "1.0.5", "2.1.3").
      * Returns true if [latest] is a newer version than [current].
      *

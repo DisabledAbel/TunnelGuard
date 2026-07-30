@@ -309,8 +309,9 @@ class SettingsActivity : AppCompatActivity() {
         isUpdateChecking = true
         btnCheckUpdates.isEnabled = false
 
-        val currentVersion = config.getAppVersionName()
-        config.addLog("Checking for updates... Current version: $currentVersion")
+        val rawVersion = config.getAppVersionName()
+        val currentVersion = VersionComparator.validateAndNormalizeVersion(rawVersion)
+        config.addLog("Checking for updates... Current version: $currentVersion (raw: $rawVersion)")
 
         // Show a loading / checking updates dialog
         val loadingBuilder = androidx.appcompat.app.AlertDialog.Builder(this)
