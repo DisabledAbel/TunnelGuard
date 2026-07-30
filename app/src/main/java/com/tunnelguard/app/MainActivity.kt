@@ -194,35 +194,10 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
-    private fun detectRealVpnCapabilitiesInActivity(): Boolean {
-        try {
-            val networks = connectivityManager?.allNetworks ?: return false
-            for (network in networks) {
-                val caps = connectivityManager?.getNetworkCapabilities(network) ?: continue
-
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    // Exclude the local VPN interface created by our own service to prevent self-detection feedback loops
-                    val linkProperties = connectivityManager?.getLinkProperties(network)
-                    val addresses = linkProperties?.linkAddresses ?: emptyList()
-                    val isOurOwnVpn = addresses.any { it.address.hostAddress == "10.0.0.1" }
-
-                    if (isOurOwnVpn) {
-                        continue // Skip our own local interface
-                    }
-
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            config.addLog("Error detecting active VPN capabilities in Activity: ${e.message}")
-        }
-        return false
-    }
-
     private fun updateUI() {
         // If the service is not running, check and update the real VPN state in config so the UI is accurate
         if (!TunnelGuardVpnService.isServiceRunning) {
-            val isUpstreamVpnConnected = detectRealVpnCapabilitiesInActivity()
+            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             val currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.CONNECTED
             } else {
