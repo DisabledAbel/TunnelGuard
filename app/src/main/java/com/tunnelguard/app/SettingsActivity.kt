@@ -27,6 +27,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var layoutPrefSimulation: LinearLayout
     private lateinit var cbPrefSimulation: CheckBox
 
+    private lateinit var layoutPrefSubtitles: LinearLayout
+    private lateinit var cbPrefSubtitles: CheckBox
+
     private lateinit var btnSimulateConnected: Button
     private lateinit var btnSimulateDisconnected: Button
     private lateinit var btnClearLogs: Button
@@ -53,6 +56,9 @@ class SettingsActivity : AppCompatActivity() {
         layoutPrefSimulation = findViewById(R.id.layout_pref_simulation)
         cbPrefSimulation = findViewById(R.id.cb_pref_simulation)
 
+        layoutPrefSubtitles = findViewById(R.id.layout_pref_subtitles)
+        cbPrefSubtitles = findViewById(R.id.cb_pref_subtitles)
+
         btnSimulateConnected = findViewById(R.id.btn_simulate_connected)
         btnSimulateDisconnected = findViewById(R.id.btn_simulate_disconnected)
         btnClearLogs = findViewById(R.id.btn_clear_logs)
@@ -64,6 +70,7 @@ class SettingsActivity : AppCompatActivity() {
         // Initialize state
         cbPrefBoot.isChecked = config.isStartOnBootEnabled()
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
+        cbPrefSubtitles.isChecked = config.isDisableSubtitlesEnabled()
 
         // Update version string with the current stored version name
         updateVersionDisplay()
@@ -84,6 +91,13 @@ class SettingsActivity : AppCompatActivity() {
 
             // Notify VpnService of connectivity check methodology change
             triggerVpnServiceUpdate()
+        }
+
+        layoutPrefSubtitles.setOnClickListener {
+            val newChecked = !config.isDisableSubtitlesEnabled()
+            config.setDisableSubtitlesEnabled(newChecked)
+            cbPrefSubtitles.isChecked = newChecked
+            config.addLog("Changed Disable Subtitles by Default -> $newChecked")
         }
 
         btnSimulateConnected.setOnClickListener {

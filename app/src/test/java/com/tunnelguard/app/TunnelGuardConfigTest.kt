@@ -123,6 +123,17 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testDisableSubtitlesToggle() {
+        assertFalse(config.isDisableSubtitlesEnabled())
+
+        config.setDisableSubtitlesEnabled(true)
+        assertTrue(config.isDisableSubtitlesEnabled())
+
+        config.setDisableSubtitlesEnabled(false)
+        assertFalse(config.isDisableSubtitlesEnabled())
+    }
+
+    @Test
     fun testProtectionStateTransitions() {
         config.setProtectionEnabled(false)
         assertEquals(ProtectionState.INACTIVE, config.getProtectionState())

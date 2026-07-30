@@ -20,6 +20,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_VPN_STATUS = "vpn_status" // To persist mocked/detected VPN state
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
         private const val KEY_VERSION_NAME = "override_version_name"
+        private const val KEY_DISABLE_SUBTITLES = "disable_subtitles_default"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -260,6 +261,17 @@ class TunnelGuardConfig(private val context: Context) {
 
     fun setStartOnBootEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_START_ON_BOOT, enabled).apply()
+    }
+
+    /**
+     * Preference: Disable Subtitles by Default.
+     */
+    fun isDisableSubtitlesEnabled(): Boolean {
+        return prefs.getBoolean(KEY_DISABLE_SUBTITLES, false)
+    }
+
+    fun setDisableSubtitlesEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DISABLE_SUBTITLES, enabled).apply()
     }
 
     /**

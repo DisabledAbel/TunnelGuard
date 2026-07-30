@@ -86,7 +86,7 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:nextFocusUp="@+id/layout_pref_boot"
-                android:nextFocusDown="@+id/btn_simulate_connected"
+                android:nextFocusDown="@+id/layout_pref_subtitles"
                 android:orientation="horizontal"
                 android:padding="16dp"
                 android:layout_marginBottom="8dp">
@@ -121,6 +121,51 @@
                     android:focusable="false" />
             </LinearLayout>
 
+            <!-- Disable Subtitles setting row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_subtitles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:nextFocusUp="@+id/layout_pref_simulation"
+                android:nextFocusDown="@+id/btn_simulate_connected"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Disable Subtitles by Default"
+                        android:textColor="@color/text_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Turn off subtitles automatically for all videos"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <CheckBox
+                    android:id="@+id/cb_pref_subtitles"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
+            </LinearLayout>
+
             <!-- Dynamic Simulator Controls -->
             <TextView
                 android:layout_width="wrap_content"
@@ -138,7 +183,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/layout_pref_simulation"
+                android:nextFocusUp="@+id/layout_pref_subtitles"
                 android:nextFocusDown="@+id/btn_simulate_disconnected"
                 android:padding="12dp"
                 android:text="Simulate VPN CONNECTED"
