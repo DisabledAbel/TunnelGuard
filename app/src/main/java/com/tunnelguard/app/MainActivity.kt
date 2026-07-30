@@ -353,10 +353,7 @@ class MainActivity : AppCompatActivity() {
         val profile = config.getProfiles().find { it.id == selectedProfileId }
         tvActiveProfile.text = profile?.name ?: "Streaming"
 
-        // 6. Count protected apps
-        tvProtectedCount.text = "${protectedApps.size}"
-
-        // 7. Update the adapter list
+        // Update the adapter list with only installed applications to avoid cluttering with "UNKNOWN" entries
         val appInfos = mutableListOf<AppStatusInfo>()
         val pm = packageManager
         for (pkg in protectedApps) {
@@ -375,10 +372,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 appInfos.add(AppStatusInfo(label, pkg, icon, statusText))
             } catch (e: Exception) {
-                appInfos.add(AppStatusInfo(pkg, pkg, resources.getDrawable(android.R.drawable.sym_def_app_icon), "UNKNOWN"))
+                // Skip displaying uninstalled/unavailable apps on the home screen
             }
         }
         adapter.updateList(appInfos)
+
+        // 6. Count actually installed protected apps
+        tvProtectedCount.text = "${appInfos.size}"
     }
 
     data class AppStatusInfo(
