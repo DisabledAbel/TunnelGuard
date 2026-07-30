@@ -75,6 +75,21 @@ class TunnelGuardVpnService : VpnService() {
         // Global check utility to find if VpnService is active (for UI binding)
         var isServiceRunning = false
             private set
+
+        private val suppressedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+        fun suppressPackage(packageName: String, durationMs: Long = 15000) {
+            suppressedPackages[packageName] = System.currentTimeMillis() + durationMs
+        }
+
+        fun isPackageSuppressed(packageName: String): Boolean {
+            val expiry = suppressedPackages[packageName] ?: return false
+            if (System.currentTimeMillis() > expiry) {
+                suppressedPackages.remove(packageName)
+                return false
+            }
+            return true
+        }
     }
 
     override fun onCreate() {
@@ -105,7 +120,7 @@ class TunnelGuardVpnService : VpnService() {
                                     config.detectRealVpnCapabilities(connectivityManager)
                                 }
 
-                                if (!isVpnOn) {
+                                if (!isVpnOn && !isPackageSuppressed(currentApp)) {
                                     config.addLog("Protected app opened without VPN: $currentApp. Triggering pop-up.")
                                     // Launch warning activity
                                     val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
