@@ -23,7 +23,7 @@
         android:roundIcon="@drawable/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TunnelGuard"
-        android:banner="@drawable/ic_launcher">
+        android:banner="@drawable/banner">
 
         <activity
             android:name=".MainActivity"
