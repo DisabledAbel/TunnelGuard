@@ -172,6 +172,9 @@ class UpdateManager(
     }
 
     private fun downloadUrlWithRedirects(urlString: String, outputFile: File, progressUpdate: (Int, Int) -> Unit) {
+        if (!urlString.lowercase().startsWith("https://")) {
+            throw SecurityException("Insecure initial URL scheme: $urlString")
+        }
         var currentUrl = urlString
         var redirectCount = 0
         val maxRedirects = 5

@@ -15,10 +15,13 @@ import org.robolectric.annotation.Config
 class MainActivityUpdateTest {
 
     private class StubUpdateChecker : UpdateChecker {
+        var invocationsCount = 0
+
         override fun checkForLatestRelease(
             onSuccess: (latestVersion: String, apkUrl: String?) -> Unit,
             onFailure: (errorMessage: String) -> Unit
         ) {
+            invocationsCount++
             // Immediate stub callback to avoid any real HttpURLConnection or network call
             onSuccess("1.0.0", null)
         }
@@ -42,15 +45,15 @@ class MainActivityUpdateTest {
 
     @Test
     fun testUpdateCheckTriggeredOnActivityLaunch() {
+        val stub = MainActivity.updateChecker as StubUpdateChecker
+        org.junit.Assert.assertEquals(0, stub.invocationsCount)
+
         // Launch MainActivity using Robolectric
         val controller = Robolectric.buildActivity(MainActivity::class.java)
         controller.create()
 
-        // Verify that hasCheckedForUpdates got set to true inside onCreate
-        // (We can verify via direct reflection or by asserting updateChecker behaviour)
-        // Since hasCheckedForUpdates is private instance-scoped now, we can verify that the stub was triggered.
-        // Wait, to test instance-scoped variable or checker triggers:
-        // By using the stub, we avoided any real HTTP connection on launch!
+        // Verify that checkForLatestRelease got invoked
+        org.junit.Assert.assertEquals(1, stub.invocationsCount)
     }
 
     @Test

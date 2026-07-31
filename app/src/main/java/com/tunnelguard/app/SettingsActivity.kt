@@ -332,7 +332,6 @@ class SettingsActivity : AppCompatActivity() {
         updatePendingRunnable?.let {
             btnCheckUpdates.removeCallbacks(it)
         }
-        UpdateManager.isUpdateInProgress.set(false)
         super.onDestroy()
     }
 
