@@ -566,6 +566,28 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    companion object {
+        fun calculateNextVersion(currentVersion: String): String {
+            return try {
+                val parts = currentVersion.split(".")
+                if (parts.size >= 3) {
+                    val major = parts[0]
+                    val minor = parts[1]
+                    val patch = (parts[2].toIntOrNull() ?: 0) + 1
+                    "$major.$minor.$patch"
+                } else if (parts.size == 2) {
+                    val major = parts[0]
+                    val minor = parts[1]
+                    "$major.$minor.1"
+                } else {
+                    "1.0.1"
+                }
+            } catch (e: Exception) {
+                "1.0.1"
+            }
+        }
+    }
+
     private class LogsAdapter(
         private val context: Context,
         private var items: List<String>
