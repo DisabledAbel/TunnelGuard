@@ -202,10 +202,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
-        UpdateManager.isUpdateInProgress.set(false)
-        super.onDestroy()
-    }
 
     private fun toggleProtection() {
         val isEnabled = config.isProtectionEnabled()
