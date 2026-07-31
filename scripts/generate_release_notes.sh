@@ -1,43 +1,27 @@
 #!/bin/bash
 set -e
 
-# Generate automatic release description using Openrouter
-if [ -n "$OPENROUTER_API_KEY" ]; then
-  echo "Generating automatic release description using Openrouter..."
+# Generate automatic release description using GitHub API
+echo "Generating automatic release description using GitHub Releases API..."
 
-  # Fetch PR number for the current branch/ref using GITHUB_REF_NAME to prevent template injection
-  PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --state all --json number -q '.[0].number' || echo "")
+# Default tag name to a fallback if CLEAN_VERSION_NAME is somehow missing
+TAG_NAME="v${CLEAN_VERSION_NAME:-1.0.0}"
+TARGET_COMMITISH="${GITHUB_REF_NAME:-main}"
 
-  if [ -n "$PR_NUMBER" ]; then
-    # Fetch PR title, body, and comments
-    PR_DATA=$(gh pr view "$PR_NUMBER" --json title,body,comments -q '"Title: " + .title + "\n\nBody: " + .body + "\n\nComments:\n" + (.comments | map(.body) | join("\n"))' || echo "")
+# Call GitHub API to generate release notes
+API_RESPONSE=$(gh api repos/{owner}/{repo}/releases/generate-notes \
+  -f tag_name="$TAG_NAME" \
+  -f target_commitish="$TARGET_COMMITISH" \
+  --jq .body 2>/dev/null || echo "")
+
+if [ -n "$API_RESPONSE" ]; then
+  echo "Successfully generated release description from GitHub API."
+  if [ -n "$RELEASE_DESCRIPTION" ]; then
+    printf "%s\n\n%s\n" "$RELEASE_DESCRIPTION" "$API_RESPONSE" > generated_description.txt
   else
-    PR_DATA="No open or closed PR found for branch $GITHUB_REF_NAME."
-  fi
-
-  # Safely build the prompt payload using jq
-  PAYLOAD=$(jq -n \
-    --arg model "nvidia/nemotron-3-ultra-550b-a55b:free" \
-    --arg prompt "You are an AI assistant helping write release notes for TunnelGuard. Write a concise, professional release description using the following PR comments and context:\n\n$PR_DATA\n\nEnsure it is well-structured with clear sections like 'What's New'." \
-    '{model: $model, messages: [{role: "user", content: $prompt}]}')
-
-  # Call Openrouter API with bounded connection and request timeout
-  RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -X POST "https://openrouter.ai/api/v1/chat/completions" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-    -d "$PAYLOAD" || echo "")
-
-  # Extract generated content
-  GENERATED_DESC=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null || echo "")
-
-  if [ -n "$GENERATED_DESC" ] && [ "$GENERATED_DESC" != "null" ]; then
-    echo "Successfully generated release description."
-    echo "$GENERATED_DESC" > generated_description.txt
-  else
-    echo "WARNING: Failed to generate description or empty response. Falling back to manual description."
-    echo "$RELEASE_DESCRIPTION" > generated_description.txt
+    printf "%s\n" "$API_RESPONSE" > generated_description.txt
   fi
 else
-  echo "OPENROUTER_API_KEY is not defined. Using manual release description."
-  echo "$RELEASE_DESCRIPTION" > generated_description.txt
+  echo "WARNING: Failed to generate description or empty response. Falling back to manual description."
+  printf "%s\n" "$RELEASE_DESCRIPTION" > generated_description.txt
 fi
