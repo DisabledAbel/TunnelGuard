@@ -178,7 +178,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateVersionDisplay() {
         val currentVersion = config.getAppVersionName()
-        tvAboutVersion.text = "Version: $currentVersion\nDeveloper: Jules (TunnelGuard Team)\nDesigned for Android TV / Google TV."
+        tvAboutVersion.text = "Version: $currentVersion\nDeveloper: DisabledAbel (TunnelGuard Team)\nDesigned for Android TV / Google TV."
     }
 
     private fun updateVpnAppOfChoiceDisplay() {
