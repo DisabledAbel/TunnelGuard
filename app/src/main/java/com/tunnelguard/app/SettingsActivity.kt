@@ -439,18 +439,13 @@ class SettingsActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     downloadDialog.dismiss()
 
-                    // Update version override in preferences
-                    config.setAppVersionName(latestVersion)
-                    updateVersionDisplay()
-                    config.addLog("Version ID updated to $latestVersion in app config.")
-
                     // Install the APK
                     installApkFile(latestVersion)
 
                     // Show success dialog
                     androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("Update Downloaded")
-                        .setMessage("TunnelGuard has successfully downloaded version $latestVersion.\n\nThe version ID has been updated in-app, and the package installer intent has been launched.")
+                        .setMessage("TunnelGuard has successfully downloaded version $latestVersion.\n\nThe package installer intent has been launched to complete the update.")
                         .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
                         .show()
                 }
