@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
         var hasCheckedForUpdates = false
+        var updateChecker: UpdateChecker = GitHubUpdateChecker()
     }
 
     private fun checkForUpdatesInBackground() {
@@ -65,49 +66,21 @@ class MainActivity : AppCompatActivity() {
         val currentVersion = VersionComparator.validateAndNormalizeVersion(rawVersion)
         config.addLog("Main Update Check: Current version is $currentVersion (raw: $rawVersion)")
 
-        Thread {
-            try {
-                val url = java.net.URL("https://api.github.com/repos/DisabledAbel/TunnelGuard/releases/latest")
-                val conn = url.openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "TunnelGuard-App")
-                conn.connectTimeout = 10000
-                conn.readTimeout = 10000
-
-                val responseCode = conn.responseCode
-                if (responseCode == 200) {
-                    val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
-                    val jsonObj = org.json.JSONObject(jsonStr)
-                    val tagName = jsonObj.getString("tag_name")
-                    val cleanTagName = tagName.trim().removePrefix("v")
-
-                    var apkUrl: String? = null
-                    val assets = jsonObj.optJSONArray("assets")
-                    if (assets != null) {
-                        for (i in 0 until assets.length()) {
-                            val asset = assets.getJSONObject(i)
-                            val assetName = asset.getString("name")
-                            if (assetName.endsWith(".apk")) {
-                                apkUrl = asset.getString("browser_download_url")
-                                break
-                            }
-                        }
+        updateChecker.checkForLatestRelease(
+            currentVersion,
+            onSuccess = { cleanTagName, apkUrl ->
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    config.addLog("Main Update Check: Latest release is $cleanTagName")
+                    if (VersionComparator.isNewerVersion(currentVersion, cleanTagName)) {
+                        showUpdateAvailableDialog(cleanTagName, apkUrl)
                     }
-
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
-                        config.addLog("Main Update Check: Latest release is $cleanTagName")
-                        if (VersionComparator.isNewerVersion(currentVersion, cleanTagName)) {
-                            showUpdateAvailableDialog(cleanTagName, apkUrl)
-                        }
-                    }
-                } else {
-                    config.addLog("Main Update Check: Failed with HTTP response code: $responseCode")
                 }
-            } catch (e: Exception) {
-                config.addLog("Main Update Check: Error: ${e.message}")
+            },
+            onFailure = { errorMessage ->
+                config.addLog("Main Update Check: Failed: $errorMessage")
             }
-        }.start()
+        )
     }
 
     private fun showUpdateAvailableDialog(latestVersion: String, apkUrl: String?) {
@@ -117,196 +90,13 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Download") { dialog, _ ->
                 dialog.dismiss()
                 if (apkUrl != null) {
-                    checkPermissionAndDownloadUpdate(latestVersion, apkUrl)
+                    UpdateManager(this, config).checkPermissionAndDownloadUpdate(latestVersion, apkUrl)
                 } else {
                     config.addLog("Main Update Check Error: No APK file found in GitHub release assets.")
-                    showUpdateErrorDialog("No APK asset found in the latest GitHub release.")
+                    UpdateManager(this, config).showUpdateErrorDialog("No APK asset found in the latest GitHub release.")
                 }
             }
             .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun checkPermissionAndDownloadUpdate(latestVersion: String, apkUrl: String) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            if (!packageManager.canRequestPackageInstalls()) {
-                config.addLog("Install unknown apps permission is NOT granted.")
-                showPermissionRequiredDialog(
-                    "Permission Required",
-                    "To automatically download and install updates, TunnelGuard requires the 'Install unknown apps' permission.\n\nPlease enable 'Allow from this source' on the next screen, then try checking for updates again.",
-                    Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = android.net.Uri.parse("package:$packageName")
-                    },
-                    Intent(android.provider.Settings.ACTION_SETTINGS),
-                    "ACTION_MANAGE_UNKNOWN_APP_SOURCES"
-                )
-                return
-            }
-        }
-        downloadAndInstallUpdate(latestVersion, apkUrl)
-    }
-
-    private fun showPermissionRequiredDialog(
-        title: String,
-        message: String,
-        primaryIntent: Intent,
-        fallbackIntent: Intent,
-        logErrorTag: String
-    ) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("Settings") { dialog, _ ->
-                dialog.dismiss()
-                try {
-                    startActivity(primaryIntent)
-                } catch (e: Exception) {
-                    config.addLog("Failed to launch $logErrorTag: ${e.message}")
-                    try {
-                        startActivity(fallbackIntent)
-                    } catch (ex: Exception) {
-                        config.addLog("Failed to launch fallback settings: ${ex.message}")
-                    }
-                }
-            }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun downloadAndInstallUpdate(latestVersion: String, downloadUrl: String) {
-        val downloadBuilder = androidx.appcompat.app.AlertDialog.Builder(this)
-        downloadBuilder.setTitle("Downloading Update")
-        downloadBuilder.setMessage("Downloading TunnelGuard v$latestVersion...\n0%")
-        downloadBuilder.setCancelable(false)
-        val downloadDialog = downloadBuilder.create()
-        downloadDialog.show()
-
-        Thread {
-            try {
-                val updatesDir = java.io.File(cacheDir, "updates")
-                if (!updatesDir.exists()) {
-                    updatesDir.mkdirs()
-                }
-                val updateApkFile = java.io.File(updatesDir, "TunnelGuard-v$latestVersion-update.apk")
-
-                downloadUrlWithRedirects(downloadUrl, updateApkFile) { progress, total ->
-                    val percentage = if (total > 0) (progress * 100L / total).toInt() else 0
-                    runOnUiThread {
-                        if (!isFinishing && !isDestroyed) {
-                            downloadDialog.setMessage("Downloading TunnelGuard v$latestVersion...\n$percentage%")
-                        }
-                    }
-                }
-
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    downloadDialog.dismiss()
-
-                    // Install the APK
-                    installApkFile(latestVersion)
-
-                    // Show success dialog
-                    androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("Update Downloaded")
-                        .setMessage("TunnelGuard has successfully downloaded version $latestVersion.\n\nThe package installer intent has been launched to complete the update.")
-                        .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
-                        .show()
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    downloadDialog.dismiss()
-                    config.addLog("Failed to download update: ${e.message}")
-                    showUpdateErrorDialog("Failed to download update: ${e.message}")
-                }
-            }
-        }.start()
-    }
-
-    private fun downloadUrlWithRedirects(urlString: String, outputFile: java.io.File, progressUpdate: (Int, Int) -> Unit) {
-        var currentUrl = urlString
-        var redirectCount = 0
-        val maxRedirects = 5
-
-        while (redirectCount < maxRedirects) {
-            val url = java.net.URL(currentUrl)
-            val conn = url.openConnection() as java.net.HttpURLConnection
-            conn.instanceFollowRedirects = false
-            conn.setRequestProperty("User-Agent", "TunnelGuard-App")
-            conn.connectTimeout = 15000
-            conn.readTimeout = 15000
-
-            val status = conn.responseCode
-            if (status == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
-                status == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
-                status == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
-                status == 307 || status == 308) {
-
-                val newUrl = conn.getHeaderField("Location") ?: throw java.io.IOException("Redirect with empty Location header.")
-                currentUrl = newUrl
-                redirectCount++
-                continue
-            }
-
-            if (status == java.net.HttpURLConnection.HTTP_OK) {
-                val contentLength = conn.contentLength
-                conn.inputStream.use { inputStream ->
-                    java.io.FileOutputStream(outputFile).use { outputStream ->
-                        val buffer = ByteArray(4096)
-                        var bytesRead: Int
-                        var totalBytesRead = 0
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            outputStream.write(buffer, 0, bytesRead)
-                            totalBytesRead += bytesRead
-                            progressUpdate(totalBytesRead, contentLength)
-                        }
-                    }
-                }
-                return
-            } else {
-                throw java.io.IOException("Server returned HTTP $status")
-            }
-        }
-        throw java.io.IOException("Too many redirects")
-    }
-
-    private fun installApkFile(versionName: String) {
-        try {
-            val updatesDir = java.io.File(cacheDir, "updates")
-            val updateApkFile = java.io.File(updatesDir, "TunnelGuard-v$versionName-update.apk")
-
-            config.addLog("Preparing to install downloaded APK: ${updateApkFile.absolutePath}")
-
-            // Generate content URI using FileProvider
-            val apkUri = androidx.core.content.FileProvider.getUriForFile(
-                this,
-                "$packageName.fileprovider",
-                updateApkFile
-            )
-
-            // Package installer intent
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            }
-
-            config.addLog("Launching package installer intent for URI: $apkUri")
-            startActivity(installIntent)
-
-        } catch (e: Exception) {
-            config.addLog("Failed to auto-install APK: ${e.message}")
-        }
-    }
-
-    private fun showUpdateErrorDialog(errorMessage: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Update Check Failed")
-            .setMessage("Could not check for updates or download update.\n\nDetails: $errorMessage")
-            .setPositiveButton("OK") { dialog, _ ->
                 dialog.dismiss()
             }
             .show()
