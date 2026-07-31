@@ -13,9 +13,21 @@ import org.robolectric.annotation.Config
 @Config(sdk = [Build.VERSION_CODES.Q])
 class MainActivityUpdateTest {
 
+    private class StubUpdateChecker : UpdateChecker {
+        override fun checkForLatestRelease(
+            currentVersion: String,
+            onSuccess: (latestVersion: String, apkUrl: String?) -> Unit,
+            onFailure: (errorMessage: String) -> Unit
+        ) {
+            // Immediate stub callback to avoid any real HttpURLConnection or network call
+            onSuccess("1.0.0", null)
+        }
+    }
+
     @Before
     fun setUp() {
         MainActivity.hasCheckedForUpdates = false
+        MainActivity.updateChecker = StubUpdateChecker()
     }
 
     @Test
