@@ -55,10 +55,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var hasCheckedForUpdates = false
+
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
-        var hasCheckedForUpdates = false
-        var updateChecker: UpdateChecker = GitHubUpdateChecker()
+
+        @androidx.annotation.VisibleForTesting
+        var updateChecker: UpdateChecker = UpdateChecker.instance
     }
 
     private fun checkForUpdatesInBackground() {
@@ -67,39 +70,22 @@ class MainActivity : AppCompatActivity() {
         config.addLog("Main Update Check: Current version is $currentVersion (raw: $rawVersion)")
 
         updateChecker.checkForLatestRelease(
-            currentVersion,
             onSuccess = { cleanTagName, apkUrl ->
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     config.addLog("Main Update Check: Latest release is $cleanTagName")
                     if (VersionComparator.isNewerVersion(currentVersion, cleanTagName)) {
-                        showUpdateAvailableDialog(cleanTagName, apkUrl)
+                        val updateMgr = UpdateManager(this, config)
+                        updateMgr.showUpdateAvailableDialog(cleanTagName, apkUrl, false)
                     }
                 }
             },
             onFailure = { errorMessage ->
                 config.addLog("Main Update Check: Failed: $errorMessage")
+                // Reset hasCheckedForUpdates on failure to allow retrying transient errors
+                hasCheckedForUpdates = false
             }
         )
-    }
-
-    private fun showUpdateAvailableDialog(latestVersion: String, apkUrl: String?) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("New Update Available")
-            .setMessage("A new version of TunnelGuard (v$latestVersion) is available.\n\nWould you like to download and install this update now?")
-            .setPositiveButton("Download") { dialog, _ ->
-                dialog.dismiss()
-                if (apkUrl != null) {
-                    UpdateManager(this, config).checkPermissionAndDownloadUpdate(latestVersion, apkUrl)
-                } else {
-                    config.addLog("Main Update Check Error: No APK file found in GitHub release assets.")
-                    UpdateManager(this, config).showUpdateErrorDialog("No APK asset found in the latest GitHub release.")
-                }
-            }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -214,6 +200,11 @@ class MainActivity : AppCompatActivity() {
             }
             mainNetworkCallback = null
         }
+    }
+
+    override fun onDestroy() {
+        UpdateManager.isUpdateInProgress.set(false)
+        super.onDestroy()
     }
 
     private fun toggleProtection() {
