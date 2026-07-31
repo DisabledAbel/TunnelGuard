@@ -22,6 +22,29 @@ class UpdateManager(
         val isUpdateInProgress = AtomicBoolean(false)
     }
 
+    fun showUpdateAvailableDialog(latestVersion: String, apkUrl: String?, isFromSettings: Boolean) {
+        androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle("New Update Available")
+            .setMessage("A new version of TunnelGuard (v$latestVersion) is available.\n\nWould you like to download and install this update now?")
+            .setPositiveButton("Download") { dialog, _ ->
+                dialog.dismiss()
+                if (apkUrl != null) {
+                    checkPermissionAndDownloadUpdate(latestVersion, apkUrl)
+                } else {
+                    if (isFromSettings) {
+                        config.addLog("Error: No APK file found in GitHub release assets.")
+                    } else {
+                        config.addLog("Main Update Check Error: No APK file found in GitHub release assets.")
+                    }
+                    showUpdateErrorDialog("No APK asset found in the latest GitHub release.")
+                }
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     fun checkPermissionAndDownloadUpdate(latestVersion: String, apkUrl: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!activity.packageManager.canRequestPackageInstalls()) {
@@ -70,6 +93,10 @@ class UpdateManager(
             .show()
     }
 
+    fun validateVersionName(versionName: String): Boolean {
+        return versionName.matches(Regex("^[0-9A-Za-z._-]+$"))
+    }
+
     fun downloadAndInstallUpdate(latestVersion: String, downloadUrl: String) {
         if (!isUpdateInProgress.compareAndSet(false, true)) {
             config.addLog("Update/download already in progress. Ignoring duplicate request.")
@@ -84,13 +111,20 @@ class UpdateManager(
         downloadDialog.show()
 
         Thread {
-            var success = false
             try {
-                val updatesDir = File(activity.cacheDir, "updates")
+                if (!validateVersionName(latestVersion)) {
+                    throw IllegalArgumentException("Invalid version name format: $latestVersion")
+                }
+
+                val updatesDir = File(activity.cacheDir, "updates").canonicalFile
                 if (!updatesDir.exists()) {
                     updatesDir.mkdirs()
                 }
-                val updateApkFile = File(updatesDir, "TunnelGuard-v$latestVersion-update.apk")
+                val updateApkFile = File(updatesDir, "TunnelGuard-v$latestVersion-update.apk").canonicalFile
+                val parentFile = updateApkFile.parentFile ?: throw IllegalArgumentException("Invalid parent file path")
+                if (parentFile.canonicalPath != updatesDir.canonicalPath) {
+                    throw IllegalArgumentException("Path traversal detected in version name: $latestVersion")
+                }
 
                 downloadUrlWithRedirects(downloadUrl, updateApkFile) { progress, total ->
                     val percentage = if (total > 0) (progress * 100L / total).toInt() else 0
@@ -102,7 +136,10 @@ class UpdateManager(
                 }
 
                 activity.runOnUiThread {
-                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                    if (activity.isFinishing || activity.isDestroyed) {
+                        isUpdateInProgress.set(false)
+                        return@runOnUiThread
+                    }
                     downloadDialog.dismiss()
 
                     // Install the APK and report back
@@ -117,17 +154,19 @@ class UpdateManager(
                     } else {
                         showUpdateErrorDialog("Failed to initialize or launch package installer intent.")
                     }
+                    isUpdateInProgress.set(false)
                 }
-                success = true
             } catch (e: Exception) {
                 activity.runOnUiThread {
-                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                    if (activity.isFinishing || activity.isDestroyed) {
+                        isUpdateInProgress.set(false)
+                        return@runOnUiThread
+                    }
                     downloadDialog.dismiss()
                     config.addLog("Failed to download update: ${e.message}")
                     showUpdateErrorDialog("Failed to download update: ${e.message}")
+                    isUpdateInProgress.set(false)
                 }
-            } finally {
-                isUpdateInProgress.set(false)
             }
         }.start()
     }
@@ -154,7 +193,12 @@ class UpdateManager(
                     status == 307 || status == 308) {
 
                     val newUrl = conn.getHeaderField("Location") ?: throw IOException("Redirect with empty Location header.")
-                    currentUrl = newUrl
+                    // Resolve relative redirect against base currentUrl
+                    val resolvedUrlObj = URL(URL(currentUrl), newUrl)
+                    if (resolvedUrlObj.protocol.lowercase() != "https") {
+                        throw SecurityException("Insecure redirect to non-HTTPS URL: $resolvedUrlObj")
+                    }
+                    currentUrl = resolvedUrlObj.toString()
                     redirectCount++
                     continue
                 }
@@ -186,8 +230,17 @@ class UpdateManager(
 
     fun installApkFile(versionName: String): Boolean {
         return try {
-            val updatesDir = File(activity.cacheDir, "updates")
-            val updateApkFile = File(updatesDir, "TunnelGuard-v$versionName-update.apk")
+            if (!validateVersionName(versionName)) {
+                throw IllegalArgumentException("Invalid version name format: $versionName")
+            }
+
+            val updatesDir = File(activity.cacheDir, "updates").canonicalFile
+            val updateApkFile = File(updatesDir, "TunnelGuard-v$versionName-update.apk").canonicalFile
+
+            val parentFile = updateApkFile.parentFile ?: throw IllegalArgumentException("Invalid parent file path")
+            if (parentFile.canonicalPath != updatesDir.canonicalPath) {
+                throw IllegalArgumentException("Path traversal detected in version name: $versionName")
+            }
 
             if (!updateApkFile.exists() || updateApkFile.length() == 0L) {
                 config.addLog("Install failed: update APK file does not exist or is empty.")

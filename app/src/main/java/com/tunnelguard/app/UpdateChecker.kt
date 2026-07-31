@@ -5,8 +5,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 interface UpdateChecker {
+    companion object {
+        var instance: UpdateChecker = GitHubUpdateChecker()
+    }
     fun checkForLatestRelease(
-        currentVersion: String,
         onSuccess: (latestVersion: String, apkUrl: String?) -> Unit,
         onFailure: (errorMessage: String) -> Unit
     )
@@ -14,12 +16,14 @@ interface UpdateChecker {
 
 class GitHubUpdateChecker : UpdateChecker {
     override fun checkForLatestRelease(
-        currentVersion: String,
         onSuccess: (latestVersion: String, apkUrl: String?) -> Unit,
         onFailure: (errorMessage: String) -> Unit
     ) {
         Thread {
             var conn: HttpURLConnection? = null
+            var successResult: Pair<String, String?>? = null
+            var failureMessage: String? = null
+
             try {
                 val url = URL("https://api.github.com/repos/DisabledAbel/TunnelGuard/releases/latest")
                 conn = url.openConnection() as HttpURLConnection
@@ -47,14 +51,22 @@ class GitHubUpdateChecker : UpdateChecker {
                             }
                         }
                     }
-                    onSuccess(cleanTagName, apkUrl)
+                    successResult = Pair(cleanTagName, apkUrl)
                 } else {
-                    onFailure("HTTP error code $responseCode")
+                    failureMessage = "HTTP error code $responseCode"
                 }
             } catch (e: Exception) {
-                onFailure(e.message ?: "Unknown error")
+                failureMessage = e.message ?: "Unknown error"
             } finally {
                 conn?.disconnect()
+            }
+
+            // Invoke callbacks outside of try-catch block to guarantee that exceptions thrown
+            // in callbacks are not caught and routed incorrectly.
+            if (successResult != null) {
+                onSuccess(successResult.first, successResult.second)
+            } else {
+                onFailure(failureMessage ?: "Unknown error")
             }
         }.start()
     }

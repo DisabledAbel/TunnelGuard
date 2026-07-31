@@ -113,7 +113,7 @@ class SettingsActivity : AppCompatActivity() {
                 cbPrefMonitor.isChecked = newChecked
                 triggerVpnServiceUpdate()
             } else {
-                showPermissionRequiredDialog(
+                UpdateManager(this, config).showPermissionRequiredDialog(
                     "Permission Required",
                     "To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.",
                     Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
@@ -198,34 +198,6 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun showPermissionRequiredDialog(
-        title: String,
-        message: String,
-        primaryIntent: Intent,
-        fallbackIntent: Intent,
-        logErrorTag: String
-    ) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("Settings") { dialog, _ ->
-                dialog.dismiss()
-                try {
-                    startActivity(primaryIntent)
-                } catch (e: Exception) {
-                    config.addLog("Failed to launch $logErrorTag: ${e.message}")
-                    try {
-                        startActivity(fallbackIntent)
-                    } catch (ex: Exception) {
-                        config.addLog("Failed to launch fallback settings: ${ex.message}")
-                    }
-                }
-            }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
 
     private fun showVpnAppOfChoiceDialog() {
         val pm = packageManager
@@ -321,8 +293,7 @@ class SettingsActivity : AppCompatActivity() {
         val loadingDialog = loadingBuilder.create()
         loadingDialog.show()
 
-        MainActivity.updateChecker.checkForLatestRelease(
-            currentVersion,
+        UpdateChecker.instance.checkForLatestRelease(
             onSuccess = { cleanTagName, apkUrl ->
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
@@ -331,7 +302,7 @@ class SettingsActivity : AppCompatActivity() {
 
                     if (VersionComparator.isNewerVersion(currentVersion, cleanTagName)) {
                         // New version is available! Ask the user to download.
-                        showUpdateAvailableDialog(cleanTagName, apkUrl)
+                        UpdateManager(this, config).showUpdateAvailableDialog(cleanTagName, apkUrl, true)
                     } else {
                         // Up to date
                         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -357,29 +328,11 @@ class SettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun showUpdateAvailableDialog(latestVersion: String, apkUrl: String?) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("New Update Available")
-            .setMessage("A new version of TunnelGuard (v$latestVersion) is available.\n\nWould you like to download and install this update now?")
-            .setPositiveButton("Download") { dialog, _ ->
-                dialog.dismiss()
-                if (apkUrl != null) {
-                    UpdateManager(this, config).checkPermissionAndDownloadUpdate(latestVersion, apkUrl)
-                } else {
-                    config.addLog("Error: No APK file found in GitHub release assets.")
-                    UpdateManager(this, config).showUpdateErrorDialog("No APK asset found in the latest GitHub release.")
-                }
-            }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
-
     override fun onDestroy() {
         updatePendingRunnable?.let {
             btnCheckUpdates.removeCallbacks(it)
         }
+        UpdateManager.isUpdateInProgress.set(false)
         super.onDestroy()
     }
 
