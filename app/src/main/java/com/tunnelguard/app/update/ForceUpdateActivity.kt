@@ -94,15 +94,24 @@ class ForceUpdateActivity : AppCompatActivity() {
         super.onResume()
         // If the user went to settings to enable "Install Unknown Apps" permission and returned, resume installation
         if (!isDownloading && latestVersion != null && apkUrl != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (packageManager.canRequestPackageInstalls()) {
-                    val updatesDir = File(cacheDir, "updates")
-                    val apkFile = File(updatesDir, "TunnelGuard-v$latestVersion-update.apk")
-                    if (apkFile.exists() && apkFile.length() > 0) {
-                        // Validate and install if the file is already downloaded successfully
-                        if (validateApkFile(apkFile)) {
-                            val updateMgr = UpdateManager(this, config)
-                            updateMgr.installApkFile(latestVersion!!)
+            val updateMgr = UpdateManager(this, config)
+            if (updateMgr.validateVersionName(latestVersion!!)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (packageManager.canRequestPackageInstalls()) {
+                        try {
+                            val updatesDir = File(cacheDir, "updates").canonicalFile
+                            val apkFile = File(updatesDir, "TunnelGuard-v$latestVersion-update.apk").canonicalFile
+                            val parentFile = apkFile.parentFile
+                            if (parentFile != null && parentFile.canonicalPath == updatesDir.canonicalPath) {
+                                if (apkFile.exists() && apkFile.length() > 0) {
+                                    // Validate and install if the file is already downloaded successfully
+                                    if (validateApkFile(apkFile)) {
+                                        updateMgr.installApkFile(latestVersion!!)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            config.addLog("onResume download-resume check failed: ${e.message}")
                         }
                     }
                 }
@@ -225,6 +234,7 @@ class ForceUpdateActivity : AppCompatActivity() {
                 false
             }
         } catch (e: Exception) {
+            config.addLog("validateApkFile failed: ${e.message}")
             false
         }
     }
@@ -233,8 +243,10 @@ class ForceUpdateActivity : AppCompatActivity() {
         if (!urlString.lowercase().startsWith("https://")) {
             throw SecurityException("Insecure initial URL scheme: $urlString")
         }
-        if (!urlString.lowercase().contains("github.com/disabledabel/tunnelguard/releases/")) {
-            throw SecurityException("Invalid download source: $urlString")
+        val initialUrlObj = URL(urlString)
+        val initialHost = initialUrlObj.host.lowercase()
+        if (initialHost != "github.com" && !initialHost.endsWith(".github.com")) {
+            throw SecurityException("Invalid download source host: $initialHost")
         }
 
         var currentUrl = urlString
@@ -264,7 +276,9 @@ class ForceUpdateActivity : AppCompatActivity() {
                     }
                     val newUrlString = resolvedUrlObj.toString()
                     val host = resolvedUrlObj.host.lowercase()
-                    if (!host.endsWith("github.com") && !host.endsWith("githubusercontent.com")) {
+                    val isValidRedirectHost = (host == "github.com" || host.endsWith(".github.com") ||
+                            host == "githubusercontent.com" || host.endsWith(".githubusercontent.com"))
+                    if (!isValidRedirectHost) {
                         throw SecurityException("Insecure redirect host: $host")
                     }
                     currentUrl = newUrlString

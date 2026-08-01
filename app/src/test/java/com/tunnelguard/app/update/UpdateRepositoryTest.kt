@@ -14,8 +14,6 @@ import org.robolectric.annotation.Config
 @Config(sdk = [Build.VERSION_CODES.Q])
 class UpdateRepositoryTest {
 
-    private lateinit var repository: UpdateRepository
-
     private class MockUpdateChecker(
         private val mockTagName: String,
         private val mockApkUrl: String?,
@@ -24,12 +22,12 @@ class UpdateRepositoryTest {
     ) : UpdateChecker {
         var callCount = 0
 
-        override suspend fun checkForLatestRelease(): UpdateCheckResult {
+        override suspend fun checkForLatestRelease(ifNoneMatch: String?): UpdateCheckResult {
             callCount++
             return if (shouldFail) {
                 UpdateCheckResult.Failure("Mock network error")
             } else {
-                UpdateCheckResult.UpdateAvailable(mockTagName, mockApkUrl, mockBody)
+                UpdateCheckResult.UpdateAvailable(mockTagName, mockApkUrl, mockBody, "mock-etag")
             }
         }
     }
@@ -37,35 +35,43 @@ class UpdateRepositoryTest {
     @Before
     fun setUp() {
         val context = RuntimeEnvironment.getApplication()
-        repository = UpdateRepository(context)
         val prefs = context.getSharedPreferences("tunnel_guard_update_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
+        UpdateRepository.setInstance(null)
     }
 
     @Test
     fun testCacheValidationAndExpiry() = runBlocking {
-        val mockChecker = MockUpdateChecker("1.1.0", "https://github.com/DisabledAbel/TunnelGuard/releases/download/v1.1.0/TunnelGuard.apk", "Awesome features")
-        repository.updateChecker = mockChecker
+        val context = RuntimeEnvironment.getApplication()
+        val mockChecker = MockUpdateChecker("1.0.0", null, null)
+        val repository = UpdateRepository(context, mockChecker)
 
         // First check - should call the mock checker
         val result1 = repository.checkForUpdate(currentVersion = "1.0.0")
 
         assertEquals(1, mockChecker.callCount)
-        assertTrue(result1 is UpdateCheckResult.UpdateAvailable)
-        assertEquals("1.1.0", (result1 as UpdateCheckResult.UpdateAvailable).latestVersion)
+        assertTrue(result1 is UpdateCheckResult.NoUpdate)
 
         // Second check within 5 minutes - should use the cached value (no call to mock checker)
         val result2 = repository.checkForUpdate(currentVersion = "1.0.0")
 
         assertEquals(1, mockChecker.callCount) // callCount stays 1!
-        assertTrue(result2 is UpdateCheckResult.UpdateAvailable)
-        assertEquals("1.1.0", (result2 as UpdateCheckResult.UpdateAvailable).latestVersion)
+        assertTrue(result2 is UpdateCheckResult.NoUpdate)
+
+        // Move last-check timestamp backward to simulate expired cache (> 5 minutes)
+        repository.forceSetLastCheckTime(System.currentTimeMillis() - (6 * 60 * 1000))
+
+        // Third check after 6 minutes - should invoke the mock checker again!
+        val result3 = repository.checkForUpdate(currentVersion = "1.0.0")
+        assertEquals(2, mockChecker.callCount)
+        assertTrue(result3 is UpdateCheckResult.NoUpdate)
     }
 
     @Test
     fun testSessionLevelPersistenceOnSuccess() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
         val mockChecker = MockUpdateChecker("1.1.0", "https://github.com/DisabledAbel/TunnelGuard/releases/download/v1.1.0/TunnelGuard.apk", "Notes")
-        repository.updateChecker = mockChecker
+        val repository = UpdateRepository(context, mockChecker)
 
         assertFalse(repository.isUpdateDetectedInSession())
 
@@ -76,13 +82,13 @@ class UpdateRepositoryTest {
 
     @Test
     fun testOfflineSessionLevelPersistenceFallback() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val mockChecker = MockUpdateChecker("1.2.0", null, null, shouldFail = true)
+        val repository = UpdateRepository(context, mockChecker)
+
         // Step 1: Set update detected in session manually
         repository.setUpdateDetectedInSession(true)
         repository.cacheUpdateInfo("1.2.0", "https://github.com/DisabledAbel/TunnelGuard/releases/download/v1.2.0/TunnelGuard.apk", "Some notes")
-
-        // Step 2: Set the checker to fail (simulating offline/no network)
-        val mockChecker = MockUpdateChecker("1.2.0", null, null, shouldFail = true)
-        repository.updateChecker = mockChecker
 
         // Trigger checkForUpdate while "offline". It should fallback to the cached/detected session update.
         val result = repository.checkForUpdate(currentVersion = "1.0.0")
@@ -92,5 +98,25 @@ class UpdateRepositoryTest {
         assertEquals("1.2.0", details.latestVersion)
         assertEquals("https://github.com/DisabledAbel/TunnelGuard/releases/download/v1.2.0/TunnelGuard.apk", details.apkUrl)
         assertEquals("Some notes", details.releaseNotes)
+
+        // Assert that the failing update checker was NOT invoked because of early return
+        assertEquals(0, mockChecker.callCount)
+    }
+
+    @Test
+    fun testFailurePathWithNoSessionUpdate() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val mockChecker = MockUpdateChecker("1.2.0", null, null, shouldFail = true)
+        val repository = UpdateRepository(context, mockChecker)
+
+        // isUpdateDetectedInSession() is initially false
+        assertFalse(repository.isUpdateDetectedInSession())
+
+        // Check for update - should invoke the mock checker and fail, exercising the Failure path
+        val result = repository.checkForUpdate(currentVersion = "1.0.0")
+
+        assertEquals(1, mockChecker.callCount)
+        assertTrue(result is UpdateCheckResult.Failure)
+        assertEquals("Mock network error", (result as UpdateCheckResult.Failure).errorMessage)
     }
 }
