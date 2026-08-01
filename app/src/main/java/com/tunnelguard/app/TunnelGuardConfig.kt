@@ -291,12 +291,14 @@ class TunnelGuardConfig(private val context: Context) {
         }
     }
 
+    var elapsedRealtimeProvider: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+
     fun setVPNState(state: VPNState) {
         prefs.edit().putString(KEY_VPN_STATUS, state.name).apply()
         if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) {
             val startTime = prefs.getLong("vpn_connection_start_time", 0L)
             if (startTime == 0L) {
-                prefs.edit().putLong("vpn_connection_start_time", System.currentTimeMillis()).apply()
+                prefs.edit().putLong("vpn_connection_start_time", elapsedRealtimeProvider()).apply()
             }
         } else {
             prefs.edit().putLong("vpn_connection_start_time", 0L).apply()
@@ -317,7 +319,7 @@ class TunnelGuardConfig(private val context: Context) {
         if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) {
             val startTime = prefs.getLong("vpn_connection_start_time", 0L)
             if (startTime > 0L) {
-                return System.currentTimeMillis() - startTime
+                return elapsedRealtimeProvider() - startTime
             }
         }
         return 0L

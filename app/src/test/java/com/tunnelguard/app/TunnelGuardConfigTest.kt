@@ -88,7 +88,9 @@ class TunnelGuardConfigTest {
             (prefsStore[key] as? Long) ?: default
         }
 
-        config = TunnelGuardConfig(mockContext)
+        config = TunnelGuardConfig(mockContext).apply {
+            elapsedRealtimeProvider = { System.currentTimeMillis() }
+        }
     }
 
     @Test
