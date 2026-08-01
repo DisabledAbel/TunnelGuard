@@ -6,12 +6,18 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 interface UpdateChecker {
-    suspend fun checkForLatestRelease(): UpdateCheckResult
+    suspend fun checkForLatestRelease(ifNoneMatch: String? = null): UpdateCheckResult
 }
 
 sealed class UpdateCheckResult {
-    data class UpdateAvailable(val latestVersion: String, val apkUrl: String?, val releaseNotes: String?) : UpdateCheckResult()
+    data class UpdateAvailable(
+        val latestVersion: String,
+        val apkUrl: String?,
+        val releaseNotes: String?,
+        val eTag: String? = null
+    ) : UpdateCheckResult()
     object NoUpdate : UpdateCheckResult()
+    object NotModified : UpdateCheckResult()
     data class Failure(val errorMessage: String) : UpdateCheckResult()
 }
 
@@ -27,26 +33,28 @@ class GitHubUpdateCheckerImpl(
             .create(GitHubReleaseService::class.java)
     }
 
-    override suspend fun checkForLatestRelease(): UpdateCheckResult = withContext(Dispatchers.IO) {
+    override suspend fun checkForLatestRelease(ifNoneMatch: String?): UpdateCheckResult = withContext(Dispatchers.IO) {
         try {
-            val response = service.getLatestRelease()
+            val response = service.getLatestRelease(ifNoneMatch = ifNoneMatch)
+            if (response.code() == 304) {
+                return@withContext UpdateCheckResult.NotModified
+            }
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
                     val cleanTagName = body.tag_name.trim().removePrefix("v")
-                    var apkUrl: String? = null
-                    body.assets?.forEach { asset ->
-                        if (asset.name.endsWith(".apk")) {
-                            apkUrl = asset.browser_download_url
-                        }
-                    }
-                    UpdateCheckResult.UpdateAvailable(cleanTagName, apkUrl, body.body)
+                    // Explicit first-match policy for APK selection
+                    val apkUrl = body.assets?.firstOrNull { it.name.endsWith(".apk") }?.browser_download_url
+                    val eTag = response.headers().get("ETag")
+                    UpdateCheckResult.UpdateAvailable(cleanTagName, apkUrl, body.body, eTag)
                 } else {
                     UpdateCheckResult.Failure("Empty response body")
                 }
             } else {
                 UpdateCheckResult.Failure("HTTP error code ${response.code()}")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             UpdateCheckResult.Failure(e.message ?: "Unknown error")
         }

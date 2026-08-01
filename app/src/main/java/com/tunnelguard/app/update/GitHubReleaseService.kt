@@ -7,7 +7,8 @@ import retrofit2.http.Header
 interface GitHubReleaseService {
     @GET("repos/DisabledAbel/TunnelGuard/releases/latest")
     suspend fun getLatestRelease(
-        @Header("User-Agent") userAgent: String = "TunnelGuard-App"
+        @Header("User-Agent") userAgent: String = "TunnelGuard-App",
+        @Header("If-None-Match") ifNoneMatch: String? = null
     ): Response<GitHubReleaseResponse>
 }
 

@@ -2,6 +2,9 @@ package com.tunnelguard.app
 
 import android.content.Intent
 import android.os.Build
+import com.tunnelguard.app.update.ForceUpdateActivity
+import com.tunnelguard.app.update.UpdateCheckResult
+import com.tunnelguard.app.update.UpdateChecker
 import com.tunnelguard.app.update.UpdateRepository
 import org.junit.After
 import org.junit.Assert.*
@@ -21,47 +24,41 @@ class MainActivityUpdateTest {
     private class StubUpdateChecker : UpdateChecker {
         var invocationsCount = 0
 
-        override fun checkForLatestRelease(
-            onSuccess: (latestVersion: String, apkUrl: String?) -> Unit,
-            onFailure: (errorMessage: String) -> Unit
-        ) {
+        override suspend fun checkForLatestRelease(ifNoneMatch: String?): UpdateCheckResult {
             invocationsCount++
-            // Immediate stub callback to avoid any real HttpURLConnection or network call
-            onSuccess("1.0.0", null)
+            return UpdateCheckResult.NoUpdate
         }
     }
 
-    private val originalChecker = UpdateChecker.instance
+    private lateinit var currentStub: StubUpdateChecker
 
     @Before
     fun setUp() {
-        val stub = StubUpdateChecker()
-        MainActivity.updateChecker = stub
-        UpdateChecker.instance = stub
-
         val context = RuntimeEnvironment.getApplication()
         val prefs = context.getSharedPreferences("tunnel_guard_update_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
+
+        currentStub = StubUpdateChecker()
+        val repo = UpdateRepository(context, currentStub)
+        UpdateRepository.setInstance(repo)
     }
 
     @After
     fun tearDown() {
-        MainActivity.updateChecker = originalChecker
-        UpdateChecker.instance = originalChecker
+        UpdateRepository.setInstance(null)
         UpdateManager.isUpdateInProgress.set(false)
     }
 
     @Test
     fun testUpdateCheckTriggeredOnActivityLaunch() {
-        val stub = MainActivity.updateChecker as StubUpdateChecker
-        org.junit.Assert.assertEquals(0, stub.invocationsCount)
+        assertEquals(0, currentStub.invocationsCount)
 
         // Launch MainActivity using Robolectric
         val controller = Robolectric.buildActivity(MainActivity::class.java)
         controller.create()
 
         // Verify that checkForLatestRelease got invoked
-        org.junit.Assert.assertEquals(1, stub.invocationsCount)
+        assertEquals(1, currentStub.invocationsCount)
     }
 
     @Test
@@ -91,7 +88,7 @@ class MainActivityUpdateTest {
 
         assertNotNull("ForceUpdateActivity should have been started", startedIntent)
         assertEquals(
-            com.tunnelguard.app.update.ForceUpdateActivity::class.java.name,
+            ForceUpdateActivity::class.java.name,
             startedIntent.component?.className
         )
         assertTrue("MainActivity should have finished", activity.isFinishing)

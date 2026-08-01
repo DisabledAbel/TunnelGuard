@@ -64,18 +64,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
-
-        @androidx.annotation.VisibleForTesting
-        var updateChecker: UpdateChecker = UpdateChecker.instance
     }
 
     private fun runMandatoryUpdateCheck() {
-        // For backwards compatibility and ensuring existing tests pass
-        updateChecker.checkForLatestRelease(
-            onSuccess = { _, _ -> },
-            onFailure = { _ -> }
-        )
-
         val repo = UpdateRepository.getInstance(this)
         val rawVersion = config.getAppVersionName()
         val currentVersion = VersionComparator.validateAndNormalizeVersion(rawVersion)
@@ -130,6 +121,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     is UpdateCheckResult.NoUpdate -> {
+                        // Do nothing, allow normal app launch
+                    }
+                    is UpdateCheckResult.NotModified -> {
                         // Do nothing, allow normal app launch
                     }
                 }
