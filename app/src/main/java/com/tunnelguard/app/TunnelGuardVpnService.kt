@@ -351,6 +351,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("No apps selected for protection. Closing local tunnel interface.")
             config.setLastDisconnectReason("No apps selected for protection")
             closeVpnInterface()
+            sendBroadcast(broadcastIntent)
             return
         }
 
@@ -434,6 +435,8 @@ class TunnelGuardVpnService : VpnService() {
         } else {
             stopForeground(true)
         }
+        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+        sendBroadcast(broadcastIntent)
         stopSelf()
     }
 }
