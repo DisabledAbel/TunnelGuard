@@ -1,0 +1,54 @@
+package com.tunnelguard.app.update
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+interface UpdateChecker {
+    suspend fun checkForLatestRelease(): UpdateCheckResult
+}
+
+sealed class UpdateCheckResult {
+    data class UpdateAvailable(val latestVersion: String, val apkUrl: String?, val releaseNotes: String?) : UpdateCheckResult()
+    object NoUpdate : UpdateCheckResult()
+    data class Failure(val errorMessage: String) : UpdateCheckResult()
+}
+
+class GitHubUpdateCheckerImpl(
+    private val apiBaseUrl: String = "https://api.github.com/"
+) : UpdateChecker {
+
+    private val service: GitHubReleaseService by lazy {
+        Retrofit.Builder()
+            .baseUrl(apiBaseUrl)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GitHubReleaseService::class.java)
+    }
+
+    override suspend fun checkForLatestRelease(): UpdateCheckResult = withContext(Dispatchers.IO) {
+        try {
+            val response = service.getLatestRelease()
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null) {
+                    val cleanTagName = body.tag_name.trim().removePrefix("v")
+                    var apkUrl: String? = null
+                    body.assets?.forEach { asset ->
+                        if (asset.name.endsWith(".apk")) {
+                            apkUrl = asset.browser_download_url
+                        }
+                    }
+                    UpdateCheckResult.UpdateAvailable(cleanTagName, apkUrl, body.body)
+                } else {
+                    UpdateCheckResult.Failure("Empty response body")
+                }
+            } else {
+                UpdateCheckResult.Failure("HTTP error code ${response.code()}")
+            }
+        } catch (e: Exception) {
+            UpdateCheckResult.Failure(e.message ?: "Unknown error")
+        }
+    }
+}
