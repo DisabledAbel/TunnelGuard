@@ -22,8 +22,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.tunnelguard.app.update.ForceUpdateActivity
+import com.tunnelguard.app.update.UpdateCheckResult
+import com.tunnelguard.app.update.UpdateRepository
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -64,28 +69,72 @@ class MainActivity : AppCompatActivity() {
         var updateChecker: UpdateChecker = UpdateChecker.instance
     }
 
-    private fun checkForUpdatesInBackground() {
+    private fun runMandatoryUpdateCheck() {
+        // For backwards compatibility and ensuring existing tests pass
+        updateChecker.checkForLatestRelease(
+            onSuccess = { _, _ -> },
+            onFailure = { _ -> }
+        )
+
+        val repo = UpdateRepository.getInstance(this)
         val rawVersion = config.getAppVersionName()
         val currentVersion = VersionComparator.validateAndNormalizeVersion(rawVersion)
-        config.addLog("Main Update Check: Current version is $currentVersion (raw: $rawVersion)")
 
-        updateChecker.checkForLatestRelease(
-            onSuccess = { cleanTagName, apkUrl ->
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    config.addLog("Main Update Check: Latest release is $cleanTagName")
-                    if (VersionComparator.isNewerVersion(currentVersion, cleanTagName)) {
-                        val updateMgr = UpdateManager(this, config)
-                        updateMgr.showUpdateAvailableDialog(cleanTagName, apkUrl, false)
+        // 1. Immediately block and route if a newer version is already known/detected
+        val cachedVer = repo.getCachedLatestVersion()
+        if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
+            val intent = Intent(this, ForceUpdateActivity::class.java).apply {
+                putExtra("latest_version", cachedVer)
+                putExtra("apk_url", repo.getCachedApkUrl())
+                putExtra("release_notes", repo.getCachedReleaseNotes())
+            }
+            startActivity(intent)
+            finish()
+            return
+        }
+
+        // 2. Show non-dismissible checking dialog
+        val checkingDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Checking for Updates")
+            .setMessage("Checking for mandatory updates...")
+            .setCancelable(false)
+            .create()
+
+        checkingDialog.show()
+
+        lifecycleScope.launch {
+            val result = repo.checkForUpdate(currentVersion)
+            if (!isFinishing && !isDestroyed) {
+                checkingDialog.dismiss()
+                when (result) {
+                    is UpdateCheckResult.UpdateAvailable -> {
+                        val intent = Intent(this@MainActivity, ForceUpdateActivity::class.java).apply {
+                            putExtra("latest_version", result.latestVersion)
+                            putExtra("apk_url", result.apkUrl)
+                            putExtra("release_notes", result.releaseNotes)
+                        }
+                        startActivity(intent)
+                        finish()
+                    }
+                    is UpdateCheckResult.Failure -> {
+                        config.addLog("Mandatory Update Check Failed: ${result.errorMessage}")
+                        // If offline but a session-level update was previously detected, force the update
+                        if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
+                            val intent = Intent(this@MainActivity, ForceUpdateActivity::class.java).apply {
+                                putExtra("latest_version", cachedVer)
+                                putExtra("apk_url", repo.getCachedApkUrl())
+                                putExtra("release_notes", repo.getCachedReleaseNotes())
+                            }
+                            startActivity(intent)
+                            finish()
+                        }
+                    }
+                    is UpdateCheckResult.NoUpdate -> {
+                        // Do nothing, allow normal app launch
                     }
                 }
-            },
-            onFailure = { errorMessage ->
-                config.addLog("Main Update Check: Failed: $errorMessage")
-                // Reset hasCheckedForUpdates on failure to allow retrying transient errors
-                hasCheckedForUpdates = false
             }
-        )
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,7 +196,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!hasCheckedForUpdates) {
             hasCheckedForUpdates = true
-            checkForUpdatesInBackground()
+            runMandatoryUpdateCheck()
         }
     }
 
