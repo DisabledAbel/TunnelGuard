@@ -18,6 +18,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tunnelguard.app.update.ForceUpdateActivity
 import com.tunnelguard.app.update.UpdateCheckResult
 import com.tunnelguard.app.update.UpdateRepository
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -43,6 +45,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDnsStatus: TextView
     private lateinit var tvActiveProfile: TextView
     private lateinit var tvProtectedCount: TextView
+    private lateinit var tvUptimeStatus: TextView
+    private lateinit var tvDisconnectReason: TextView
 
     private lateinit var btnToggleProtection: Button
     private lateinit var btnToggleEmergency: Button
@@ -186,12 +190,43 @@ class MainActivity : AppCompatActivity() {
         adapter = HomeAppsAdapter(this, emptyList())
         rvProtectedApps.adapter = adapter
 
+        tvUptimeStatus = findViewById(R.id.tv_uptime_status)
+        tvDisconnectReason = findViewById(R.id.tv_disconnect_reason)
+
         updateUI()
 
         if (!hasCheckedForUpdates) {
             hasCheckedForUpdates = true
-            runMandatoryUpdateCheck()
+            if (config.isForcedUpdatesEnabled()) {
+                runMandatoryUpdateCheck()
+            }
         }
+    }
+
+    private var uptimeJob: kotlinx.coroutines.Job? = null
+
+    private fun startUptimeUpdates() {
+        uptimeJob?.cancel()
+        uptimeJob = lifecycleScope.launch {
+            while (isActive) {
+                val uptimeMillis = config.getConnectionUptimeMillis()
+                tvUptimeStatus.text = formatUptime(uptimeMillis)
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+
+    private fun stopUptimeUpdates() {
+        uptimeJob?.cancel()
+        uptimeJob = null
+    }
+
+    private fun formatUptime(millis: Long): String {
+        if (millis <= 0) return "00:00:00"
+        val seconds = (millis / 1000) % 60
+        val minutes = (millis / (1000 * 60)) % 60
+        val hours = (millis / (1000 * 60 * 60))
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     override fun onResume() {
@@ -230,10 +265,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateUI()
+        startUptimeUpdates()
     }
 
     override fun onPause() {
         super.onPause()
+        stopUptimeUpdates()
         unregisterReceiver(receiver)
         mainNetworkCallback?.let {
             try {
@@ -457,6 +494,71 @@ class MainActivity : AppCompatActivity() {
 
         // 6. Count actually installed protected apps
         tvProtectedCount.text = "${appInfos.size}"
+
+        // 7. Update Connection Uptime and Last Disconnect Reason
+        val uptimeMillis = config.getConnectionUptimeMillis()
+        tvUptimeStatus.text = formatUptime(uptimeMillis)
+        tvDisconnectReason.text = config.getLastDisconnectReason()
+
+        // 8. Handle Tamper warning banner
+        val tamperInfo = checkTamperStatus()
+        val layoutTamperWarning = findViewById<LinearLayout>(R.id.layout_tamper_warning)
+        val tvTamperMessage = findViewById<TextView>(R.id.tv_tamper_message)
+
+        if (tamperInfo.first) {
+            layoutTamperWarning.visibility = View.VISIBLE
+            tvTamperMessage.text = "${tamperInfo.second} Click to resolve."
+            layoutTamperWarning.setOnClickListener {
+                resolveTamper()
+            }
+        } else {
+            layoutTamperWarning.visibility = View.GONE
+        }
+    }
+
+    private fun checkTamperStatus(): Pair<Boolean, String> {
+        val messages = mutableListOf<String>()
+        var isTampered = false
+
+        // 1. VPN permission check when protection is active
+        if (config.isProtectionEnabled()) {
+            val vpnIntent = VpnService.prepare(this)
+            if (vpnIntent != null) {
+                isTampered = true
+                messages.add("VPN permission has been revoked.")
+            }
+        }
+
+        // 2. Usage access permission check when monitoring is active
+        if (config.isAppMonitorEnabled()) {
+            if (!config.hasUsageStatsPermission(this)) {
+                isTampered = true
+                messages.add("Usage Access permission is missing.")
+            }
+        }
+
+        return Pair(isTampered, messages.joinToString(" "))
+    }
+
+    private fun resolveTamper() {
+        if (config.isProtectionEnabled() && VpnService.prepare(this) != null) {
+            val intent = VpnService.prepare(this)
+            if (intent != null) {
+                startActivityForResult(intent, REQUEST_VPN_PREPARE)
+                return
+            }
+        }
+        if (config.isAppMonitorEnabled() && !config.hasUsageStatsPermission(this)) {
+            try {
+                startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            } catch (e: Exception) {
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+                } catch (ex: Exception) {
+                    Toast.makeText(this, "Could not open settings", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     data class AppStatusInfo(

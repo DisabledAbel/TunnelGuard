@@ -200,6 +200,7 @@ class TunnelGuardVpnService : VpnService() {
         config.addLog("VpnService received action: $action")
 
         if (action == ACTION_STOP) {
+            config.setLastDisconnectReason("User stopped protection")
             stopVpn()
             return START_NOT_STICKY
         }
@@ -269,6 +270,7 @@ class TunnelGuardVpnService : VpnService() {
 
     override fun onRevoke() {
         config.addLog("VpnService revoked by the system (another VPN started).")
+        config.setLastDisconnectReason("System revoked VPN (another VPN started)")
         closeVpnInterface()
         checkAndRunVpnRouting()
         super.onRevoke()
@@ -326,10 +328,14 @@ class TunnelGuardVpnService : VpnService() {
         } else {
             // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
             val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
+            val prevState = config.getVPNState()
             currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.CONNECTED
             } else {
                 VPNState.DISCONNECTED
+            }
+            if ((prevState == VPNState.CONNECTED || prevState == VPNState.PROTECTED) && currentVpnState == VPNState.DISCONNECTED) {
+                config.setLastDisconnectReason("Loss of network connectivity")
             }
             config.setVPNState(currentVpnState)
             config.addLog("Checking VPN in Real Mode. Status: $currentVpnState")
@@ -343,6 +349,7 @@ class TunnelGuardVpnService : VpnService() {
         val protectedApps = config.getProtectedApps()
         if (protectedApps.isEmpty()) {
             config.addLog("No apps selected for protection. Closing local tunnel interface.")
+            config.setLastDisconnectReason("No apps selected for protection")
             closeVpnInterface()
             return
         }

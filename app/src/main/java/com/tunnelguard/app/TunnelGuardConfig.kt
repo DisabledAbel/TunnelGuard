@@ -25,6 +25,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_VPN_STATUS = "vpn_status" // To persist mocked/detected VPN state
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
         private const val KEY_VERSION_NAME = "override_version_name"
+        private const val KEY_FORCE_UPDATES = "forced_updates_enabled"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -292,6 +293,43 @@ class TunnelGuardConfig(private val context: Context) {
 
     fun setVPNState(state: VPNState) {
         prefs.edit().putString(KEY_VPN_STATUS, state.name).apply()
+        if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) {
+            val startTime = prefs.getLong("vpn_connection_start_time", 0L)
+            if (startTime == 0L) {
+                prefs.edit().putLong("vpn_connection_start_time", System.currentTimeMillis()).apply()
+            }
+        } else {
+            prefs.edit().putLong("vpn_connection_start_time", 0L).apply()
+        }
+    }
+
+    fun isForcedUpdatesEnabled(): Boolean {
+        return prefs.getBoolean(KEY_FORCE_UPDATES, true)
+    }
+
+    fun setForcedUpdatesEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FORCE_UPDATES, enabled).apply()
+        addLog("Forced updates enabled set to: $enabled")
+    }
+
+    fun getConnectionUptimeMillis(): Long {
+        val state = getVPNState()
+        if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) {
+            val startTime = prefs.getLong("vpn_connection_start_time", 0L)
+            if (startTime > 0L) {
+                return System.currentTimeMillis() - startTime
+            }
+        }
+        return 0L
+    }
+
+    fun getLastDisconnectReason(): String {
+        return prefs.getString("last_disconnect_reason", "None") ?: "None"
+    }
+
+    fun setLastDisconnectReason(reason: String) {
+        prefs.edit().putString("last_disconnect_reason", reason).apply()
+        addLog("Last Disconnect Reason updated: $reason")
     }
 
     /**
