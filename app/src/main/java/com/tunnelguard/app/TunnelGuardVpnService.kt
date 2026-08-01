@@ -122,11 +122,18 @@ class TunnelGuardVpnService : VpnService() {
                                 }
 
                                 if (!isVpnOn && !isPackageSuppressed(currentApp)) {
-                                    config.addLog("Protected app opened without VPN: $currentApp. Triggering alert notification.")
+                                    config.addLog("Protected app opened without VPN: $currentApp. Automatically opening warning and VPN redirection.")
 
                                     val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
                                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                                         putExtra("target_package", currentApp)
+                                    }
+
+                                    // Attempt to directly launch the warning/redirection activity
+                                    try {
+                                        this@TunnelGuardVpnService.startActivity(warningIntent)
+                                    } catch (e: Exception) {
+                                        config.addLog("Could not start VpnWarningActivity directly from background: ${e.message}")
                                     }
 
                                     val pendingIntent = PendingIntent.getActivity(
@@ -153,6 +160,7 @@ class TunnelGuardVpnService : VpnService() {
                                         .setCategory(NotificationCompat.CATEGORY_ALARM)
                                         .setAutoCancel(true)
                                         .setContentIntent(pendingIntent)
+                                        .setFullScreenIntent(pendingIntent, true) // Force auto-launch of the activity via full screen intent fallback
                                         .build()
 
                                     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
