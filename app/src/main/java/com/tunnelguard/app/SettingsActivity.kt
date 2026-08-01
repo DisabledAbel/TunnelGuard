@@ -36,6 +36,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var layoutPrefMonitor: LinearLayout
     private lateinit var cbPrefMonitor: CheckBox
 
+    private lateinit var layoutPrefForceUpdates: LinearLayout
+    private lateinit var cbPrefForceUpdates: CheckBox
+
     private lateinit var layoutPrefVpnChoice: LinearLayout
     private lateinit var tvPrefVpnChoiceValue: TextView
 
@@ -68,6 +71,9 @@ class SettingsActivity : AppCompatActivity() {
         layoutPrefMonitor = findViewById(R.id.layout_pref_monitor)
         cbPrefMonitor = findViewById(R.id.cb_pref_monitor)
 
+        layoutPrefForceUpdates = findViewById(R.id.layout_pref_force_updates)
+        cbPrefForceUpdates = findViewById(R.id.cb_pref_force_updates)
+
         layoutPrefVpnChoice = findViewById(R.id.layout_pref_vpn_choice)
         tvPrefVpnChoiceValue = findViewById(R.id.tv_pref_vpn_choice_value)
 
@@ -83,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefBoot.isChecked = config.isStartOnBootEnabled()
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
         cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
+        cbPrefForceUpdates.isChecked = config.isForcedUpdatesEnabled()
 
         // Update version string with the current stored version name
         updateVersionDisplay()
@@ -123,6 +130,13 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        layoutPrefForceUpdates.setOnClickListener {
+            val newChecked = !config.isForcedUpdatesEnabled()
+            config.setForcedUpdatesEnabled(newChecked)
+            cbPrefForceUpdates.isChecked = newChecked
+            config.addLog("Changed Forced Updates -> $newChecked")
+        }
+
         layoutPrefVpnChoice.setOnClickListener {
             showVpnAppOfChoiceDialog()
         }
@@ -139,6 +153,7 @@ class SettingsActivity : AppCompatActivity() {
 
         btnSimulateDisconnected.setOnClickListener {
             if (config.isSimulatedVpnEnabled()) {
+                config.setLastDisconnectReason("Simulation trigger")
                 config.setVPNState(VPNState.DISCONNECTED)
                 config.addLog("Simulating VPN state change to DISCONNECTED.")
                 triggerVpnServiceUpdate()

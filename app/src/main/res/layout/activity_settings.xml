@@ -131,7 +131,7 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:nextFocusUp="@+id/layout_pref_simulation"
-                android:nextFocusDown="@+id/layout_pref_vpn_choice"
+                android:nextFocusDown="@+id/layout_pref_force_updates"
                 android:orientation="horizontal"
                 android:padding="16dp"
                 android:layout_marginBottom="8dp">
@@ -166,6 +166,51 @@
                     android:focusable="false" />
             </LinearLayout>
 
+            <!-- Forced App Updates setting row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_force_updates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:nextFocusUp="@+id/layout_pref_monitor"
+                android:nextFocusDown="@+id/layout_pref_vpn_choice"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Forced App Updates"
+                        android:textColor="@color/text_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Enforce update check on startup and block access until updated"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <CheckBox
+                    android:id="@+id/cb_pref_force_updates"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
+            </LinearLayout>
+
             <!-- VPN App of Choice setting row -->
             <LinearLayout
                 android:id="@+id/layout_pref_vpn_choice"
@@ -175,7 +220,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center_vertical"
-                android:nextFocusUp="@+id/layout_pref_monitor"
+                android:nextFocusUp="@+id/layout_pref_force_updates"
                 android:nextFocusDown="@+id/btn_simulate_connected"
                 android:orientation="horizontal"
                 android:padding="16dp"

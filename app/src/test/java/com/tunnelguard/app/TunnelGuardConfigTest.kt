@@ -16,6 +16,7 @@ import org.junit.Test
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.anyBoolean
+import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.*
 
@@ -58,6 +59,12 @@ class TunnelGuardConfigTest {
             prefsStore[key] = value
             mockEditor
         }
+        whenever(mockEditor.putLong(anyString(), anyLong())).thenAnswer { invocation ->
+            val key = invocation.getArgument<String>(0)
+            val value = invocation.getArgument<Long>(1)
+            prefsStore[key] = value
+            mockEditor
+        }
         whenever(mockEditor.remove(anyString())).thenAnswer { invocation ->
             val key = invocation.getArgument<String>(0)
             prefsStore.remove(key)
@@ -74,6 +81,11 @@ class TunnelGuardConfigTest {
             val key = invocation.getArgument<String>(0)
             val default = invocation.getArgument<Boolean>(1)
             (prefsStore[key] as? Boolean) ?: default
+        }
+        whenever(mockPrefs.getLong(anyString(), anyLong())).thenAnswer { invocation ->
+            val key = invocation.getArgument<String>(0)
+            val default = invocation.getArgument<Long>(1)
+            (prefsStore[key] as? Long) ?: default
         }
 
         config = TunnelGuardConfig(mockContext)
@@ -303,5 +315,54 @@ class TunnelGuardConfigTest {
         } finally {
             mockProcess.close()
         }
+    }
+
+    @Test
+    fun testForcedUpdatesConfiguration() {
+        // Default should be true
+        assertTrue(config.isForcedUpdatesEnabled())
+
+        // Toggle to false
+        config.setForcedUpdatesEnabled(false)
+        assertFalse(config.isForcedUpdatesEnabled())
+
+        // Toggle back to true
+        config.setForcedUpdatesEnabled(true)
+        assertTrue(config.isForcedUpdatesEnabled())
+    }
+
+    @Test
+    fun testLastDisconnectReason() {
+        // Default should be "None"
+        assertEquals("None", config.getLastDisconnectReason())
+
+        // Set reason
+        config.setLastDisconnectReason("Loss of network connectivity")
+        assertEquals("Loss of network connectivity", config.getLastDisconnectReason())
+
+        // Set another reason
+        config.setLastDisconnectReason("User stopped protection")
+        assertEquals("User stopped protection", config.getLastDisconnectReason())
+    }
+
+    @Test
+    fun testConnectionUptimeCalculation() {
+        config.setVPNState(VPNState.DISCONNECTED)
+        assertEquals(0L, config.getConnectionUptimeMillis())
+
+        // Transition to CONNECTED should set start time
+        config.setVPNState(VPNState.CONNECTED)
+        val uptime = config.getConnectionUptimeMillis()
+        assertTrue(uptime >= 0L)
+
+        // Verify that setting VPNState again does not overwrite start time
+        val firstStartTime = prefsStore["vpn_connection_start_time"] as Long
+        config.setVPNState(VPNState.CONNECTED)
+        val secondStartTime = prefsStore["vpn_connection_start_time"] as Long
+        assertEquals(firstStartTime, secondStartTime)
+
+        // Transition to DISCONNECTED should reset start time
+        config.setVPNState(VPNState.DISCONNECTED)
+        assertEquals(0L, config.getConnectionUptimeMillis())
     }
 }
