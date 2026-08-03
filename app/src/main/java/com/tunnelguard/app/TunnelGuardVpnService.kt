@@ -327,10 +327,16 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
-            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
+            val isUpstreamVpnConnected = if (vpnInterface != null) {
+                false
+            } else {
+                config.detectRealVpnCapabilities(connectivityManager)
+            }
             val prevState = config.getVPNState()
             currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.CONNECTED
+            } else if (vpnInterface != null) {
+                VPNState.BLOCKED
             } else {
                 VPNState.DISCONNECTED
             }
@@ -408,6 +414,9 @@ class TunnelGuardVpnService : VpnService() {
                 return
             }
             vpnInterface = pfd
+            if (!simulated) {
+                config.setVPNState(VPNState.BLOCKED)
+            }
             config.addLog("Local block interface established successfully. Fail-closed ACTIVE for protected apps.")
         } catch (e: Exception) {
             config.addLog("Failed to establish VPN Interface: ${e.message}")
@@ -430,6 +439,10 @@ class TunnelGuardVpnService : VpnService() {
     private fun stopVpn() {
         stopMonitoring()
         closeVpnInterface()
+        val simulated = config.isSimulatedVpnEnabled()
+        if (!simulated) {
+            config.setVPNState(VPNState.DISCONNECTED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {

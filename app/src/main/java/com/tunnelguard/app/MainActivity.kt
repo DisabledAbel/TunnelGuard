@@ -264,6 +264,15 @@ class MainActivity : AppCompatActivity() {
             config.addLog("Error registering activity network callback: ${e.message}")
         }
 
+        // Auto-start TunnelGuardVpnService if protection is enabled but service is not running,
+        // and we already have VPN preparation permission
+        if (config.isProtectionEnabled() && !TunnelGuardVpnService.isServiceRunning) {
+            if (VpnService.prepare(this) == null) {
+                config.addLog("Protection is enabled but service is not running. Auto-starting TunnelGuardVpnService.")
+                startVpnService()
+            }
+        }
+
         updateUI()
         startUptimeUpdates()
     }
