@@ -38,6 +38,9 @@ class MainActivityUpdateTest {
         val prefs = context.getSharedPreferences("tunnel_guard_update_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
 
+        val mainPrefs = context.getSharedPreferences("tunnel_guard_prefs", android.content.Context.MODE_PRIVATE)
+        mainPrefs.edit().clear().commit()
+
         currentStub = StubUpdateChecker()
         val repo = UpdateRepository(context, currentStub)
         UpdateRepository.setInstance(repo)
@@ -92,5 +95,26 @@ class MainActivityUpdateTest {
             startedIntent.component?.className
         )
         assertTrue("MainActivity should have finished", activity.isFinishing)
+    }
+
+    @Test
+    fun testPermissionApprovalFollowedByResume() {
+        val context = RuntimeEnvironment.getApplication()
+        val config = TunnelGuardConfig(context)
+        config.setProtectionEnabled(true)
+
+        TunnelGuardVpnService.isServiceStarting = false
+
+        val controller = Robolectric.buildActivity(MainActivity::class.java)
+        val activity = controller.create().get()
+
+        activity.onActivityResult(2001, android.app.Activity.RESULT_OK, null)
+
+        assertTrue(TunnelGuardVpnService.isServiceStarting)
+
+        controller.resume()
+
+        assertTrue(TunnelGuardVpnService.isServiceStarting)
+        TunnelGuardVpnService.isServiceStarting = false
     }
 }
