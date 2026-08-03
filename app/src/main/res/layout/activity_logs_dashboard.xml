@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://tools.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="24dp">
+
+    <!-- Header Title -->
+    <TextView
+        android:id="@+id/tv_logs_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Logs Dashboard"
+        android:textColor="@color/text_primary"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Subtitle or active filter state -->
+    <TextView
+        android:id="@+id/tv_logs_subtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Track device logs, VPN connection events, and system routing."
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_logs_header" />
+
+    <!-- Left menu: ScrollView -->
+    <ScrollView
+        android:id="@+id/left_scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:focusable="false"
+        android:scrollbars="none"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/guideline_logs"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tv_logs_subtitle">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btn_tab_app_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusDown="@+id/btn_tab_vpn_logs"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="App Debug Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_tab_vpn_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_tab_app_logs"
+                android:nextFocusDown="@+id/btn_tab_device_logs"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="VPN Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_tab_device_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_tab_vpn_logs"
+                android:nextFocusDown="@+id/btn_refresh"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="Device Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btn_refresh"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_tab_device_logs"
+                android:nextFocusDown="@+id/btn_clear_app_logs"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="Refresh Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_clear_app_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_refresh"
+                android:nextFocusDown="@+id/btn_back"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="Clear App Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_back"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_clear_app_logs"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="Back to Dashboard"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Guideline dividing Left Side and Right Side -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline_logs"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.35" />
+
+    <!-- Right Side: RecyclerView of filtered logs -->
+    <LinearLayout
+        android:id="@+id/right_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/guideline_logs"
+        app:layout_constraintTop_toBottomOf="@+id/tv_logs_subtitle">
+
+        <TextView
+            android:id="@+id/tv_active_tab_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="App Debug Logs"
+            android:textColor="@color/focus_highlight"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_logs_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="12dp"
+            android:focusable="true"
+            android:nextFocusLeft="@+id/btn_tab_app_logs"
+            tools:listitem="@layout/item_log" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -59,6 +59,11 @@
             android:theme="@style/Theme.TunnelGuard" />
 
         <activity
+            android:name=".LogsDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard" />
+
+        <activity
             android:name=".VpnWarningActivity"
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard.TranslucentDialog" />

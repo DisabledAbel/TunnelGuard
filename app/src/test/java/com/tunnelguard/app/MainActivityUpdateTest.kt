@@ -60,6 +60,9 @@ class MainActivityUpdateTest {
         val controller = Robolectric.buildActivity(MainActivity::class.java)
         controller.create()
 
+        // Idle the main looper to execute the pending lifecycleScope.launch coroutine
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
         // Verify that checkForLatestRelease got invoked
         assertEquals(1, currentStub.invocationsCount)
     }

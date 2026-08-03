@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnManageApps: Button
     private lateinit var btnManageProfiles: Button
     private lateinit var btnTestProtection: Button
+    private lateinit var btnLogsDashboard: Button
     private lateinit var btnSettings: Button
     private lateinit var rvProtectedApps: RecyclerView
 
@@ -156,6 +157,7 @@ class MainActivity : AppCompatActivity() {
         btnManageApps = findViewById(R.id.btn_manage_apps)
         btnManageProfiles = findViewById(R.id.btn_manage_profiles)
         btnTestProtection = findViewById(R.id.btn_test_protection)
+        btnLogsDashboard = findViewById(R.id.btn_logs_dashboard)
         btnSettings = findViewById(R.id.btn_settings)
         rvProtectedApps = findViewById(R.id.rv_home_protected_apps)
 
@@ -179,6 +181,10 @@ class MainActivity : AppCompatActivity() {
 
         btnTestProtection.setOnClickListener {
             startActivity(Intent(this, TestActivity::class.java))
+        }
+
+        btnLogsDashboard.setOnClickListener {
+            startActivity(Intent(this, LogsDashboardActivity::class.java))
         }
 
         btnSettings.setOnClickListener {
