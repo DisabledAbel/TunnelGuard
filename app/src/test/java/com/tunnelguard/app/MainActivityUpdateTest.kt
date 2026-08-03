@@ -108,13 +108,23 @@ class MainActivityUpdateTest {
         val controller = Robolectric.buildActivity(MainActivity::class.java)
         val activity = controller.create().get()
 
+        val shadowApp = shadowOf(activity.applicationContext as android.app.Application)
+        // Clear any previous started services in the queue first
+        while (shadowApp.nextStartedService != null) { }
+
         activity.onActivityResult(2001, android.app.Activity.RESULT_OK, null)
 
         assertTrue(TunnelGuardVpnService.isServiceStarting)
+        val firstIntent = shadowApp.nextStartedService
+        assertNotNull(firstIntent)
+        assertEquals(TunnelGuardVpnService.ACTION_START, firstIntent?.action)
+        assertNull(shadowApp.nextStartedService)
 
         controller.resume()
 
         assertTrue(TunnelGuardVpnService.isServiceStarting)
+        assertNull(shadowApp.nextStartedService)
+
         TunnelGuardVpnService.isServiceStarting = false
     }
 }
