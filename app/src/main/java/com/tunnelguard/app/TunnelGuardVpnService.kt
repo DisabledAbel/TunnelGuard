@@ -28,6 +28,8 @@ import kotlinx.coroutines.delay
 class TunnelGuardVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var lastEstablishedApps: Set<String>? = null
+    private var lastEmergencyLock: Boolean? = null
     private lateinit var config: TunnelGuardConfig
     private lateinit var connectivityManager: ConnectivityManager
 
@@ -378,6 +380,12 @@ class TunnelGuardVpnService : VpnService() {
             return
         }
 
+        // Avoid redundant rebuilding of the local block interface if already active and config hasn't changed
+        if (vpnInterface != null && protectedApps == lastEstablishedApps && isEmergencyLock == lastEmergencyLock) {
+            config.addLog("Routing check: local interface is already active and configuration has not changed. No-op.")
+            return
+        }
+
         // If upstream is DISCONNECTED/BLOCKING or Emergency Lock is active, establish local VpnService and direct all packets
         // of allowed (protected) apps into it without forwarding them (blackholing/fail-closed block).
         val builder = Builder()
@@ -419,6 +427,8 @@ class TunnelGuardVpnService : VpnService() {
                 return
             }
             vpnInterface = pfd
+            lastEstablishedApps = protectedApps.toSet()
+            lastEmergencyLock = isEmergencyLock
             if (!simulated) {
                 config.setVPNState(VPNState.BLOCKED)
                 val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
@@ -441,14 +451,8 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Error closing VPN interface: ${e.message}")
         }
         vpnInterface = null
-
-        // After removing vpnInterface, in real mode without an upstream connection, set state to DISCONNECTED
-        if (!config.isSimulatedVpnEnabled()) {
-            val isUpstreamConnected = config.detectRealVpnCapabilities(connectivityManager)
-            if (!isUpstreamConnected) {
-                config.setVPNState(VPNState.DISCONNECTED)
-            }
-        }
+        lastEstablishedApps = null
+        lastEmergencyLock = null
     }
 
     private fun stopVpn() {

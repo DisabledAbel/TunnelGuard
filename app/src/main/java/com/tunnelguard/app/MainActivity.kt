@@ -264,11 +264,11 @@ class MainActivity : AppCompatActivity() {
             config.addLog("Error registering activity network callback: ${e.message}")
         }
 
-        // Auto-start TunnelGuardVpnService if protection is enabled but service is not running,
+        // Auto-start TunnelGuardVpnService if protection or emergency lock is enabled but service is not running,
         // and we already have VPN preparation permission, and we're not currently starting it
-        if (config.isProtectionEnabled() && !TunnelGuardVpnService.isServiceRunning && !TunnelGuardVpnService.isServiceStarting) {
+        if ((config.isProtectionEnabled() || config.isEmergencyLockEnabled()) && !TunnelGuardVpnService.isServiceRunning && !TunnelGuardVpnService.isServiceStarting) {
             if (VpnService.prepare(this) == null) {
-                config.addLog("Protection is enabled but service is not running. Auto-starting TunnelGuardVpnService.")
+                config.addLog("Protection or Emergency Lock is enabled but service is not running. Auto-starting TunnelGuardVpnService.")
                 startVpnService()
             }
         }
@@ -349,6 +349,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startVpnService() {
+        if (TunnelGuardVpnService.isServiceStarting) {
+            return
+        }
         TunnelGuardVpnService.isServiceStarting = true
         val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
             action = TunnelGuardVpnService.ACTION_START
