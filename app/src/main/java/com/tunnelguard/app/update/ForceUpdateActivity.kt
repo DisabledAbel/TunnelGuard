@@ -105,8 +105,19 @@ class ForceUpdateActivity : AppCompatActivity() {
                             if (parentFile != null && parentFile.canonicalPath == updatesDir.canonicalPath) {
                                 if (apkFile.exists() && apkFile.length() > 0) {
                                     // Validate and install if the file is already downloaded successfully
-                                    if (validateApkFile(apkFile)) {
+                                    val errorBuilder = StringBuilder()
+                                    if (validateApkFile(apkFile, errorBuilder)) {
                                         updateMgr.installApkFile(latestVersion!!)
+                                    } else {
+                                        val errorMsg = errorBuilder.toString()
+                                        androidx.appcompat.app.AlertDialog.Builder(this)
+                                            .setTitle("Update Validation Failed")
+                                            .setMessage(errorMsg.ifBlank { "Downloaded APK file validation failed." })
+                                            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                                            .show()
+                                        if (apkFile.exists()) {
+                                            apkFile.delete()
+                                        }
                                     }
                                 }
                             }
@@ -200,13 +211,19 @@ class ForceUpdateActivity : AppCompatActivity() {
                     btnUpdate.isEnabled = true
 
                     // Validate APK before installing
-                    if (validateApkFile(updateApkFile)) {
+                    val errorBuilder = StringBuilder()
+                    if (validateApkFile(updateApkFile, errorBuilder)) {
                         val installSuccess = updateMgr.installApkFile(latestVersion!!)
                         if (!installSuccess) {
                             Toast.makeText(this@ForceUpdateActivity, "Failed to launch package installer", Toast.LENGTH_LONG).show()
                         }
                     } else {
-                        Toast.makeText(this@ForceUpdateActivity, "Downloaded file validation failed. It may be corrupted or security checks failed.", Toast.LENGTH_LONG).show()
+                        val errorMsg = errorBuilder.toString()
+                        androidx.appcompat.app.AlertDialog.Builder(this@ForceUpdateActivity)
+                            .setTitle("Update Validation Failed")
+                            .setMessage(errorMsg.ifBlank { "Downloaded APK file validation failed." })
+                            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                            .show()
                         if (updateApkFile.exists()) {
                             updateApkFile.delete()
                         }
@@ -223,20 +240,9 @@ class ForceUpdateActivity : AppCompatActivity() {
         }
     }
 
-    private fun validateApkFile(apkFile: File): Boolean {
-        return try {
-            val pm = packageManager
-            val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
-            if (packageInfo != null) {
-                val isValidPackage = packageInfo.packageName == packageName
-                isValidPackage
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            config.addLog("validateApkFile failed: ${e.message}")
-            false
-        }
+    private fun validateApkFile(apkFile: File, outError: StringBuilder? = null): Boolean {
+        val updateMgr = UpdateManager(this, config)
+        return updateMgr.validateApkFile(apkFile, outError)
     }
 
     private fun downloadUrlWithRedirects(urlString: String, outputFile: File, progressUpdate: (Int, Int) -> Unit) {

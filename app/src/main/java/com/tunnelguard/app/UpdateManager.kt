@@ -2,6 +2,7 @@ package com.tunnelguard.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -142,17 +143,26 @@ class UpdateManager(
                     }
                     downloadDialog.dismiss()
 
-                    // Install the APK and report back
-                    val installSuccess = installApkFile(latestVersion)
-                    if (installSuccess) {
-                        // Show success dialog ONLY when installation reports success
-                        androidx.appcompat.app.AlertDialog.Builder(activity)
-                            .setTitle("Update Downloaded")
-                            .setMessage("TunnelGuard has successfully downloaded version $latestVersion.\n\nThe package installer intent has been launched to complete the update.")
-                            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
-                            .show()
+                    val errorBuilder = StringBuilder()
+                    if (validateApkFile(updateApkFile, errorBuilder)) {
+                        // Install the APK and report back
+                        val installSuccess = installApkFile(latestVersion)
+                        if (installSuccess) {
+                            // Show success dialog ONLY when installation reports success
+                            androidx.appcompat.app.AlertDialog.Builder(activity)
+                                .setTitle("Update Downloaded")
+                                .setMessage("TunnelGuard has successfully downloaded version $latestVersion.\n\nThe package installer intent has been launched to complete the update.")
+                                .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                                .show()
+                        } else {
+                            showUpdateErrorDialog("Failed to initialize or launch package installer intent.")
+                        }
                     } else {
-                        showUpdateErrorDialog("Failed to initialize or launch package installer intent.")
+                        val errorMsg = errorBuilder.toString()
+                        showUpdateErrorDialog(errorMsg.ifBlank { "Downloaded APK file validation failed." })
+                        if (updateApkFile.exists()) {
+                            updateApkFile.delete()
+                        }
                     }
                     isUpdateInProgress.set(false)
                 }
@@ -229,6 +239,69 @@ class UpdateManager(
             }
         }
         throw IOException("Too many redirects")
+    }
+
+    fun validateApkFile(apkFile: File, outError: StringBuilder? = null): Boolean {
+        return try {
+            val pm = activity.packageManager
+
+            // Check if file exists and is not empty
+            if (!apkFile.exists() || apkFile.length() == 0L) {
+                outError?.append("Downloaded APK file does not exist or is empty.")
+                config.addLog("validateApkFile: APK file does not exist or is empty.")
+                return false
+            }
+
+            // Retrieve package info with GET_SIGNATURES for the downloaded APK
+            val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNATURES)
+            if (packageInfo == null) {
+                outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
+                config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
+                return false
+            }
+
+            // 1. Verify Package Name
+            if (packageInfo.packageName != activity.packageName) {
+                outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
+                config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
+                return false
+            }
+
+            // 2. Verify Signatures/Certificates
+            val archiveSignatures = packageInfo.signatures
+            if (archiveSignatures.isNullOrEmpty()) {
+                outError?.append("The downloaded APK does not contain any signing certificates. It cannot be verified.")
+                config.addLog("validateApkFile: No signatures found in downloaded APK.")
+                return false
+            }
+
+            // Get current running app's signatures
+            val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNATURES)
+            val currentSignatures = currentPackageInfo.signatures
+            if (currentSignatures.isNullOrEmpty()) {
+                outError?.append("The installed app does not have signing certificates.")
+                config.addLog("validateApkFile: No signatures found in installed app.")
+                return false
+            }
+
+            // Compare sets of signatures to make order-independent and robust
+            val archiveSigSet = archiveSignatures.toSet()
+            val currentSigSet = currentSignatures.toSet()
+
+            if (archiveSigSet != currentSigSet) {
+                outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
+                        "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
+                        "To install this update, please uninstall the current version and install the new version manually.")
+                config.addLog("validateApkFile: Signature mismatch!")
+                return false
+            }
+
+            true
+        } catch (e: Exception) {
+            outError?.append("Error during APK validation: ${e.message}")
+            config.addLog("validateApkFile failed: ${e.message}")
+            false
+        }
     }
 
     fun installApkFile(versionName: String): Boolean {
