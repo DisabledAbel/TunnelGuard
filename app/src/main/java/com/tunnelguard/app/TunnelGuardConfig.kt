@@ -70,7 +70,12 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     private fun isOurOurVpn(addresses: List<android.net.LinkAddress>): Boolean {
-        return addresses.any { it.address.hostAddress == TUNNEL_ADDRESS || it.address.hostAddress == "2001:db8::1" }
+        val ourIpv4 = try { java.net.InetAddress.getByName(TUNNEL_ADDRESS) } catch (e: Exception) { null }
+        val ourIpv6 = try { java.net.InetAddress.getByName("2001:db8::1") } catch (e: Exception) { null }
+        return addresses.any {
+            val addr = it.address
+            (ourIpv4 != null && addr == ourIpv4) || (ourIpv6 != null && addr == ourIpv6)
+        }
     }
 
     /**
