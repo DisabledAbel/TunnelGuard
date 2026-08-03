@@ -335,9 +335,22 @@
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
                 android:nextFocusUp="@+id/btn_manage_profiles"
-                android:nextFocusDown="@+id/btn_settings"
+                android:nextFocusDown="@+id/btn_logs_dashboard"
                 android:padding="12dp"
                 android:text="Test Protection"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_logs_dashboard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_test_protection"
+                android:nextFocusDown="@+id/btn_settings"
+                android:padding="12dp"
+                android:text="Logs Dashboard"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="12dp" />
 
@@ -347,7 +360,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_test_protection"
+                android:nextFocusUp="@+id/btn_logs_dashboard"
                 android:padding="12dp"
                 android:text="Settings"
                 android:textColor="@color/text_primary"
