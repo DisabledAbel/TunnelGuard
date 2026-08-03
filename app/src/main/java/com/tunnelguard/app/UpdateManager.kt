@@ -3,6 +3,7 @@ package com.tunnelguard.app
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.SigningInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -241,6 +242,17 @@ class UpdateManager(
         throw IOException("Too many redirects")
     }
 
+    private fun SigningInfo.signersMatchExactly(other: SigningInfo): Boolean {
+        val thisHistory = this.getSigningCertificateHistory() ?: this.getApkContentsSigners()
+        val otherHistory = other.getSigningCertificateHistory() ?: other.getApkContentsSigners()
+        if (thisHistory == null || otherHistory == null) return false
+        return thisHistory.any { thisSig ->
+            otherHistory.any { otherSig ->
+                thisSig == otherSig
+            }
+        }
+    }
+
     fun validateApkFile(apkFile: File, outError: StringBuilder? = null): Boolean {
         return try {
             val pm = activity.packageManager
@@ -252,48 +264,91 @@ class UpdateManager(
                 return false
             }
 
-            // Retrieve package info with GET_SIGNATURES for the downloaded APK
-            val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNATURES)
-            if (packageInfo == null) {
-                outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
-                config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
-                return false
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // On Android 28+, retrieve signing certificates via GET_SIGNING_CERTIFICATES
+                val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
+                if (packageInfo == null) {
+                    outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
+                    config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
+                    return false
+                }
 
-            // 1. Verify Package Name
-            if (packageInfo.packageName != activity.packageName) {
-                outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
-                config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
-                return false
-            }
+                // 1. Verify Package Name
+                if (packageInfo.packageName != activity.packageName) {
+                    outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
+                    config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
+                    return false
+                }
 
-            // 2. Verify Signatures/Certificates
-            val archiveSignatures = packageInfo.signatures
-            if (archiveSignatures.isNullOrEmpty()) {
-                outError?.append("The downloaded APK does not contain any signing certificates. It cannot be verified.")
-                config.addLog("validateApkFile: No signatures found in downloaded APK.")
-                return false
-            }
+                val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
 
-            // Get current running app's signatures
-            val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNATURES)
-            val currentSignatures = currentPackageInfo.signatures
-            if (currentSignatures.isNullOrEmpty()) {
-                outError?.append("The installed app does not have signing certificates.")
-                config.addLog("validateApkFile: No signatures found in installed app.")
-                return false
-            }
+                val archiveSigningInfo = packageInfo.signingInfo
+                val currentSigningInfo = currentPackageInfo.signingInfo
 
-            // Compare sets of signatures to make order-independent and robust
-            val archiveSigSet = archiveSignatures.toSet()
-            val currentSigSet = currentSignatures.toSet()
+                if (archiveSigningInfo == null || currentSigningInfo == null) {
+                    outError?.append("Signing information is missing.")
+                    config.addLog("validateApkFile: SigningInfo is null.")
+                    return false
+                }
 
-            if (archiveSigSet != currentSigSet) {
-                outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
-                        "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
-                        "To install this update, please uninstall the current version and install the new version manually.")
-                config.addLog("validateApkFile: Signature mismatch!")
-                return false
+                val archiveMultiple = archiveSigningInfo.hasMultipleSigners()
+                val currentMultiple = currentSigningInfo.hasMultipleSigners()
+
+                if (archiveMultiple || currentMultiple) {
+                    // Retaining exact signer-set comparison for multi-signer packages
+                    val archiveSigs = archiveSigningInfo.getApkContentsSigners()?.toSet() ?: emptySet()
+                    val currentSigs = currentSigningInfo.getApkContentsSigners()?.toSet() ?: emptySet()
+                    if (archiveSigs != currentSigs) {
+                        outError?.append("Signature mismatch on multi-signer package.")
+                        config.addLog("validateApkFile: Multi-signer signature mismatch!")
+                        return false
+                    }
+                } else {
+                    // Use SigningInfo.signersMatchExactly() for single-signer APKs (supporting rotation/rotated single-signer)
+                    if (!archiveSigningInfo.signersMatchExactly(currentSigningInfo)) {
+                        outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
+                                "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
+                                "To install this update, please uninstall the current version and install the new version manually.")
+                        config.addLog("validateApkFile: Signature mismatch!")
+                        return false
+                    }
+                }
+            } else {
+                // Legacy handling on older versions (< API 28)
+                val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNATURES)
+                if (packageInfo == null) {
+                    outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
+                    config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
+                    return false
+                }
+
+                // 1. Verify Package Name
+                if (packageInfo.packageName != activity.packageName) {
+                    outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
+                    config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
+                    return false
+                }
+
+                val archiveSignatures = packageInfo.signatures
+                val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNATURES)
+                val currentSignatures = currentPackageInfo.signatures
+
+                if (archiveSignatures.isNullOrEmpty() || currentSignatures.isNullOrEmpty()) {
+                    outError?.append("Signing signatures are missing.")
+                    config.addLog("validateApkFile: Signatures are null or empty.")
+                    return false
+                }
+
+                val archiveSigSet = archiveSignatures.toSet()
+                val currentSigSet = currentSignatures.toSet()
+
+                if (archiveSigSet != currentSigSet) {
+                    outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
+                            "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
+                            "To install this update, please uninstall the current version and install the new version manually.")
+                    config.addLog("validateApkFile: Signature mismatch!")
+                    return false
+                }
             }
 
             true
