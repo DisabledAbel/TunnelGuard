@@ -229,6 +229,10 @@ class MainActivity : AppCompatActivity() {
         return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    /**
+     * Resumes the activity's monitoring, restores VPN service protection when required,
+     * refreshes the interface, and starts connection uptime updates.
+     */
     override fun onResume() {
         super.onResume()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -310,6 +314,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Toggles emergency lock and updates the VPN service to enforce the new state.
+     */
     private fun toggleEmergencyLock() {
         val isLocked = config.isEmergencyLockEnabled()
         val nextLockState = !isLocked
@@ -335,6 +342,13 @@ class MainActivity : AppCompatActivity() {
         updateUI()
     }
 
+    /**
+     * Handles the result of the VPN permission request.
+     *
+     * @param requestCode The identifier of the permission request.
+     * @param resultCode The result of the permission request.
+     * @param data Additional result data, if provided.
+     */
     public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_VPN_PREPARE && resultCode == Activity.RESULT_OK) {
@@ -348,6 +362,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Starts the VPN service if it is not already starting.
+     */
     private fun startVpnService() {
         if (TunnelGuardVpnService.isServiceStarting) {
             return
@@ -370,6 +387,9 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    /**
+     * Requests the VPN service to apply the current protection settings.
+     */
     private fun triggerVpnServiceUpdate() {
         val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
             action = TunnelGuardVpnService.ACTION_UPDATE
@@ -377,6 +397,9 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    /**
+     * Synchronizes the home screen with the current VPN, protection, DNS, profile, application, uptime, and tamper-warning states.
+     */
     private fun updateUI() {
         if (!TunnelGuardVpnService.isServiceRunning && !config.isSimulatedVpnEnabled()) {
             val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)

@@ -101,6 +101,9 @@ class TunnelGuardVpnService : VpnService() {
         }
     }
 
+    /**
+     * Initializes the VPN service and its connectivity configuration.
+     */
     override fun onCreate() {
         super.onCreate()
         isServiceStarting = false
@@ -250,6 +253,9 @@ class TunnelGuardVpnService : VpnService() {
         return START_STICKY
     }
 
+    /**
+     * Releases VPN resources and unregisters service callbacks when the service is destroyed.
+     */
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
@@ -321,7 +327,10 @@ class TunnelGuardVpnService : VpnService() {
     }
 
     /**
-     * Checks the current physical and simulated connection states and starts or updates the routing interface.
+     * Evaluates the current VPN state and configures the fail-closed routing interface for protected applications.
+     *
+     * Closes the local interface when no applications are protected or an upstream VPN is active without Emergency Lock.
+     * Establishes or reuses a local blocking interface when required, updating and broadcasting state changes as needed.
      */
     @Synchronized
     private fun checkAndRunVpnRouting() {
@@ -444,6 +453,9 @@ class TunnelGuardVpnService : VpnService() {
         }
     }
 
+    /**
+     * Closes the active VPN interface and clears its cached routing configuration.
+     */
     private fun closeVpnInterface() {
         try {
             vpnInterface?.close()
@@ -455,6 +467,9 @@ class TunnelGuardVpnService : VpnService() {
         lastEmergencyLock = null
     }
 
+    /**
+     * Stops VPN operation, clears its state, removes the foreground notification, and stops the service.
+     */
     private fun stopVpn() {
         stopMonitoring()
         closeVpnInterface()

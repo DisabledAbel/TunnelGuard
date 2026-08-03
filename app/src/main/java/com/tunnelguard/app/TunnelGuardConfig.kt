@@ -42,7 +42,10 @@ class TunnelGuardConfig(private val context: Context) {
     )
 
     /**
-     * Consolidate VPN capability detection helper.
+     * Determines whether an external VPN is currently active.
+     *
+     * @param connectivityManager The connectivity manager used to inspect available networks.
+     * @return `true` if an external VPN network is detected, `false` otherwise.
      */
     fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): Boolean {
         if (connectivityManager == null) return false
@@ -69,6 +72,12 @@ class TunnelGuardConfig(private val context: Context) {
         return false
     }
 
+    /**
+     * Determines whether the interface includes one of TunnelGuard's tunnel addresses.
+     *
+     * @param addresses The interface link addresses to inspect.
+     * @return `true` if an address matches the configured IPv4 or documented IPv6 tunnel address, `false` otherwise.
+     */
     private fun isOurOurVpn(addresses: List<android.net.LinkAddress>): Boolean {
         val ourIpv4 = try { java.net.InetAddress.getByName(TUNNEL_ADDRESS) } catch (e: Exception) { null }
         val ourIpv6 = try { java.net.InetAddress.getByName("2001:db8::1") } catch (e: Exception) { null }
