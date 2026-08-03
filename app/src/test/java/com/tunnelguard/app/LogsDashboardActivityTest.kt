@@ -12,6 +12,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.Q])
@@ -34,7 +36,17 @@ class LogsDashboardActivityTest {
         config.addLog("Another log line here.")
 
         val controller = Robolectric.buildActivity(LogsDashboardActivity::class.java)
-        val activity = controller.create().start().resume().get()
+        val activity = controller.get()
+        activity.ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
+
+        val latch = CountDownLatch(1)
+        activity.onRefreshCompleteCallback = {
+            latch.countDown()
+        }
+
+        controller.create().start().resume()
+        latch.await(2, TimeUnit.SECONDS)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val tvActiveTabTitle = activity.findViewById<TextView>(R.id.tv_active_tab_title)
         val rvLogsList = activity.findViewById<RecyclerView>(R.id.rv_logs_list)
@@ -46,16 +58,8 @@ class LogsDashboardActivityTest {
         val adapter = rvLogsList.adapter
         assertNotNull(adapter)
 
-        // Wait up to 2 seconds for background thread/coroutine to update list
-        var attempts = 0
-        while (adapter!!.itemCount < 2 && attempts < 20) {
-            Thread.sleep(100)
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            attempts++
-        }
-
         // There should be at least the 2 logs we added
-        assertTrue("Adapter should have at least 2 logs, but had ${adapter.itemCount}", adapter.itemCount >= 2)
+        assertTrue("Adapter should have at least 2 logs, but had ${adapter!!.itemCount}", adapter.itemCount >= 2)
     }
 
     @Test
@@ -67,13 +71,27 @@ class LogsDashboardActivityTest {
         config.addLog("Another VPN status: CONNECTED")
 
         val controller = Robolectric.buildActivity(LogsDashboardActivity::class.java)
-        val activity = controller.create().start().resume().get()
+        val activity = controller.get()
+        activity.ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
+
+        var latch = CountDownLatch(1)
+        activity.onRefreshCompleteCallback = {
+            latch.countDown()
+        }
+
+        controller.create().start().resume()
+        latch.await(2, TimeUnit.SECONDS)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val btnTabVpnLogs = activity.findViewById<Button>(R.id.btn_tab_vpn_logs)
         assertNotNull(btnTabVpnLogs)
 
+        latch = CountDownLatch(1)
         // Switch to VPN logs tab
         btnTabVpnLogs.performClick()
+
+        latch.await(2, TimeUnit.SECONDS)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val tvActiveTabTitle = activity.findViewById<TextView>(R.id.tv_active_tab_title)
         assertEquals("VPN Logs", tvActiveTabTitle.text.toString())
@@ -82,16 +100,8 @@ class LogsDashboardActivityTest {
         val adapter = rvLogsList.adapter
         assertNotNull(adapter)
 
-        // Wait up to 2 seconds for background thread/coroutine to update list
-        var attempts = 0
-        while (adapter!!.itemCount == 0 && attempts < 20) {
-            Thread.sleep(100)
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            attempts++
-        }
-
         // It should contain at least our VPN logs
-        assertTrue("Adapter should have at least 1 log, but had ${adapter.itemCount}", adapter.itemCount >= 1)
+        assertTrue("Adapter should have at least 1 log, but had ${adapter!!.itemCount}", adapter.itemCount >= 1)
     }
 
     @Test
@@ -99,20 +109,26 @@ class LogsDashboardActivityTest {
         config.addLog("A temporary log entry.")
 
         val controller = Robolectric.buildActivity(LogsDashboardActivity::class.java)
-        val activity = controller.create().start().resume().get()
+        val activity = controller.get()
+        activity.ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
+
+        var latch = CountDownLatch(1)
+        activity.onRefreshCompleteCallback = {
+            latch.countDown()
+        }
+
+        controller.create().start().resume()
+        latch.await(2, TimeUnit.SECONDS)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         val btnClearAppLogs = activity.findViewById<Button>(R.id.btn_clear_app_logs)
         assertNotNull(btnClearAppLogs)
 
+        latch = CountDownLatch(1)
         btnClearAppLogs.performClick()
 
-        // Wait up to 2 seconds for background thread/coroutine to update list
-        var attempts = 0
-        while (config.getLogs().size != 1 && attempts < 20) {
-            Thread.sleep(100)
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            attempts++
-        }
+        latch.await(2, TimeUnit.SECONDS)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         // The app logs should now be cleared
         // Since we add "App debug logs cleared by user." when clearing, the logs size should be exactly 1.

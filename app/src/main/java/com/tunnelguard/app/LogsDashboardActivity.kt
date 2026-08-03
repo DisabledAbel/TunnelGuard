@@ -39,6 +39,10 @@ class LogsDashboardActivity : AppCompatActivity() {
 
     private var activeTab = LogTab.APP
 
+    var ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
+    var onRefreshCompleteCallback: (() -> Unit)? = null
+    private var currentRequestId = 0L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_logs_dashboard)
@@ -115,18 +119,23 @@ class LogsDashboardActivity : AppCompatActivity() {
     }
 
     private fun refreshCurrentLogs() {
+        val requestId = ++currentRequestId
+        val capturedTab = activeTab
         lifecycleScope.launch {
-            val logs = withContext(Dispatchers.IO) {
-                when (activeTab) {
+            val logs = withContext(ioDispatcher) {
+                when (capturedTab) {
                     LogTab.APP -> config.getLogs()
                     LogTab.VPN -> getVpnLogs()
                     LogTab.DEVICE -> getDeviceLogcatRaw()
                 }
             }
-            logsAdapter.updateList(logs)
-            if (logs.isNotEmpty()) {
-                rvLogsList.scrollToPosition(0)
+            if (requestId == currentRequestId && capturedTab == activeTab) {
+                logsAdapter.updateList(logs)
+                if (logs.isNotEmpty()) {
+                    rvLogsList.scrollToPosition(0)
+                }
             }
+            onRefreshCompleteCallback?.invoke()
         }
     }
 
@@ -161,18 +170,23 @@ class LogsDashboardActivity : AppCompatActivity() {
     }
 
     private fun getDeviceLogcatRaw(): List<String> {
-        val lines = mutableListOf<String>()
+        val lines = java.util.ArrayDeque<String>(500)
         try {
             val process = Runtime.getRuntime().exec("logcat -d -v time")
             val bufferedReader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
             var line: String?
             while (bufferedReader.readLine().also { line = it } != null) {
-                line?.let { lines.add(it) }
+                line?.let {
+                    if (lines.size >= 500) {
+                        lines.removeFirst()
+                    }
+                    lines.add(it)
+                }
             }
         } catch (e: Exception) {
             lines.add("Error reading logcat: ${e.message}")
         }
-        return if (lines.size > 500) lines.takeLast(500) else lines
+        return lines.toList()
     }
 
     private class LogsAdapter(
