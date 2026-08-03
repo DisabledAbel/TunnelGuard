@@ -265,8 +265,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Auto-start TunnelGuardVpnService if protection is enabled but service is not running,
-        // and we already have VPN preparation permission
-        if (config.isProtectionEnabled() && !TunnelGuardVpnService.isServiceRunning) {
+        // and we already have VPN preparation permission, and we're not currently starting it
+        if (config.isProtectionEnabled() && !TunnelGuardVpnService.isServiceRunning && !TunnelGuardVpnService.isServiceStarting) {
             if (VpnService.prepare(this) == null) {
                 config.addLog("Protection is enabled but service is not running. Auto-starting TunnelGuardVpnService.")
                 startVpnService()
@@ -335,7 +335,7 @@ class MainActivity : AppCompatActivity() {
         updateUI()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_VPN_PREPARE && resultCode == Activity.RESULT_OK) {
             config.setProtectionEnabled(true)
@@ -349,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startVpnService() {
+        TunnelGuardVpnService.isServiceStarting = true
         val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
             action = TunnelGuardVpnService.ACTION_START
         }
@@ -374,7 +375,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        if (!TunnelGuardVpnService.isServiceRunning) {
+        if (!TunnelGuardVpnService.isServiceRunning && !config.isSimulatedVpnEnabled()) {
             val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             val currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.CONNECTED

@@ -78,6 +78,9 @@ class TunnelGuardVpnService : VpnService() {
             private set
 
         @Volatile
+        var isServiceStarting = false
+
+        @Volatile
         var pendingWarningId: String? = null
 
         private val suppressedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -98,6 +101,7 @@ class TunnelGuardVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceStarting = false
         config = TunnelGuardConfig(this)
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         isServiceRunning = true
@@ -247,6 +251,7 @@ class TunnelGuardVpnService : VpnService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        isServiceStarting = false
         stopMonitoring()
         if (isCallbackRegistered) {
             try {
@@ -416,6 +421,8 @@ class TunnelGuardVpnService : VpnService() {
             vpnInterface = pfd
             if (!simulated) {
                 config.setVPNState(VPNState.BLOCKED)
+                val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+                sendBroadcast(successBroadcastIntent)
             }
             config.addLog("Local block interface established successfully. Fail-closed ACTIVE for protected apps.")
         } catch (e: Exception) {
@@ -434,11 +441,20 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Error closing VPN interface: ${e.message}")
         }
         vpnInterface = null
+
+        // After removing vpnInterface, in real mode without an upstream connection, set state to DISCONNECTED
+        if (!config.isSimulatedVpnEnabled()) {
+            val isUpstreamConnected = config.detectRealVpnCapabilities(connectivityManager)
+            if (!isUpstreamConnected) {
+                config.setVPNState(VPNState.DISCONNECTED)
+            }
+        }
     }
 
     private fun stopVpn() {
         stopMonitoring()
         closeVpnInterface()
+        isServiceStarting = false
         val simulated = config.isSimulatedVpnEnabled()
         if (!simulated) {
             config.setVPNState(VPNState.DISCONNECTED)
