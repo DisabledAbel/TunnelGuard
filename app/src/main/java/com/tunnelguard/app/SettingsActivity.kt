@@ -143,8 +143,8 @@ class SettingsActivity : AppCompatActivity() {
 
         btnSimulateConnected.setOnClickListener {
             if (config.isSimulatedVpnEnabled()) {
-                config.setVPNState(VPNState.CONNECTED)
-                config.addLog("Simulating VPN state change to CONNECTED.")
+                config.setVPNState(VPNState.PROTECTED)
+                config.addLog("Simulating VPN state change to PROTECTED.")
                 triggerVpnServiceUpdate()
             } else {
                 config.addLog("Please enable Simulation Mode first before using simulated triggers.")

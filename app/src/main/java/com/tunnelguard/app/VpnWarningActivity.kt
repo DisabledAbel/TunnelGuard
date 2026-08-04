@@ -133,7 +133,7 @@ class VpnWarningActivity : AppCompatActivity() {
             tvCountdownStatus.text = "Simulation Mode: Trying to auto-connect VPN..."
             // In simulation mode, we simulate automatic connection
             val runnable = Runnable {
-                config.setVPNState(VPNState.CONNECTED)
+                config.setVPNState(VPNState.PROTECTED)
                 config.addLog("Auto-connected simulated VPN for $targetPackage")
 
                 // Notify VpnService to update routing table dynamically
