@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -21,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.tunnelguard.app.R
 import io.noties.markwon.Markwon
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @Composable
 fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp: () -> Unit) {
@@ -41,7 +44,17 @@ fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp:
                     VersionBadge("Current Version", state.currentVersion, Modifier.weight(1f))
                     VersionBadge("Latest Version", state.latestVersion, Modifier.weight(1f))
                 }
-                if (state.publishedAt.isNotBlank()) Text("Release Date: ${state.publishedAt}", modifier = Modifier.padding(top = 12.dp))
+                if (state.publishedAt.isNotBlank()) {
+                    val formattedDate = try {
+                        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                        val date = isoFormat.parse(state.publishedAt)
+                        val outputFormat = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM, Locale.getDefault())
+                        date?.let { outputFormat.format(it) } ?: state.publishedAt
+                    } catch (e: Exception) {
+                        state.publishedAt
+                    }
+                    Text("Release Date: $formattedDate", modifier = Modifier.padding(top = 12.dp))
+                }
                 Spacer(Modifier.height(16.dp))
                 ElevatedCard(Modifier.weight(1f).fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
                     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -78,6 +91,7 @@ private fun VersionBadge(label: String, value: String, modifier: Modifier = Modi
 @Composable
 private fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val markwon = remember(context) { Markwon.create(context) }
     AndroidView(
         modifier = modifier,
         factory = {
@@ -89,6 +103,6 @@ private fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier
                 setLineSpacing(0f, 1.15f)
             }
         },
-        update = { Markwon.create(context).setMarkdown(it, markdown) }
+        update = { markwon.setMarkdown(it, markdown) }
     )
 }
