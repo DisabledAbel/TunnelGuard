@@ -420,7 +420,7 @@ class MainActivity : AppCompatActivity() {
         if (!TunnelGuardVpnService.isServiceRunning && !config.isSimulatedVpnEnabled()) {
             val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             val currentVpnState = if (isUpstreamVpnConnected) {
-                VPNState.CONNECTED
+                VPNState.PROTECTED
             } else {
                 VPNState.DISCONNECTED
             }

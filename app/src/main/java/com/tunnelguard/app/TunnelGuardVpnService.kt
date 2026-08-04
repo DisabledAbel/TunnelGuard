@@ -350,7 +350,7 @@ class TunnelGuardVpnService : VpnService() {
             }
             val prevState = config.getVPNState()
             currentVpnState = if (isUpstreamVpnConnected) {
-                VPNState.CONNECTED
+                VPNState.PROTECTED
             } else if (vpnInterface != null) {
                 VPNState.BLOCKED
             } else {
