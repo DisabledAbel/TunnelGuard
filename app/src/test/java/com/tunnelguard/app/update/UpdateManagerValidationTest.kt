@@ -71,7 +71,7 @@ class UpdateManagerValidationTest {
             signingInfo = mockCurrentSigningInfo
         }
 
-        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
+        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES)))
             .thenReturn(archivePackageInfo)
 
         whenever(mockPackageManager.getPackageInfo(eq("com.tunnelguard.app"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
@@ -111,7 +111,7 @@ class UpdateManagerValidationTest {
             signingInfo = mockCurrentSigningInfo
         }
 
-        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
+        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES)))
             .thenReturn(archivePackageInfo)
 
         whenever(mockPackageManager.getPackageInfo(eq("com.tunnelguard.app"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
@@ -150,7 +150,7 @@ class UpdateManagerValidationTest {
             signingInfo = mockCurrentSigningInfo
         }
 
-        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
+        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES)))
             .thenReturn(archivePackageInfo)
 
         whenever(mockPackageManager.getPackageInfo(eq("com.tunnelguard.app"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
@@ -170,7 +170,7 @@ class UpdateManagerValidationTest {
             packageName = "com.different.app"
         }
 
-        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES)))
+        whenever(mockPackageManager.getPackageArchiveInfo(eq("/fake/path/apk.apk"), eq(PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES)))
             .thenReturn(archivePackageInfo)
 
         val errorBuilder = StringBuilder()

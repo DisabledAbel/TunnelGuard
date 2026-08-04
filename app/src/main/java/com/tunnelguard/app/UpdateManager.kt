@@ -265,8 +265,9 @@ class UpdateManager(
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // On Android 28+, retrieve signing certificates via GET_SIGNING_CERTIFICATES
-                val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
+                // On Android 28+, retrieve signing certificates via GET_SIGNING_CERTIFICATES and GET_SIGNATURES combined
+                // to work around the Android OS bug where signingInfo is otherwise returned as null for local APK packages.
+                val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES)
                 if (packageInfo == null) {
                     outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
                     config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
