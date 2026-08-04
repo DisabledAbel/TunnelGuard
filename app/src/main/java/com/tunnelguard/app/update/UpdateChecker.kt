@@ -75,9 +75,12 @@ class GitHubUpdateCheckerImpl(
             uri.path.startsWith("/DisabledAbel/TunnelGuard/releases/")
     } catch (_: Exception) { false }
 
-    private fun isTrustedGitHubDownloadUrl(url: String?): Boolean = try {
-        val uri = URI(url ?: return false)
-        uri.scheme == "https" && (uri.host.equals("github.com", true) || uri.host.endsWith(".github.com", true)) &&
-            uri.path.startsWith("/DisabledAbel/TunnelGuard/releases/download/")
-    } catch (_: Exception) { false }
+    private fun isTrustedGitHubDownloadUrl(url: String?): Boolean {
+        if (url == null) return false
+        return try {
+            val uri = URI(url)
+            uri.scheme == "https" && (uri.host.equals("github.com", true) || uri.host.endsWith(".github.com", true)) &&
+                uri.path.startsWith("/DisabledAbel/TunnelGuard/releases/download/")
+        } catch (_: Exception) { false }
+    }
 }
