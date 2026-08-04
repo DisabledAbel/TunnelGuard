@@ -213,7 +213,9 @@ class MainActivity : AppCompatActivity() {
 
         if (!hasCheckedForUpdates) {
             hasCheckedForUpdates = true
-            runMandatoryUpdateCheck()
+            if (config.isForcedUpdatesEnabled()) {
+                runMandatoryUpdateCheck()
+            }
         }
     }
 
