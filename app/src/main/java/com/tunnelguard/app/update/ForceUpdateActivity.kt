@@ -23,7 +23,7 @@ class ForceUpdateActivity : ComponentActivity() {
         updateRepository = UpdateRepository.getInstance(this)
         installerManager = InstallerManager(this, config)
 
-        val latestVersion = intent.getStringExtra(EXTRA_LATEST_VERSION) ?: updateRepository.getCachedLatestVersion() ?: "1.0.0"
+        val latestVersion = intent.getStringExtra(EXTRA_LATEST_VERSION) ?: updateRepository.getCachedLatestVersion() ?: config.getAppVersionName()
         viewModel.initialize(
             currentVersion = VersionComparator.validateAndNormalizeVersion(config.getAppVersionName()),
             result = UpdateCheckResult.UpdateAvailable(
@@ -53,7 +53,7 @@ class ForceUpdateActivity : ComponentActivity() {
         if (installerManager.canInstallPackages()) {
             val state = viewModel.state.value
             if (state.isDownloading) return
-            val apkFile = updateApkFile(state.latestVersion)
+            val apkFile = updateApkFile(state.latestVersion) ?: return
             if (apkFile.exists() && apkFile.length() > 0) installIfValid(apkFile, state.latestVersion)
         }
     }
@@ -64,14 +64,15 @@ class ForceUpdateActivity : ComponentActivity() {
             installerManager.openInstallPermissionSettings()
             return
         }
-        if (!state.latestVersion.matches(Regex("^[0-9A-Za-z._-]+$"))) {
+        if (!state.latestVersion.matches(SAFE_VERSION)) {
             viewModel.setError("The latest release version is malformed and cannot be installed safely.")
             return
         }
-        viewModel.download(updateApkFile(state.latestVersion)) { apkFile -> installIfValid(apkFile, state.latestVersion) }
+        viewModel.download(updateApkFile(state.latestVersion)!!) { apkFile -> installIfValid(apkFile, state.latestVersion) }
     }
 
-    private fun updateApkFile(versionName: String): File {
+    private fun updateApkFile(versionName: String): File? {
+        if (!versionName.matches(SAFE_VERSION)) return null
         val updatesDir = File(cacheDir, "updates").canonicalFile
         val file = File(updatesDir, "TunnelGuard-v$versionName-update.apk").canonicalFile
         require(file.parentFile?.canonicalPath == updatesDir.canonicalPath) { "Invalid update file path" }
@@ -95,5 +96,6 @@ class ForceUpdateActivity : ComponentActivity() {
         const val EXTRA_RELEASE_NAME = "release_name"
         const val EXTRA_RELEASE_URL = "release_url"
         const val EXTRA_PUBLISHED_AT = "published_at"
+        private val SAFE_VERSION = Regex("^[0-9A-Za-z._-]+$")
     }
 }

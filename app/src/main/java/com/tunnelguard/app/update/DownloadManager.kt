@@ -1,6 +1,8 @@
 package com.tunnelguard.app.update
 
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -30,20 +32,30 @@ class DownloadManager {
                         currentUrl = redirected.toString()
                     }
                     HttpURLConnection.HTTP_OK -> {
-                        val total = conn.contentLengthLong
+                        val total = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            conn.contentLengthLong
+                        } else {
+                            conn.contentLength.toLong()
+                        }
                         var readTotal = 0L
-                        conn.inputStream.use { input -> FileOutputStream(outputFile).use { output ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read == -1) break
-                                output.write(buffer, 0, read)
-                                readTotal += read
-                                if (total > 0) progressUpdate(((readTotal * 100L) / total).toInt().coerceIn(0, 100))
-                            }
-                        } }
-                        progressUpdate(100)
-                        return@withContext outputFile
+                        try {
+                            conn.inputStream.use { input -> FileOutputStream(outputFile).use { output ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    ensureActive()
+                                    val read = input.read(buffer)
+                                    if (read == -1) break
+                                    output.write(buffer, 0, read)
+                                    readTotal += read
+                                    if (total > 0) progressUpdate(((readTotal * 100L) / total).toInt().coerceIn(0, 100))
+                                }
+                            } }
+                            progressUpdate(100)
+                            return@withContext outputFile
+                        } catch (e: Exception) {
+                            outputFile.delete()
+                            throw e
+                        }
                     }
                     else -> throw IOException("Server returned HTTP $status")
                 }

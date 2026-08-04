@@ -26,8 +26,11 @@ class UpdateViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(UpdateUiState())
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
+    private var initialized = false
 
     fun initialize(currentVersion: String, result: UpdateCheckResult.UpdateAvailable) {
+        if (initialized) return
+        initialized = true
         _state.value = UpdateUiState(
             currentVersion = currentVersion,
             latestVersion = result.latestVersion,
