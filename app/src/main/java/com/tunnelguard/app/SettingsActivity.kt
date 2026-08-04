@@ -55,6 +55,11 @@ class SettingsActivity : AppCompatActivity() {
     private var isUpdateChecking = false
     private var updatePendingRunnable: Runnable? = null
 
+    /**
+     * Initializes the settings screen, loads persisted configuration, and configures preference controls, simulation actions, logs, and update checking.
+     *
+     * @param savedInstanceState The activity's previously saved state, if available.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)

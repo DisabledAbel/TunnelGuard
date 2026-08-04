@@ -128,6 +128,13 @@ class VpnWarningActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Starts the automatic VPN connection flow for the target application.
+     *
+     * In simulation mode, marks the VPN as protected after a short delay and launches the target
+     * application. Otherwise, starts a countdown before redirecting the user to the configured VPN
+     * destination.
+     */
     private fun startAutoConnectFlow() {
         if (config.isSimulatedVpnEnabled()) {
             tvCountdownStatus.text = "Simulation Mode: Trying to auto-connect VPN..."
