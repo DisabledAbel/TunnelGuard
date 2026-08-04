@@ -80,9 +80,12 @@ class MainActivity : AppCompatActivity() {
         val cachedVer = repo.getCachedLatestVersion()
         if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
             val intent = Intent(this, ForceUpdateActivity::class.java).apply {
-                putExtra("latest_version", cachedVer)
-                putExtra("apk_url", repo.getCachedApkUrl())
-                putExtra("release_notes", repo.getCachedReleaseNotes())
+                putExtra(ForceUpdateActivity.EXTRA_LATEST_VERSION, cachedVer)
+                putExtra(ForceUpdateActivity.EXTRA_APK_URL, repo.getCachedApkUrl())
+                putExtra(ForceUpdateActivity.EXTRA_RELEASE_NOTES, repo.getCachedReleaseNotes())
+                putExtra(ForceUpdateActivity.EXTRA_RELEASE_NAME, repo.getCachedReleaseName())
+                putExtra(ForceUpdateActivity.EXTRA_RELEASE_URL, repo.getCachedReleaseUrl())
+                putExtra(ForceUpdateActivity.EXTRA_PUBLISHED_AT, repo.getCachedPublishedAt())
             }
             startActivity(intent)
             finish()
@@ -105,21 +108,28 @@ class MainActivity : AppCompatActivity() {
                 when (result) {
                     is UpdateCheckResult.UpdateAvailable -> {
                         val intent = Intent(this@MainActivity, ForceUpdateActivity::class.java).apply {
-                            putExtra("latest_version", result.latestVersion)
-                            putExtra("apk_url", result.apkUrl)
-                            putExtra("release_notes", result.releaseNotes)
+                            putExtra(ForceUpdateActivity.EXTRA_LATEST_VERSION, result.latestVersion)
+                            putExtra(ForceUpdateActivity.EXTRA_APK_URL, result.apkUrl)
+                            putExtra(ForceUpdateActivity.EXTRA_RELEASE_NOTES, result.releaseNotes)
+                            putExtra(ForceUpdateActivity.EXTRA_RELEASE_NAME, result.releaseName)
+                            putExtra(ForceUpdateActivity.EXTRA_RELEASE_URL, result.releaseUrl)
+                            putExtra(ForceUpdateActivity.EXTRA_PUBLISHED_AT, result.publishedAt)
                         }
                         startActivity(intent)
                         finish()
                     }
                     is UpdateCheckResult.Failure -> {
                         config.addLog("Mandatory Update Check Failed: ${result.errorMessage}")
+                        Toast.makeText(this@MainActivity, "Update checking is currently unavailable. Continuing offline.", Toast.LENGTH_LONG).show()
                         // If offline but a session-level update was previously detected, force the update
                         if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
                             val intent = Intent(this@MainActivity, ForceUpdateActivity::class.java).apply {
-                                putExtra("latest_version", cachedVer)
-                                putExtra("apk_url", repo.getCachedApkUrl())
-                                putExtra("release_notes", repo.getCachedReleaseNotes())
+                                putExtra(ForceUpdateActivity.EXTRA_LATEST_VERSION, cachedVer)
+                                putExtra(ForceUpdateActivity.EXTRA_APK_URL, repo.getCachedApkUrl())
+                                putExtra(ForceUpdateActivity.EXTRA_RELEASE_NOTES, repo.getCachedReleaseNotes())
+                                putExtra(ForceUpdateActivity.EXTRA_RELEASE_NAME, repo.getCachedReleaseName())
+                                putExtra(ForceUpdateActivity.EXTRA_RELEASE_URL, repo.getCachedReleaseUrl())
+                                putExtra(ForceUpdateActivity.EXTRA_PUBLISHED_AT, repo.getCachedPublishedAt())
                             }
                             startActivity(intent)
                             finish()
@@ -203,9 +213,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!hasCheckedForUpdates) {
             hasCheckedForUpdates = true
-            if (config.isForcedUpdatesEnabled()) {
-                runMandatoryUpdateCheck()
-            }
+            runMandatoryUpdateCheck()
         }
     }
 
