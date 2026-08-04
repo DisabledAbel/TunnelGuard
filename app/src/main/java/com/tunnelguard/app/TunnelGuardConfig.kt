@@ -294,7 +294,9 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     /**
-     * Persistent VPN state (especially useful for mocking or when simulation is enabled).
+     * Retrieves the persisted VPN state, normalizing `CONNECTED` to `PROTECTED`.
+     *
+     * @return The persisted VPN state, or `DISCONNECTED` if the stored value is missing or invalid.
      */
     fun getVPNState(): VPNState {
         val name = prefs.getString(KEY_VPN_STATUS, VPNState.DISCONNECTED.name)
@@ -308,6 +310,14 @@ class TunnelGuardConfig(private val context: Context) {
 
     var elapsedRealtimeProvider: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
+    /**
+     * Persists the VPN state and updates the connection start time.
+     *
+     * `CONNECTED` is stored as `PROTECTED`. Active states preserve an existing connection start time,
+     * while other states clear it.
+     *
+     * @param state The VPN state to persist.
+     */
     fun setVPNState(state: VPNState) {
         val normalizedState = if (state == VPNState.CONNECTED) VPNState.PROTECTED else state
         prefs.edit().putString(KEY_VPN_STATUS, normalizedState.name).apply()
