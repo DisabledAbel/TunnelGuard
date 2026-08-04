@@ -41,7 +41,7 @@ class UpdateRepositoryTest {
     }
 
     @Test
-    fun testCacheValidationAndExpiry() = runBlocking {
+    fun testEveryLaunchPerformsFreshCheck() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val mockChecker = MockUpdateChecker("1.0.0", null, null)
         val repository = UpdateRepository(context, mockChecker)
@@ -52,19 +52,11 @@ class UpdateRepositoryTest {
         assertEquals(1, mockChecker.callCount)
         assertTrue(result1 is UpdateCheckResult.NoUpdate)
 
-        // Second check within 5 minutes - should use the cached value (no call to mock checker)
+        // Second check should still call GitHub because update checks run on every launch.
         val result2 = repository.checkForUpdate(currentVersion = "1.0.0")
 
-        assertEquals(1, mockChecker.callCount) // callCount stays 1!
-        assertTrue(result2 is UpdateCheckResult.NoUpdate)
-
-        // Move last-check timestamp backward to simulate expired cache (> 5 minutes)
-        repository.forceSetLastCheckTime(System.currentTimeMillis() - (6 * 60 * 1000))
-
-        // Third check after 6 minutes - should invoke the mock checker again!
-        val result3 = repository.checkForUpdate(currentVersion = "1.0.0")
         assertEquals(2, mockChecker.callCount)
-        assertTrue(result3 is UpdateCheckResult.NoUpdate)
+        assertTrue(result2 is UpdateCheckResult.NoUpdate)
     }
 
     @Test
@@ -99,8 +91,8 @@ class UpdateRepositoryTest {
         assertEquals("https://github.com/DisabledAbel/TunnelGuard/releases/download/v1.2.0/TunnelGuard.apk", details.apkUrl)
         assertEquals("Some notes", details.releaseNotes)
 
-        // Assert that the failing update checker was NOT invoked because of early return
-        assertEquals(0, mockChecker.callCount)
+        // Fresh checks are still attempted, then cached release data is used as a fallback.
+        assertEquals(1, mockChecker.callCount)
     }
 
     @Test
