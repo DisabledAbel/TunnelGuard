@@ -52,6 +52,7 @@ class ForceUpdateActivity : ComponentActivity() {
         super.onResume()
         if (installerManager.canInstallPackages()) {
             val state = viewModel.state.value
+            if (state.isDownloading) return
             val apkFile = updateApkFile(state.latestVersion)
             if (apkFile.exists() && apkFile.length() > 0) installIfValid(apkFile, state.latestVersion)
         }
