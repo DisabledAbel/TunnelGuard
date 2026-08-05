@@ -60,6 +60,7 @@
                 android:padding="12dp"
                 android:text="App Debug Logs"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Tab for App Debug Logs"
                 android:layout_marginBottom="8dp" />
 
             <Button
@@ -74,6 +75,7 @@
                 android:padding="12dp"
                 android:text="VPN Logs"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Tab for VPN Logs"
                 android:layout_marginBottom="8dp" />
 
             <Button
@@ -88,6 +90,7 @@
                 android:padding="12dp"
                 android:text="Device Logs"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Tab for Device Logs"
                 android:layout_marginBottom="16dp" />
 
             <Button
@@ -102,6 +105,7 @@
                 android:padding="12dp"
                 android:text="Refresh Logs"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Refresh logs button"
                 android:layout_marginBottom="8dp" />
 
             <Button
@@ -111,11 +115,27 @@
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
                 android:nextFocusUp="@+id/btn_refresh"
-                android:nextFocusDown="@+id/btn_back"
+                android:nextFocusDown="@+id/btn_export_logs"
                 android:nextFocusRight="@+id/rv_logs_list"
                 android:padding="12dp"
                 android:text="Clear App Logs"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Clear app logs button"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_export_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_clear_app_logs"
+                android:nextFocusDown="@+id/btn_back"
+                android:nextFocusRight="@+id/rv_logs_list"
+                android:padding="12dp"
+                android:text="Export Logs"
+                android:textColor="@color/text_primary"
+                android:contentDescription="Export logs to file button"
                 android:layout_marginBottom="8dp" />
 
             <Button
@@ -124,11 +144,12 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_clear_app_logs"
+                android:nextFocusUp="@+id/btn_export_logs"
                 android:nextFocusRight="@+id/rv_logs_list"
                 android:padding="12dp"
                 android:text="Back to Dashboard"
                 android:textColor="@color/text_primary"
+                android:contentDescription="Go back to Dashboard button"
                 android:layout_marginBottom="16dp" />
 
         </LinearLayout>
@@ -163,6 +184,25 @@
             android:textColor="@color/focus_highlight"
             android:textSize="18sp"
             android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/et_log_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/tv_input_selector"
+            android:hint="Search logs..."
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="14sp"
+            android:padding="10dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:singleLine="true"
+            android:inputType="text"
+            android:contentDescription="Search filter for log messages"
+            android:nextFocusLeft="@+id/btn_tab_app_logs"
+            android:nextFocusDown="@+id/rv_logs_list" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_logs_list"

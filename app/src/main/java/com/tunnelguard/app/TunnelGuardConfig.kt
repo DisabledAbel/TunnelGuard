@@ -459,18 +459,25 @@ class TunnelGuardConfig(private val context: Context) {
     /**
      * Log persistence. Simple in-memory or SharedPref based log store for development display.
      */
-    fun addLog(message: String) {
-        val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-        val formatted = "[$timestamp] $message"
+    fun addLog(message: String, level: String = "INFO") {
+        val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+        val formatted = "[$timestamp] [$level] $message"
         val logs = getLogs().toMutableList()
         logs.add(0, formatted) // Keep newest first
-        if (logs.size > 100) {
+
+        // Log rotation: Keep max 500 lines
+        while (logs.size > 500) {
             logs.removeAt(logs.size - 1)
         }
+
         val arr = JSONArray()
         logs.forEach { arr.put(it) }
         prefs.edit().putString(KEY_LOGS, arr.toString()).apply()
     }
+
+    fun addLogInfo(message: String) = addLog(message, "INFO")
+    fun addLogWarning(message: String) = addLog(message, "WARN")
+    fun addLogError(message: String) = addLog(message, "ERROR")
 
     fun getLogs(): List<String> {
         val jsonStr = prefs.getString(KEY_LOGS, "[]") ?: "[]"
@@ -488,6 +495,24 @@ class TunnelGuardConfig(private val context: Context) {
 
     fun clearLogs() {
         prefs.edit().remove(KEY_LOGS).apply()
+    }
+
+    fun exportLogsToFile(): java.io.File? {
+        try {
+            val exportFile = java.io.File(context.cacheDir, "exported_tunnelguard_logs.txt")
+            java.io.FileWriter(exportFile).use { writer ->
+                val logs = getLogs()
+                // Write oldest first for correct chronological reading
+                for (i in logs.indices.reversed()) {
+                    writer.write(logs[i])
+                    writer.write("\n")
+                }
+            }
+            return exportFile
+        } catch (e: Exception) {
+            addLog("Failed to export logs: ${e.message}", "ERROR")
+            return null
+        }
     }
 
     /**

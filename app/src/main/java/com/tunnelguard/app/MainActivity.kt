@@ -249,6 +249,7 @@ class MainActivity : AppCompatActivity() {
      * Resumes the activity's monitoring, restores VPN service protection when required,
      * refreshes the interface, and starts connection uptime updates.
      */
+    @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onResume() {
         super.onResume()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
