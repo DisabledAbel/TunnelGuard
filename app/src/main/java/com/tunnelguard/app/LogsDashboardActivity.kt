@@ -25,9 +25,11 @@ class LogsDashboardActivity : AppCompatActivity() {
     private lateinit var btnTabDeviceLogs: Button
     private lateinit var btnRefresh: Button
     private lateinit var btnClearAppLogs: Button
+    private lateinit var btnExportLogs: Button
     private lateinit var btnBack: Button
 
     private lateinit var tvActiveTabTitle: TextView
+    private lateinit var etLogSearch: android.widget.EditText
     private lateinit var rvLogsList: RecyclerView
     private lateinit var logsAdapter: LogsAdapter
 
@@ -38,6 +40,7 @@ class LogsDashboardActivity : AppCompatActivity() {
     }
 
     private var activeTab = LogTab.APP
+    private var allLogsList: List<String> = emptyList()
 
     var ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
     var onRefreshCompleteCallback: (() -> Unit)? = null
@@ -55,9 +58,11 @@ class LogsDashboardActivity : AppCompatActivity() {
         btnTabDeviceLogs = findViewById(R.id.btn_tab_device_logs)
         btnRefresh = findViewById(R.id.btn_refresh)
         btnClearAppLogs = findViewById(R.id.btn_clear_app_logs)
+        btnExportLogs = findViewById(R.id.btn_export_logs)
         btnBack = findViewById(R.id.btn_back)
 
         tvActiveTabTitle = findViewById(R.id.tv_active_tab_title)
+        etLogSearch = findViewById(R.id.et_log_search)
         rvLogsList = findViewById(R.id.rv_logs_list)
 
         // Setup Recycler
@@ -91,9 +96,27 @@ class LogsDashboardActivity : AppCompatActivity() {
             }
         }
 
+        btnExportLogs.setOnClickListener {
+            val file = config.exportLogsToFile()
+            if (file != null) {
+                Toast.makeText(this, "Logs exported to:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Failed to export logs", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         btnBack.setOnClickListener {
             finish()
         }
+
+        // Search text watcher
+        etLogSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                applyLogSearchFilter(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
 
         // Initialize state & focus
         switchTab(LogTab.APP)
@@ -130,13 +153,23 @@ class LogsDashboardActivity : AppCompatActivity() {
                 }
             }
             if (requestId == currentRequestId && capturedTab == activeTab) {
-                logsAdapter.updateList(logs)
+                allLogsList = logs
+                applyLogSearchFilter(etLogSearch.text.toString())
                 if (logs.isNotEmpty()) {
                     rvLogsList.scrollToPosition(0)
                 }
             }
             onRefreshCompleteCallback?.invoke()
         }
+    }
+
+    private fun applyLogSearchFilter(query: String) {
+        val filtered = if (query.isBlank()) {
+            allLogsList
+        } else {
+            allLogsList.filter { it.contains(query, ignoreCase = true) }
+        }
+        logsAdapter.updateList(filtered)
     }
 
     private fun getVpnLogs(): List<String> {

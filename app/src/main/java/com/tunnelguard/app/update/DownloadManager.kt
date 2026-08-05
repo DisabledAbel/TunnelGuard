@@ -13,6 +13,25 @@ import java.net.URL
 
 class DownloadManager {
     suspend fun downloadApk(urlString: String, outputFile: File, progressUpdate: (Int) -> Unit): File = withContext(Dispatchers.IO) {
+        var lastException: Exception? = null
+        val maxRetries = 3
+
+        for (attempt in 1..maxRetries) {
+            try {
+                return@withContext performDownload(urlString, outputFile, progressUpdate)
+            } catch (e: Exception) {
+                lastException = e
+                outputFile.delete()
+                if (attempt < maxRetries) {
+                    val delayMs = attempt * 2000L
+                    kotlinx.coroutines.delay(delayMs)
+                }
+            }
+        }
+        throw lastException ?: IOException("Failed to download APK after $maxRetries attempts")
+    }
+
+    private suspend fun performDownload(urlString: String, outputFile: File, progressUpdate: (Int) -> Unit): File {
         validateInitialUrl(urlString)
         outputFile.parentFile?.mkdirs()
         var currentUrl = urlString
@@ -38,24 +57,19 @@ class DownloadManager {
                             conn.contentLength.toLong()
                         }
                         var readTotal = 0L
-                        try {
-                            conn.inputStream.use { input -> FileOutputStream(outputFile).use { output ->
-                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                                while (true) {
-                                    ensureActive()
-                                    val read = input.read(buffer)
-                                    if (read == -1) break
-                                    output.write(buffer, 0, read)
-                                    readTotal += read
-                                    if (total > 0) progressUpdate(((readTotal * 100L) / total).toInt().coerceIn(0, 100))
-                                }
-                            } }
-                            progressUpdate(100)
-                            return@withContext outputFile
-                        } catch (e: Exception) {
-                            outputFile.delete()
-                            throw e
-                        }
+                        conn.inputStream.use { input -> FileOutputStream(outputFile).use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                val read = input.read(buffer)
+                                if (read == -1) break
+                                output.write(buffer, 0, read)
+                                readTotal += read
+                                if (total > 0) progressUpdate(((readTotal * 100L) / total).toInt().coerceIn(0, 100))
+                            }
+                        } }
+                        progressUpdate(100)
+                        return outputFile
                     }
                     else -> throw IOException("Server returned HTTP $status")
                 }

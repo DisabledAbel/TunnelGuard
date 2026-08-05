@@ -128,13 +128,32 @@ class UpdateManager(
                     throw IllegalArgumentException("Path traversal detected in version name: $latestVersion")
                 }
 
-                downloadUrlWithRedirects(downloadUrl, updateApkFile) { progress, total ->
-                    val percentage = if (total > 0) (progress * 100L / total).toInt() else 0
-                    activity.runOnUiThread {
-                        if (!activity.isFinishing && !activity.isDestroyed) {
-                            downloadDialog.setMessage("Downloading TunnelGuard v$latestVersion...\n$percentage%")
+                var downloadSuccess = false
+                var lastError: Exception? = null
+                for (attempt in 1..3) {
+                    try {
+                        downloadUrlWithRedirects(downloadUrl, updateApkFile) { progress, total ->
+                            val percentage = if (total > 0) (progress * 100L / total).toInt() else 0
+                            activity.runOnUiThread {
+                                if (!activity.isFinishing && !activity.isDestroyed) {
+                                    downloadDialog.setMessage("Downloading TunnelGuard v$latestVersion...\n$percentage% (Attempt $attempt of 3)")
+                                }
+                            }
+                        }
+                        downloadSuccess = true
+                        break
+                    } catch (e: Exception) {
+                        lastError = e
+                        if (updateApkFile.exists()) {
+                            updateApkFile.delete()
+                        }
+                        if (attempt < 3) {
+                            Thread.sleep(attempt * 2000L)
                         }
                     }
+                }
+                if (!downloadSuccess) {
+                    throw lastError ?: IOException("Failed to download APK after 3 attempts")
                 }
 
                 activity.runOnUiThread {
@@ -242,6 +261,7 @@ class UpdateManager(
         throw IOException("Too many redirects")
     }
 
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
     private fun SigningInfo.signersMatchExactly(other: SigningInfo): Boolean {
         val thisHistory = this.getSigningCertificateHistory() ?: this.getApkContentsSigners()
         val otherHistory = other.getSigningCertificateHistory() ?: other.getApkContentsSigners()

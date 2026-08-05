@@ -54,6 +54,12 @@ class TunnelGuardVpnService : VpnService() {
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             super.onCapabilitiesChanged(network, networkCapabilities)
+            val transports = mutableListOf<String>()
+            if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) transports.add("WIFI")
+            if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) transports.add("CELLULAR")
+            if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) transports.add("ETHERNET")
+            val transportStr = if (transports.isEmpty()) "OTHER" else transports.joinToString(", ")
+            config.addLog("Network Capabilities Changed. Transports: $transportStr. Re-evaluating routing.")
             checkAndRunVpnRouting()
         }
     }
@@ -364,7 +370,9 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         // Broadcaster for UI updates
-        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+            setPackage(packageName)
+        }
         sendBroadcast(broadcastIntent)
 
         // Fetch selected applications for protection
@@ -430,7 +438,9 @@ class TunnelGuardVpnService : VpnService() {
             if (pfd == null) {
                 config.addLog("Failed to establish VPN Interface: builder.establish() returned null. Setup/permission error.")
                 config.setVPNState(VPNState.ERROR)
-                val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+                val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+                    setPackage(packageName)
+                }
                 sendBroadcast(failureBroadcastIntent)
                 closeVpnInterface()
                 return
@@ -440,14 +450,18 @@ class TunnelGuardVpnService : VpnService() {
             lastEmergencyLock = isEmergencyLock
             if (!simulated) {
                 config.setVPNState(VPNState.BLOCKED)
-                val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+                val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+                    setPackage(packageName)
+                }
                 sendBroadcast(successBroadcastIntent)
             }
             config.addLog("Local block interface established successfully. Fail-closed ACTIVE for protected apps.")
         } catch (e: Exception) {
             config.addLog("Failed to establish VPN Interface: ${e.message}")
             config.setVPNState(VPNState.ERROR)
-            val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+            val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+                setPackage(packageName)
+            }
             sendBroadcast(failureBroadcastIntent)
             closeVpnInterface()
         }
@@ -483,7 +497,9 @@ class TunnelGuardVpnService : VpnService() {
         } else {
             stopForeground(true)
         }
-        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED")
+        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+            setPackage(packageName)
+        }
         sendBroadcast(broadcastIntent)
         stopSelf()
     }
