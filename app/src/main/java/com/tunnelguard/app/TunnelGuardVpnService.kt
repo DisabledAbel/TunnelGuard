@@ -159,11 +159,20 @@ class TunnelGuardVpnService : VpnService() {
                                         config.addLog("Could not start VpnWarningActivity directly from background: ${e.message}")
                                     }
 
+                                    val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                        android.app.ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
+                                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                                        ).toBundle()
+                                    } else {
+                                        null
+                                    }
+
                                     val pendingIntent = PendingIntent.getActivity(
                                         this@TunnelGuardVpnService,
                                         1002,
                                         warningIntent,
-                                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                                        options
                                     )
 
                                     var appLabel = currentApp
