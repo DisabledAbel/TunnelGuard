@@ -124,7 +124,7 @@ class TunnelGuardVpnService : VpnService() {
             var lastForegroundApp: String? = null
             while (isActive) {
                 try {
-                    if (config.isAppMonitorEnabled() && config.hasUsageStatsPermission(this@TunnelGuardVpnService)) {
+                    if (config.isAppMonitorEnabled() && config.hasUsageStatsPermission(this@TunnelGuardVpnService) && config.hasSystemAlertWindowPermission()) {
                         val currentApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
                         if (currentApp != null && currentApp != lastForegroundApp) {
                             lastForegroundApp = currentApp
@@ -160,7 +160,7 @@ class TunnelGuardVpnService : VpnService() {
                                     }
 
                                     val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                        android.app.ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
+                                        android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
                                             android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                                         ).toBundle()
                                     } else {
