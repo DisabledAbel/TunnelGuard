@@ -119,12 +119,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         layoutPrefMonitor.setOnClickListener {
-            if (config.hasUsageStatsPermission(this)) {
-                val newChecked = !config.isAppMonitorEnabled()
-                config.setAppMonitorEnabled(newChecked)
-                cbPrefMonitor.isChecked = newChecked
-                triggerVpnServiceUpdate()
-            } else {
+            if (!config.hasUsageStatsPermission(this)) {
                 UpdateManager(this, config).showPermissionRequiredDialog(
                     "Permission Required",
                     "To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.",
@@ -132,6 +127,24 @@ class SettingsActivity : AppCompatActivity() {
                     Intent(Settings.ACTION_SETTINGS),
                     "ACTION_USAGE_ACCESS_SETTINGS"
                 )
+            } else if (!config.hasSystemAlertWindowPermission()) {
+                val overlayIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                } else {
+                    Intent(Settings.ACTION_SETTINGS)
+                }
+                UpdateManager(this, config).showPermissionRequiredDialog(
+                    "Permission Required",
+                    "To display the security warning overlay on top of other applications, TunnelGuard requires the 'Display Over Other Apps' permission.\n\nPlease find TunnelGuard and enable this permission on the next screen.",
+                    overlayIntent,
+                    Intent(Settings.ACTION_SETTINGS),
+                    "ACTION_MANAGE_OVERLAY_PERMISSION"
+                )
+            } else {
+                val newChecked = !config.isAppMonitorEnabled()
+                config.setAppMonitorEnabled(newChecked)
+                cbPrefMonitor.isChecked = newChecked
+                triggerVpnServiceUpdate()
             }
         }
 
@@ -184,8 +197,8 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Check if usage stats permission was granted and update state
-        if (config.hasUsageStatsPermission(this)) {
+        // Check if usage stats permission and overlay permission are granted and update state
+        if (config.hasUsageStatsPermission(this) && config.hasSystemAlertWindowPermission()) {
             cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
         } else {
             cbPrefMonitor.isChecked = false

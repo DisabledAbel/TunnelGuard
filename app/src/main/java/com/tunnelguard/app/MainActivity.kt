@@ -13,6 +13,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -590,6 +591,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 3. Draw over other apps permission check when monitoring is active
+        if (config.isAppMonitorEnabled()) {
+            if (!config.hasSystemAlertWindowPermission()) {
+                isTampered = true
+                messages.add("Display Over Other Apps permission is missing.")
+            }
+        }
+
         return Pair(isTampered, messages.joinToString(" "))
     }
 
@@ -607,6 +616,24 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 try {
                     startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+                } catch (ex: Exception) {
+                    Toast.makeText(this, "Could not open settings", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
+        if (config.isAppMonitorEnabled() && !config.hasSystemAlertWindowPermission()) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                }
+            } catch (e: Exception) {
+                try {
+                    startActivity(Intent(Settings.ACTION_SETTINGS))
                 } catch (ex: Exception) {
                     Toast.makeText(this, "Could not open settings", Toast.LENGTH_SHORT).show()
                 }

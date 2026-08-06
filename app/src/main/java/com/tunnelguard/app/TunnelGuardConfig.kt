@@ -560,6 +560,14 @@ class TunnelGuardConfig(private val context: Context) {
         addLog("VPN App of Choice set to: $packageName")
     }
 
+    fun hasSystemAlertWindowPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.provider.Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
+    }
+
     fun hasUsageStatsPermission(ctx: Context): Boolean {
         val appOps = ctx.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
