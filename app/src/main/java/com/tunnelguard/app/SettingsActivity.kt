@@ -54,6 +54,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private var isUpdateChecking = false
     private var updatePendingRunnable: Runnable? = null
+    private var isNotificationPermissionRequestedForToggleOn = false
 
     /**
      * Initializes the settings screen, loads persisted configuration, and configures preference controls, simulation actions, logs, and update checking.
@@ -119,40 +120,47 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         layoutPrefMonitor.setOnClickListener {
-            if (!config.hasUsageStatsPermission(this)) {
-                UpdateManager(this, config).showPermissionRequiredDialog(
-                    "Permission Required",
-                    "To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.",
-                    Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
-                    Intent(Settings.ACTION_SETTINGS),
-                    "ACTION_USAGE_ACCESS_SETTINGS"
-                )
-            } else if (!config.hasSystemAlertWindowPermission()) {
-                val overlayIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                } else {
-                    Intent(Settings.ACTION_SETTINGS)
-                }
-                UpdateManager(this, config).showPermissionRequiredDialog(
-                    "Permission Required",
-                    "To display the security warning overlay on top of other applications, TunnelGuard requires the 'Display Over Other Apps' permission.\n\nPlease find TunnelGuard and enable this permission on the next screen.",
-                    overlayIntent,
-                    Intent(Settings.ACTION_SETTINGS),
-                    "ACTION_MANAGE_OVERLAY_PERMISSION"
-                )
-            } else if (!config.hasNotificationPermission()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    androidx.core.app.ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                        REQUEST_POST_NOTIFICATIONS
-                    )
-                }
-            } else {
-                val newChecked = !config.isAppMonitorEnabled()
-                config.setAppMonitorEnabled(newChecked)
-                cbPrefMonitor.isChecked = newChecked
+            val intendedState = !config.isAppMonitorEnabled()
+            if (!intendedState) {
+                config.setAppMonitorEnabled(false)
+                cbPrefMonitor.isChecked = false
                 triggerVpnServiceUpdate()
+            } else {
+                if (!config.hasUsageStatsPermission(this)) {
+                    UpdateManager(this, config).showPermissionRequiredDialog(
+                        "Permission Required",
+                        "To detect when a protected application is opened and display the security warning, TunnelGuard requires the 'Usage Access' permission.\n\nPlease enable TunnelGuard in the system settings screen that opens next.",
+                        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
+                        Intent(Settings.ACTION_SETTINGS),
+                        "ACTION_USAGE_ACCESS_SETTINGS"
+                    )
+                } else if (!config.hasSystemAlertWindowPermission()) {
+                    val overlayIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                    } else {
+                        Intent(Settings.ACTION_SETTINGS)
+                    }
+                    UpdateManager(this, config).showPermissionRequiredDialog(
+                        "Permission Required",
+                        "To display the security warning overlay on top of other applications, TunnelGuard requires the 'Display Over Other Apps' permission.\n\nPlease find TunnelGuard and enable this permission on the next screen.",
+                        overlayIntent,
+                        Intent(Settings.ACTION_SETTINGS),
+                        "ACTION_MANAGE_OVERLAY_PERMISSION"
+                    )
+                } else if (!config.hasNotificationPermission()) {
+                    isNotificationPermissionRequestedForToggleOn = true
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        androidx.core.app.ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                            REQUEST_POST_NOTIFICATIONS
+                        )
+                    }
+                } else {
+                    config.setAppMonitorEnabled(true)
+                    cbPrefMonitor.isChecked = true
+                    triggerVpnServiceUpdate()
+                }
             }
         }
 
@@ -223,7 +231,7 @@ class SettingsActivity : AppCompatActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 config.addLog("Notification permission granted.")
                 // If other permissions are already granted, enable the monitor
-                if (config.hasUsageStatsPermission(this) && config.hasSystemAlertWindowPermission()) {
+                if (isNotificationPermissionRequestedForToggleOn && config.hasUsageStatsPermission(this) && config.hasSystemAlertWindowPermission()) {
                     config.setAppMonitorEnabled(true)
                     cbPrefMonitor.isChecked = true
                     triggerVpnServiceUpdate()
@@ -231,6 +239,7 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 config.addLog("Notification permission denied.")
             }
+            isNotificationPermissionRequestedForToggleOn = false
         }
     }
 
