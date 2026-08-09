@@ -89,6 +89,9 @@ class TunnelGuardVpnService : VpnService() {
         var isServiceStarting = false
 
         @Volatile
+        var isTunnelEstablished = false
+
+        @Volatile
         var pendingWarningId: String? = null
 
         private val suppressedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -412,40 +415,77 @@ class TunnelGuardVpnService : VpnService() {
             return
         }
 
-        // If upstream is DISCONNECTED/BLOCKING or Emergency Lock is active, establish local VpnService and direct all packets
-        // of allowed (protected) apps into it without forwarding them (blackholing/fail-closed block).
-        val builder = Builder()
-            .setSession("TunnelGuardFailClosedTunnel")
-            .addAddress(TunnelGuardConfig.TUNNEL_ADDRESS, TunnelGuardConfig.TUNNEL_PREFIX_LENGTH)
-            .addAddress("2001:db8::1", 128)
-            .addRoute("0.0.0.0", 0) // Capture all IPv4 traffic of the allowed applications
-            .addRoute("::", 0) // Capture all IPv6 traffic (::/0) of the allowed applications
-            .setMtu(1500)
-
-        // Add each protected application to the VPN tunnel
-        var addedAny = false
-        for (app in protectedApps) {
-            try {
-                builder.addAllowedApplication(app)
-                addedAny = true
-            } catch (e: Exception) {
-                config.addLog("Could not add allowed app: $app. Error: ${e.message}")
-            }
-        }
-
-        if (!addedAny) {
-            config.addLog("No valid protected apps could be added to VPN tunnel.")
-            closeVpnInterface()
-            return
-        }
-
         // Close previous interface before establishing a new one
         closeVpnInterface()
 
+        var established = false
+
+        // Attempt establishing with IPv6 support first
         try {
-            val pfd = builder.establish()
-            if (pfd == null) {
-                config.addLog("Failed to establish VPN Interface: builder.establish() returned null. Setup/permission error.")
+            val ipv6Builder = Builder()
+                .setSession("TunnelGuardFailClosedTunnel")
+                .addAddress(TunnelGuardConfig.TUNNEL_ADDRESS, TunnelGuardConfig.TUNNEL_PREFIX_LENGTH)
+                .addAddress("2001:db8::1", 128)
+                .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
+                .setMtu(1500)
+
+            var addedAny = false
+            for (app in protectedApps) {
+                try {
+                    ipv6Builder.addAllowedApplication(app)
+                    addedAny = true
+                } catch (e: Exception) {
+                    config.addLog("Could not add allowed app on IPv6 builder: $app. Error: ${e.message}")
+                }
+            }
+
+            if (addedAny) {
+                val pfd = ipv6Builder.establish()
+                if (pfd != null) {
+                    vpnInterface = pfd
+                    isTunnelEstablished = true
+                    established = true
+                    config.setIpv6ProtectionActive(true)
+                    config.addLog("Local block interface (IPv4 + IPv6) established successfully. Fail-closed ACTIVE for protected apps.")
+                }
+            }
+        } catch (e: Exception) {
+            config.addLog("Failed to establish IPv6 block tunnel, falling back to IPv4-only: ${e.message}", "WARN")
+        }
+
+        // Fallback to IPv4-only if IPv6 establishment failed
+        if (!established) {
+            try {
+                val ipv4Builder = Builder()
+                    .setSession("TunnelGuardFailClosedTunnel")
+                    .addAddress(TunnelGuardConfig.TUNNEL_ADDRESS, TunnelGuardConfig.TUNNEL_PREFIX_LENGTH)
+                    .addRoute("0.0.0.0", 0)
+                    .setMtu(1500)
+
+                var addedAny = false
+                for (app in protectedApps) {
+                    try {
+                        ipv4Builder.addAllowedApplication(app)
+                        addedAny = true
+                    } catch (e: Exception) {
+                        config.addLog("Could not add allowed app on IPv4 fallback builder: $app. Error: ${e.message}")
+                    }
+                }
+
+                if (addedAny) {
+                    val pfd = ipv4Builder.establish()
+                    if (pfd != null) {
+                        vpnInterface = pfd
+                        isTunnelEstablished = true
+                        established = true
+                        config.setIpv6ProtectionActive(false)
+                        config.addLog("Local block interface (IPv4-Only fallback) established successfully. Fail-closed ACTIVE for protected apps. IPv6 is UNPROTECTED.")
+                    }
+                }
+            } catch (e: Exception) {
+                isTunnelEstablished = false
+                config.addLog("Failed to establish IPv4 fallback block tunnel: ${e.message}", "ERROR")
                 config.setVPNState(VPNState.ERROR)
                 val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
                     setPackage(packageName)
@@ -454,25 +494,28 @@ class TunnelGuardVpnService : VpnService() {
                 closeVpnInterface()
                 return
             }
-            vpnInterface = pfd
-            lastEstablishedApps = protectedApps.toSet()
-            lastEmergencyLock = isEmergencyLock
-            if (!simulated) {
-                config.setVPNState(VPNState.BLOCKED)
-                val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
-                    setPackage(packageName)
-                }
-                sendBroadcast(successBroadcastIntent)
-            }
-            config.addLog("Local block interface established successfully. Fail-closed ACTIVE for protected apps.")
-        } catch (e: Exception) {
-            config.addLog("Failed to establish VPN Interface: ${e.message}")
+        }
+
+        if (!established) {
+            isTunnelEstablished = false
+            config.addLog("Failed to establish any block tunnel (neither IPv6 nor IPv4-Only succeeded).", "ERROR")
             config.setVPNState(VPNState.ERROR)
             val failureBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
                 setPackage(packageName)
             }
             sendBroadcast(failureBroadcastIntent)
             closeVpnInterface()
+            return
+        }
+
+        lastEstablishedApps = protectedApps.toSet()
+        lastEmergencyLock = isEmergencyLock
+        if (!simulated) {
+            config.setVPNState(VPNState.BLOCKED)
+            val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(successBroadcastIntent)
         }
     }
 
@@ -486,6 +529,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Error closing VPN interface: ${e.message}")
         }
         vpnInterface = null
+        isTunnelEstablished = false
         lastEstablishedApps = null
         lastEmergencyLock = null
     }

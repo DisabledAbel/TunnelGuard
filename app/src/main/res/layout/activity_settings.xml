@@ -4,26 +4,30 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background_dark"
-    android:padding="32dp">
+    android:padding="24dp">
 
+    <!-- Header Title -->
     <TextView
         android:id="@+id/tv_settings_header"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Settings"
+        android:text="TunnelGuard Settings"
         android:textColor="@color/text_primary"
-        android:textSize="32sp"
+        android:textSize="28sp"
         android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Left side: Scrollable Settings List -->
     <ScrollView
+        android:id="@+id/scroll_settings_left"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         android:focusable="false"
+        android:scrollbars="none"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/guideline_settings"
+        app:layout_constraintEnd_toStartOf="@+id/guideline_settings_split"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tv_settings_header">
 
@@ -32,7 +36,72 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Start on Boot setting row -->
+            <!-- ================= PROTECTION SECTION ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="PROTECTION"
+                android:textColor="@color/focus_highlight"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Enable/Disable Protection Row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_protection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:nextFocusDown="@+id/btn_settings_manage_apps"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Enable Protection"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Activate active per-app fail-closed security"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+                <CheckBox
+                    android:id="@+id/cb_pref_protection"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
+            </LinearLayout>
+
+            <!-- Manage Protected Apps Button -->
+            <Button
+                android:id="@+id/btn_settings_manage_apps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/layout_pref_protection"
+                android:nextFocusDown="@+id/layout_pref_boot"
+                android:padding="12dp"
+                android:text="Select Protected Apps"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Start on Boot Row -->
             <LinearLayout
                 android:id="@+id/layout_pref_boot"
                 android:layout_width="match_parent"
@@ -41,9 +110,10 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center_vertical"
-                android:nextFocusDown="@+id/layout_pref_simulation"
+                android:nextFocusUp="@+id/btn_settings_manage_apps"
+                android:nextFocusDown="@+id/layout_pref_monitor"
                 android:orientation="horizontal"
-                android:padding="16dp"
+                android:padding="12dp"
                 android:layout_marginBottom="8dp">
 
                 <LinearLayout
@@ -51,23 +121,20 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical">
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Start on Boot"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="15sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Enable protection automatically when the TV boots"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
-
                 <CheckBox
                     android:id="@+id/cb_pref_boot"
                     android:layout_width="wrap_content"
@@ -76,52 +143,7 @@
                     android:focusable="false" />
             </LinearLayout>
 
-            <!-- Simulation Mode setting row -->
-            <LinearLayout
-                android:id="@+id/layout_pref_simulation"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/tv_item_selector"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:nextFocusUp="@+id/layout_pref_boot"
-                android:nextFocusDown="@+id/layout_pref_monitor"
-                android:orientation="horizontal"
-                android:padding="16dp"
-                android:layout_marginBottom="8dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Simulation Mode"
-                        android:textColor="@color/text_primary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Simulate VPN disconnection for testing"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <CheckBox
-                    android:id="@+id/cb_pref_simulation"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="false"
-                    android:focusable="false" />
-            </LinearLayout>
-
-            <!-- Monitor Protected Apps setting row -->
+            <!-- Monitor Protected Apps Row -->
             <LinearLayout
                 android:id="@+id/layout_pref_monitor"
                 android:layout_width="match_parent"
@@ -130,10 +152,10 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center_vertical"
-                android:nextFocusUp="@+id/layout_pref_simulation"
-                android:nextFocusDown="@+id/layout_pref_force_updates"
+                android:nextFocusUp="@+id/layout_pref_boot"
+                android:nextFocusDown="@+id/layout_pref_vpn_choice"
                 android:orientation="horizontal"
-                android:padding="16dp"
+                android:padding="12dp"
                 android:layout_marginBottom="8dp">
 
                 <LinearLayout
@@ -141,23 +163,20 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical">
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Monitor Protected Apps"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="15sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Show alert pop-up if a protected app is opened without a VPN connection"
+                        android:text="Alert if a protected app is opened without VPN"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
-
                 <CheckBox
                     android:id="@+id/cb_pref_monitor"
                     android:layout_width="wrap_content"
@@ -166,52 +185,7 @@
                     android:focusable="false" />
             </LinearLayout>
 
-            <!-- Forced App Updates setting row -->
-            <LinearLayout
-                android:id="@+id/layout_pref_force_updates"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/tv_item_selector"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:nextFocusUp="@+id/layout_pref_monitor"
-                android:nextFocusDown="@+id/layout_pref_vpn_choice"
-                android:orientation="horizontal"
-                android:padding="16dp"
-                android:layout_marginBottom="8dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Forced App Updates"
-                        android:textColor="@color/text_primary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Enforce update check on startup and block access until updated"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <CheckBox
-                    android:id="@+id/cb_pref_force_updates"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="false"
-                    android:focusable="false" />
-            </LinearLayout>
-
-            <!-- VPN App of Choice setting row -->
+            <!-- VPN App of Choice Row -->
             <LinearLayout
                 android:id="@+id/layout_pref_vpn_choice"
                 android:layout_width="match_parent"
@@ -220,10 +194,97 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center_vertical"
-                android:nextFocusUp="@+id/layout_pref_force_updates"
-                android:nextFocusDown="@+id/btn_simulate_connected"
+                android:nextFocusUp="@+id/layout_pref_monitor"
+                android:nextFocusDown="@+id/btn_launch_diagnostics"
                 android:orientation="horizontal"
-                android:padding="16dp"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VPN App of Choice"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/tv_pref_vpn_choice_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="None (System Settings)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+
+            <!-- ================= DIAGNOSTICS SECTION ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DIAGNOSTICS &amp; LOGS"
+                android:textColor="@color/focus_highlight"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Open Diagnostics Activity Button -->
+            <Button
+                android:id="@+id/btn_launch_diagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/layout_pref_vpn_choice"
+                android:nextFocusDown="@+id/btn_settings_export_logs"
+                android:padding="12dp"
+                android:text="View Diagnostics Screen"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Export Logs Button -->
+            <Button
+                android:id="@+id/btn_settings_export_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_launch_diagnostics"
+                android:nextFocusDown="@+id/layout_pref_simulation"
+                android:padding="12dp"
+                android:text="Export Logs"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+
+            <!-- ================= ADVANCED SECTION ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ADVANCED"
+                android:textColor="@color/focus_highlight"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Simulation Mode Row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_simulation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:nextFocusUp="@+id/btn_settings_export_logs"
+                android:nextFocusDown="@+id/btn_import_config"
+                android:orientation="horizontal"
+                android:padding="12dp"
                 android:layout_marginBottom="8dp">
 
                 <LinearLayout
@@ -231,35 +292,214 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical">
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VPN App of Choice"
+                        android:text="Simulation Mode"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="15sp"
                         android:textStyle="bold" />
-
                     <TextView
-                        android:id="@+id/tv_pref_vpn_choice_value"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="None (System Settings)"
+                        android:text="Simulate VPN disconnection for testing"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
+                <CheckBox
+                    android:id="@+id/cb_pref_simulation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
             </LinearLayout>
 
-            <!-- Dynamic Simulator Controls -->
+            <!-- Import Config Button -->
+            <Button
+                android:id="@+id/btn_import_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/layout_pref_simulation"
+                android:nextFocusDown="@+id/btn_export_config"
+                android:padding="12dp"
+                android:text="Import Config"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Export Config Button -->
+            <Button
+                android:id="@+id/btn_export_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_import_config"
+                android:nextFocusDown="@+id/btn_check_updates"
+                android:padding="12dp"
+                android:text="Export Config"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <!-- ================= ABOUT SECTION ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ABOUT"
+                android:textColor="@color/focus_highlight"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Check for Updates Button -->
+            <Button
+                android:id="@+id/btn_check_updates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_export_config"
+                android:nextFocusDown="@+id/btn_show_onboarding"
+                android:padding="12dp"
+                android:text="Check for Updates"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Show Onboarding Button -->
+            <Button
+                android:id="@+id/btn_show_onboarding"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_check_updates"
+                android:nextFocusDown="@+id/btn_show_license"
+                android:padding="12dp"
+                android:text="Show Onboarding Guide"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Show License Button -->
+            <Button
+                android:id="@+id/btn_show_license"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_show_onboarding"
+                android:nextFocusDown="@+id/btn_settings_back"
+                android:padding="12dp"
+                android:text="View Open-Source License"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Back Button -->
+            <Button
+                android:id="@+id/btn_settings_back"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_show_license"
+                android:padding="12dp"
+                android:text="Back to Home"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline_settings_split"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.55" />
+
+    <!-- Right Side: Info Panel, Version, IPv6 Status -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/guideline_settings_split"
+        app:layout_constraintTop_toBottomOf="@+id/tv_settings_header">
+
+        <!-- IPv6 Protection Info Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tv_input_selector"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="8dp"
-                android:text="Simulation State Controls"
-                android:textColor="@color/text_secondary"
+                android:text="IPv6 Protocol Protection"
+                android:textColor="@color/focus_highlight"
                 android:textSize="14sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_settings_ipv6_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Fail-closed IPv6 protection is fully supported and enforced by routing all IPv6 traffic (::/0) into the blackhole interface. Ensure your upstream VPN supports complete IPv6 routing to avoid system bypass leaks."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- About/Version Details Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tv_input_selector"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="About &amp; Developer Info"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_about_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Version: 1.0.0\nDeveloper: DisabledAbel\nDesigned specifically for Android TV / Google TV. Optimized for remote controls."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Simulated Controls in settings (Hidden under Simulation mode to reduce clutter, but accessible) -->
+        <LinearLayout
+            android:id="@+id/layout_sim_state_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/tv_input_selector"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Simulation Triggers"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
 
             <Button
                 android:id="@+id/btn_simulate_connected"
@@ -267,122 +507,21 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/layout_pref_vpn_choice"
-                android:nextFocusDown="@+id/btn_simulate_disconnected"
-                android:padding="12dp"
-                android:text="Simulate VPN CONNECTED"
-                android:textColor="@color/text_primary" />
+                android:textSize="12sp"
+                android:text="Simulate VPN PROTECTED"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp"/>
 
             <Button
                 android:id="@+id/btn_simulate_disconnected"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_simulate_connected"
-                android:nextFocusDown="@+id/btn_check_updates"
-                android:padding="12dp"
+                android:textSize="12sp"
                 android:text="Simulate VPN DISCONNECTED"
-                android:textColor="@color/text_primary" />
-
-            <!-- About Card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="@drawable/tv_item_selector"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="About TunnelGuard"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tv_about_version"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Version: 1.0.0\nDeveloper: DisabledAbel (TunnelGuard Team)\nDesigned for Android TV / Google TV."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <!-- Check for Updates Button -->
-            <Button
-                android:id="@+id/btn_check_updates"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/tv_button_selector"
-                android:focusable="true"
-                android:nextFocusUp="@+id/btn_simulate_disconnected"
-                android:nextFocusDown="@+id/layout_pref_boot"
-                android:padding="12dp"
-                android:text="Check for Updates"
-                android:textColor="@color/text_primary" />
-
+                android:textColor="@color/text_primary"/>
         </LinearLayout>
-    </ScrollView>
-
-    <androidx.constraintlayout.widget.Guideline
-        android:id="@+id/guideline_settings"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.55" />
-
-    <!-- Right Side: Log display and Controls -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="24dp"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/guideline_settings"
-        app:layout_constraintTop_toBottomOf="@+id/tv_settings_header">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Debug Logs"
-                android:textColor="@color/text_primary"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/btn_clear_logs"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/tv_button_selector"
-                android:focusable="true"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:text="Clear Logs"
-                android:textColor="@color/text_primary" />
-        </LinearLayout>
-
-        <!-- Logs View List -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_debug_logs"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="12dp"
-            android:focusable="false" />
 
     </LinearLayout>
 

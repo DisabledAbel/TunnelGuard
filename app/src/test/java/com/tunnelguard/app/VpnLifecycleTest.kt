@@ -26,6 +26,9 @@ class VpnLifecycleTest {
         // Reset config SharedPreferences
         val prefs = context.getSharedPreferences("tunnel_guard_prefs", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
+        prefs.edit().putBoolean("onboarding_completed", true).commit()
+        // Mock VPN permission as already prepared/granted for boot receiver tests
+        org.robolectric.shadows.ShadowVpnService.setPrepareResult(null)
     }
 
     @Test

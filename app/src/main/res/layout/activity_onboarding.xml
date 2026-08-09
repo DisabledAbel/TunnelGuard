@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="32dp">
+
+    <!-- Header Title -->
+    <TextView
+        android:id="@+id/tv_onboarding_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Welcome to TunnelGuard"
+        android:textColor="@color/text_primary"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ScrollView
+        android:id="@+id/scroll_onboarding"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:focusable="false"
+        app:layout_constraintBottom_toTopOf="@+id/btn_get_started"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tv_onboarding_title">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Protect your internet path with fail-closed security for selected apps."
+                android:textColor="@color/focus_highlight"
+                android:textSize="18sp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- Core Point 1 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🛡️ What is TunnelGuard?"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="TunnelGuard is a specialized firewall utility designed to ensure your streaming and download apps only access the network through an active VPN. Unprotected apps are unaffected."
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Core Point 2 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔒 What is 'Fail-Closed' protection?"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="If your VPN fails or disconnects, your real IP and traffic could leak to your ISP. 'Fail-closed' means TunnelGuard immediately intercepts and blackholes all traffic from protected apps, blocking them from the internet completely until your VPN is reconnected."
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Core Point 3 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠️ One Active VPN Constraint"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Android only allows ONE active VPN connection at a time. Because TunnelGuard implements its block using Android's local VPN API, it acts as a local firewall. It is designed to run and block traffic when your upstream VPN is unavailable, and stay out of the way when you are securely connected."
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Core Point 4 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙️ Explicit Activation Required"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="TunnelGuard does not protect anything automatically. You must explicitly start TunnelGuard, select which apps to protect, and grant the required VPN permission to engage fail-closed security."
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:layout_marginBottom="24dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Get Started focusable button -->
+    <Button
+        android:id="@+id/btn_get_started"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/tv_button_selector"
+        android:focusable="true"
+        android:text="Get Started"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
+        android:padding="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

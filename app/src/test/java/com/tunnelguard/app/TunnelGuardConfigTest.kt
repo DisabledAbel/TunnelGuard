@@ -372,4 +372,104 @@ class TunnelGuardConfigTest {
         config.setVPNState(VPNState.DISCONNECTED)
         assertEquals(0L, config.getConnectionUptimeMillis())
     }
+
+    @Test
+    fun testBackupAndRestoreValidation() {
+        config.setSelectedProfileId("custom")
+        config.setStartOnBootEnabled(true)
+        config.setAppMonitorEnabled(true)
+        config.setForcedUpdatesEnabled(false)
+
+        val rawJsonStr = """
+            {
+                "start_on_boot": false,
+                "app_monitor_enabled": false,
+                "forced_updates_enabled": true,
+                "selected_profile_id": "custom",
+                "protection_profiles": [
+                    {
+                        "id": "custom",
+                        "name": "Custom",
+                        "isSystem": true,
+                        "apps": ["com.valid.app", "invalid..app", "another.valid.one", ""]
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val success = config.importConfigFromJson(rawJsonStr)
+        assertTrue(success)
+
+        assertFalse(config.isStartOnBootEnabled())
+        assertFalse(config.isAppMonitorEnabled())
+        assertTrue(config.isForcedUpdatesEnabled())
+        assertEquals("custom", config.getSelectedProfileId())
+
+        val protectedApps = config.getProtectedApps()
+        assertEquals(2, protectedApps.size)
+        assertTrue(protectedApps.contains("com.valid.app"))
+        assertTrue(protectedApps.contains("another.valid.one"))
+        assertFalse(protectedApps.contains("invalid..app"))
+        assertFalse(protectedApps.contains(""))
+
+        val exportedJson = config.exportConfigToJson()
+        assertTrue(exportedJson.contains("start_on_boot"))
+        assertTrue(exportedJson.contains("app_monitor_enabled"))
+        assertTrue(exportedJson.contains("protection_profiles"))
+    }
+
+    @Test
+    fun testOnboardingConfigPersistence() {
+        assertFalse(config.isOnboardingCompleted())
+        config.setOnboardingCompleted(true)
+        assertTrue(config.isOnboardingCompleted())
+    }
+
+    @Test
+    fun testIpv6ProtectionStatePersistence() {
+        assertFalse(config.isIpv6ProtectionActive())
+        config.setIpv6ProtectionActive(true)
+        assertTrue(config.isIpv6ProtectionActive())
+    }
+
+    @Test
+    fun testDeterministicSecurityStateMachine() {
+        val mockConnectivity = mock(ConnectivityManager::class.java)
+
+        config.setProtectionEnabled(false)
+        config.setEmergencyLockEnabled(false)
+        var state = SecurityStateMachine.getSecurityState(mockContext, config, false, false, false, mockConnectivity)
+        assertEquals(SecurityState.INACTIVE, state)
+
+        config.setEmergencyLockEnabled(true)
+        config.setVPNState(VPNState.BLOCKED)
+        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, true, mockConnectivity)
+        assertEquals(SecurityState.BLOCKING, state)
+
+        state = SecurityStateMachine.getSecurityState(mockContext, config, true, true, false, mockConnectivity)
+        assertEquals(SecurityState.CONNECTING, state)
+
+        config.setEmergencyLockEnabled(false)
+        config.setProtectionEnabled(true)
+        config.setSimulatedVpnEnabled(true)
+
+        config.setVPNState(VPNState.PROTECTED)
+        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+        assertEquals(SecurityState.PROTECTED, state)
+
+        config.setVPNState(VPNState.DISCONNECTED)
+        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+        assertEquals(SecurityState.BLOCKING, state)
+
+        config.setSimulatedVpnEnabled(false)
+        val mockNet = mock(Network::class.java)
+        val mockCaps = mock(NetworkCapabilities::class.java)
+        whenever(mockConnectivity.allNetworks).thenReturn(arrayOf(mockNet))
+        whenever(mockConnectivity.getNetworkCapabilities(mockNet)).thenReturn(mockCaps)
+        whenever(mockCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+        whenever(mockConnectivity.getLinkProperties(mockNet)).thenReturn(null)
+
+        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+        assertEquals(SecurityState.PROTECTED, state)
+    }
 }

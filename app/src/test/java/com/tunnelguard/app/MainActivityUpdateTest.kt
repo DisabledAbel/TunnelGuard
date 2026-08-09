@@ -40,6 +40,7 @@ class MainActivityUpdateTest {
 
         val mainPrefs = context.getSharedPreferences("tunnel_guard_prefs", android.content.Context.MODE_PRIVATE)
         mainPrefs.edit().clear().commit()
+        mainPrefs.edit().putBoolean("onboarding_completed", true).commit()
 
         currentStub = StubUpdateChecker()
         val repo = UpdateRepository(context, currentStub)
