@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvProtectedCount: TextView
     private lateinit var tvUptimeStatus: TextView
     private lateinit var tvDisconnectReason: TextView
+    private lateinit var tvTrafficStatus: TextView
+    private lateinit var tvLastTransition: TextView
 
     private lateinit var btnToggleProtection: Button
     private lateinit var btnToggleEmergency: Button
@@ -150,9 +152,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
         config = TunnelGuardConfig(this)
+        if (!config.isOnboardingCompleted()) {
+            val intent = Intent(this, OnboardingActivity::class.java)
+            startActivity(intent)
+            finish()
+            return
+        }
+
+        setContentView(R.layout.activity_main)
+
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
         layoutMain = findViewById(R.id.main_layout)
@@ -163,6 +173,8 @@ class MainActivity : AppCompatActivity() {
         tvDnsStatus = findViewById(R.id.tv_dns_status)
         tvActiveProfile = findViewById(R.id.tv_active_profile)
         tvProtectedCount = findViewById(R.id.tv_protected_count)
+        tvTrafficStatus = findViewById(R.id.tv_traffic_status)
+        tvLastTransition = findViewById(R.id.tv_last_transition)
 
         btnToggleProtection = findViewById(R.id.btn_toggle_protection)
         btnToggleEmergency = findViewById(R.id.btn_toggle_emergency)
@@ -443,9 +455,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         val vpnState = config.getVPNState()
-        val protectionState = config.getProtectionState()
         val isLocked = config.isEmergencyLockEnabled()
         val protectedApps = config.getProtectedApps().toList()
+
+        // Get single source of truth deterministic state
+        val securityState = SecurityStateMachine.getSecurityState(
+            this,
+            config,
+            TunnelGuardVpnService.isServiceRunning,
+            TunnelGuardVpnService.isServiceStarting,
+            TunnelGuardVpnService.isTunnelEstablished,
+            connectivityManager
+        )
 
         // 1. Update VPN status display
         tvVpnStatus.text = "● ${vpnState.name}"
@@ -461,56 +482,92 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 2. Update Protection status display
-        if (isLocked) {
-            tvProtectionStatus.text = "● EMERGENCY LOCK ACTIVE"
-            tvProtectionStatus.setTextColor(resources.getColor(R.color.status_disconnected))
-            btnToggleProtection.text = "Start Protection"
-            btnToggleEmergency.text = "Unlock Network"
-        } else {
-            btnToggleEmergency.text = "Emergency Lock"
-            when (protectionState) {
-                ProtectionState.ACTIVE -> {
-                    tvProtectionStatus.text = "● PROTECTION ACTIVE"
-                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
-                    btnToggleProtection.text = "Stop Protection"
-                }
-                ProtectionState.BLOCKING -> {
-                    tvProtectionStatus.text = "● PROTECTION BLOCKED"
-                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_blocking))
-                    btnToggleProtection.text = "Stop Protection"
-                }
-                ProtectionState.INACTIVE -> {
-                    tvProtectionStatus.text = "● PROTECTION INACTIVE"
-                    tvProtectionStatus.setTextColor(resources.getColor(R.color.status_inactive))
-                    btnToggleProtection.text = "Start Protection"
-                }
+        // 2. Update Protection status display using the SecurityState
+        tvProtectionStatus.text = "● STATUS: ${securityState.name}"
+        when (securityState) {
+            SecurityState.PROTECTED -> {
+                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
+                btnToggleProtection.text = "Stop Protection"
+            }
+            SecurityState.BLOCKING -> {
+                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_blocking))
+                btnToggleProtection.text = "Stop Protection"
+            }
+            SecurityState.INACTIVE -> {
+                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_inactive))
+                btnToggleProtection.text = "Start Protection"
+            }
+            SecurityState.CONNECTING -> {
+                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_connecting))
+                btnToggleProtection.text = "Stop Protection"
+            }
+            SecurityState.ERROR -> {
+                tvProtectionStatus.setTextColor(resources.getColor(R.color.status_disconnected))
+                btnToggleProtection.text = "Start Protection"
             }
         }
 
-        // 3. Update IPv4 & IPv6 Protection Status
         if (isLocked) {
-            tvIpv4Status.text = "LOCKED (BLOCKED)"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_disconnected))
-            tvIpv6Status.text = "LOCKED (BLOCKED)"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
-        } else if (config.isProtectionEnabled()) {
-            if (vpnState == VPNState.CONNECTED || vpnState == VPNState.PROTECTED) {
-                tvIpv4Status.text = "Protected (VPN Routing)"
-                tvIpv4Status.setTextColor(resources.getColor(R.color.status_active))
-                tvIpv6Status.text = "Protected (VPN Routing)"
-                tvIpv6Status.setTextColor(resources.getColor(R.color.status_active))
-            } else {
-                tvIpv4Status.text = "Blocked (Fail-Closed)"
-                tvIpv4Status.setTextColor(resources.getColor(R.color.status_blocking))
+            btnToggleEmergency.text = "Unlock Network"
+        } else {
+            btnToggleEmergency.text = "Emergency Lock"
+        }
+
+        // 3. Update IPv4 & IPv6 Protection Status and Allowed/Blocked Traffic
+        if (securityState == SecurityState.PROTECTED) {
+            tvIpv4Status.text = "Protected (VPN Routing)"
+            tvIpv4Status.setTextColor(resources.getColor(R.color.status_active))
+            tvIpv6Status.text = "Protected (VPN Routing)"
+            tvIpv6Status.setTextColor(resources.getColor(R.color.status_active))
+
+            tvTrafficStatus.text = "ALLOWED (Secured)"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_active))
+        } else if (securityState == SecurityState.BLOCKING) {
+            tvIpv4Status.text = "Blocked (Fail-Closed)"
+            tvIpv4Status.setTextColor(resources.getColor(R.color.status_blocking))
+            if (config.isIpv6ProtectionActive()) {
                 tvIpv6Status.text = "Blocked (Fail-Closed)"
                 tvIpv6Status.setTextColor(resources.getColor(R.color.status_blocking))
+            } else {
+                tvIpv6Status.text = "Unprotected (IPv6 Unsupported)"
+                tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
             }
+
+            tvTrafficStatus.text = "BLOCKED"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
+        } else if (securityState == SecurityState.CONNECTING) {
+            tvIpv4Status.text = "Establishing..."
+            tvIpv4Status.setTextColor(resources.getColor(R.color.status_connecting))
+            tvIpv6Status.text = "Establishing..."
+            tvIpv6Status.setTextColor(resources.getColor(R.color.status_connecting))
+
+            tvTrafficStatus.text = "BLOCKED (Safe-Mode)"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
+        } else if (securityState == SecurityState.ERROR) {
+            tvIpv4Status.text = "Error"
+            tvIpv4Status.setTextColor(resources.getColor(R.color.status_disconnected))
+            tvIpv6Status.text = "Error"
+            tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
+
+            tvTrafficStatus.text = "BLOCKED (Fail-Closed)"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
         } else {
             tvIpv4Status.text = "Unprotected"
             tvIpv4Status.setTextColor(resources.getColor(R.color.text_secondary))
             tvIpv6Status.text = "Unprotected"
             tvIpv6Status.setTextColor(resources.getColor(R.color.text_secondary))
+
+            tvTrafficStatus.text = "ALLOWED (Unsecured)"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_connecting))
+        }
+
+        // Format Last State Transition
+        val lastTransition = config.getLastStateTransitionTime()
+        if (lastTransition == 0L) {
+            tvLastTransition.text = "Never"
+        } else {
+            val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            tvLastTransition.text = format.format(java.util.Date(lastTransition))
         }
 
         // 4. Update DNS Protection Status
@@ -545,10 +602,14 @@ class MainActivity : AppCompatActivity() {
                 val icon = pm.getApplicationIcon(appInfo)
                 val statusText = if (isLocked) {
                     "EMERGENCY BLOCKED"
-                } else if (protectionState == ProtectionState.BLOCKING) {
+                } else if (securityState == SecurityState.BLOCKING) {
                     "INTERNET BLOCKED"
-                } else if (protectionState == ProtectionState.ACTIVE) {
+                } else if (securityState == SecurityState.PROTECTED) {
                     "PROTECTED"
+                } else if (securityState == SecurityState.CONNECTING) {
+                    "CONNECTING"
+                } else if (securityState == SecurityState.ERROR) {
+                    "ERROR (BLOCKED)"
                 } else {
                     "UNPROTECTED"
                 }

@@ -26,6 +26,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_PROTECTION_ENABLED = "protection_enabled" // Active or inactive
         private const val KEY_VERSION_NAME = "override_version_name"
         private const val KEY_FORCE_UPDATES = "forced_updates_enabled"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -320,6 +321,10 @@ class TunnelGuardConfig(private val context: Context) {
      */
     fun setVPNState(state: VPNState) {
         val normalizedState = if (state == VPNState.CONNECTED) VPNState.PROTECTED else state
+        val oldStateName = prefs.getString(KEY_VPN_STATUS, VPNState.DISCONNECTED.name)
+        if (normalizedState.name != oldStateName) {
+            updateLastStateTransitionTime(System.currentTimeMillis())
+        }
         prefs.edit().putString(KEY_VPN_STATUS, normalizedState.name).apply()
         if (normalizedState == VPNState.CONNECTED || normalizedState == VPNState.PROTECTED) {
             val startTime = prefs.getLong("vpn_connection_start_time", 0L)
@@ -338,6 +343,39 @@ class TunnelGuardConfig(private val context: Context) {
     fun setForcedUpdatesEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_FORCE_UPDATES, enabled).apply()
         addLog("Forced updates enabled set to: $enabled")
+    }
+
+    fun isOnboardingCompleted(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+    }
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
+        addLog("Onboarding completed set to: $completed")
+    }
+
+    fun getLastStateTransitionTime(): Long {
+        return prefs.getLong("last_state_transition_time", 0L)
+    }
+
+    fun updateLastStateTransitionTime(time: Long) {
+        prefs.edit().putLong("last_state_transition_time", time).apply()
+    }
+
+    fun isIpv6ProtectionActive(): Boolean {
+        return prefs.getBoolean("ipv6_protection_active", false)
+    }
+
+    fun setIpv6ProtectionActive(active: Boolean) {
+        prefs.edit().putBoolean("ipv6_protection_active", active).apply()
+    }
+
+    fun getLastBootFailure(): String? {
+        return prefs.getString("last_boot_failure", null)
+    }
+
+    fun setLastBootFailure(failure: String?) {
+        prefs.edit().putString("last_boot_failure", failure).apply()
     }
 
     fun getConnectionUptimeMillis(): Long {
@@ -368,6 +406,10 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     fun setProtectionEnabled(enabled: Boolean) {
+        val old = prefs.getBoolean(KEY_PROTECTION_ENABLED, false)
+        if (old != enabled) {
+            updateLastStateTransitionTime(System.currentTimeMillis())
+        }
         prefs.edit().putBoolean(KEY_PROTECTION_ENABLED, enabled).apply()
     }
 
@@ -397,6 +439,10 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     fun setEmergencyLockEnabled(enabled: Boolean) {
+        val old = prefs.getBoolean("emergency_lock_enabled", false)
+        if (old != enabled) {
+            updateLastStateTransitionTime(System.currentTimeMillis())
+        }
         prefs.edit().putBoolean("emergency_lock_enabled", enabled).apply()
         addLog("Emergency Lock set to: $enabled")
     }
@@ -512,6 +558,75 @@ class TunnelGuardConfig(private val context: Context) {
         } catch (e: Exception) {
             addLog("Failed to export logs: ${e.message}", "ERROR")
             return null
+        }
+    }
+
+    fun exportConfigToJson(): String {
+        val obj = JSONObject()
+        try {
+            obj.put("start_on_boot", isStartOnBootEnabled())
+            obj.put("app_monitor_enabled", isAppMonitorEnabled())
+            obj.put("forced_updates_enabled", isForcedUpdatesEnabled())
+            obj.put("selected_profile_id", getSelectedProfileId())
+
+            val profilesStr = prefs.getString("protection_profiles", null)
+            if (profilesStr != null) {
+                obj.put("protection_profiles", JSONArray(profilesStr))
+            }
+        } catch (e: Exception) {
+            addLog("Failed to export configuration: ${e.message}", "ERROR")
+        }
+        return obj.toString()
+    }
+
+    fun importConfigFromJson(jsonStr: String): Boolean {
+        try {
+            val obj = JSONObject(jsonStr)
+            val startOnBoot = obj.optBoolean("start_on_boot", false)
+            val appMonitorEnabled = obj.optBoolean("app_monitor_enabled", false)
+            val forcedUpdatesEnabled = obj.optBoolean("forced_updates_enabled", true)
+            val selectedProfileId = obj.optString("selected_profile_id", "streaming")
+
+            val pkgRegex = Regex("^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+$")
+
+            val profilesArr = obj.optJSONArray("protection_profiles")
+            val validatedProfiles = mutableListOf<ProtectionProfile>()
+
+            if (profilesArr != null) {
+                for (i in 0 until profilesArr.length()) {
+                    val pObj = profilesArr.getJSONObject(i)
+                    val id = pObj.getString("id")
+                    val name = pObj.getString("name")
+                    val isSystem = pObj.optBoolean("isSystem", false)
+                    val appsArr = pObj.getJSONArray("apps")
+
+                    val validatedApps = mutableSetOf<String>()
+                    for (j in 0 until appsArr.length()) {
+                        val appPkg = appsArr.getString(j)
+                        if (pkgRegex.matches(appPkg)) {
+                            validatedApps.add(appPkg)
+                        } else {
+                            addLog("Ignored invalid package name on import: $appPkg", "WARN")
+                        }
+                    }
+                    validatedProfiles.add(ProtectionProfile(id, name, validatedApps, isSystem))
+                }
+            }
+
+            setStartOnBootEnabled(startOnBoot)
+            setAppMonitorEnabled(appMonitorEnabled)
+            setForcedUpdatesEnabled(forcedUpdatesEnabled)
+            setSelectedProfileId(selectedProfileId)
+
+            if (validatedProfiles.isNotEmpty()) {
+                saveProfiles(validatedProfiles)
+            }
+
+            addLog("Configuration imported successfully.", "INFO")
+            return true
+        } catch (e: Exception) {
+            addLog("Failed to import configuration: ${e.message}", "ERROR")
+            return false
         }
     }
 

@@ -30,26 +30,32 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
 
 ---
 
-## Features
+## New Features & Enhancements
 
-1. **Home Screen:**
-   * Dynamic VPN Status (CONNECTED, CONNECTING, DISCONNECTED, ERROR, BLOCKED).
-   * Protection Status (ACTIVE, BLOCKING, INACTIVE).
-   * Total number of protected apps.
-   * Quick toggle button to Start/Stop protection.
-   * Remote-friendly sidebar showing real-time status of protected applications.
-2. **Protected Apps Screen:**
-   * Full alphabetical list of all user and system launcher applications.
-   * Remote-optimized search bar to filter apps dynamically.
-   * Single-click toggle rows (D-pad remote friendly).
-   * Dynamic update propagation: modifying selection instantly updates the VPN routing tables if protection is active.
-3. **Settings Screen:**
-   * Enable/Disable "Start on Boot" (automatically engages protection when the Android TV starts).
-   * Enable/Disable "Simulation Mode" (allows manual simulation of VPN state changes for verification/testing).
-   * Manual state simulation triggers (Simulate VPN CONNECTED vs. DISCONNECTED).
-   * Real-time debug log viewer to view and audit all network state transitions, interface hooks, and errors.
-   * Clear Logs functionality.
-   * About card detailing build version metadata.
+1. **First-Run Onboarding Screen:**
+   * Explains what TunnelGuard does, "fail-closed" mechanics, the one active VPN constraint, and explicit user enablement.
+   * Remote-friendly layout with D-pad accessible "Get Started" control.
+   * Can be re-opened at any time from the settings screen.
+2. **Deterministic State Machine & Dashboard:**
+   * Single source of truth state manager (`SecurityStateMachine.kt`) ensures impossible/conflicting states cannot be displayed.
+   * Unified home screen displaying VPN state, overall security state (`PROTECTED`, `BLOCKING`, `INACTIVE`, `CONNECTING`, `ERROR`), protected apps count, and traffic allow/block state.
+3. **Dedicated Diagnostics Screen:**
+   * Fully structured system reports detailing VPN state, protection state, app counts, last transition time, boot status, Android version, device information, app version, and IPv4/IPv6 protection status.
+   * Clean, formatted events listing.
+   * Quick action buttons to Refresh, Copy to clipboard, Export/Share logs to local storage, and Clear logs.
+4. **Configuration Import & Export (Backup/Restore):**
+   * Backup/Restore your entire protection configuration (profiles, protected packages, boot settings) via clean JSON.
+   * Does NOT export private keys or credentials.
+   * Validates imported package names using package syntax regex to filter out corrupt/malicious strings.
+   * Supports import from Clipboard or local backup file.
+5. **IPv6 Protection with Fallback:**
+   * Attempts to establish IPv6 fail-closed routing (`::/0`) into the blackhole interface.
+   * Dynamically catches device limitations or OS-level IPv6 support errors and falls back to a secure IPv4-only fail-closed route.
+   * Accurately reports whether IPv6 is protected on the dashboard and diagnostics screens (never claims protection when unsupported).
+6. **Start-on-Boot Reliability:**
+   * Receiver evaluates `VpnService.prepare` status on startup.
+   * Safe execution avoids boot crashes and loops.
+   * Persists and displays boot failure diagnostics (e.g. if permissions were revoked).
 
 ---
 
@@ -71,7 +77,7 @@ By adding only the package names of selected apps to the builder, Android routes
 
 1. **System-level restriction:** Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same time as a standard on-device VPN app like Proton VPN. It is designed to act as the firewall wrapper itself, or be used in environments where the VPN is configured or simulated via state simulation tools.
 2. **System Apps Bypass:** Certain system-level apps or Google Play Services may bypass VPN interfaces if specifically exempted by Android OS configurations.
-3. **IPv6 Leaks:** In IPv6-enabled networks, ensure that your VPN configuration handles IPv6 explicitly. TunnelGuard intercepts IPv4 by default; future updates will add custom IPv6 routing rules.
+3. **IPv6 Leaks on Unsupported Hardware:** On legacy devices or custom ROMs where the kernel doesn't support local VPN IPv6 routes, IPv6 traffic is unprotected. Ensure IPv6 is disabled in your router/modem or TV settings if your hardware falls back to IPv4-only.
 
 ---
 
