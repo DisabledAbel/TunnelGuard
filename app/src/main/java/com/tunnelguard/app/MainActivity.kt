@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
+        private const val REQUEST_POST_NOTIFICATIONS = 2002
     }
 
     private fun runMandatoryUpdateCheck() {
@@ -380,6 +381,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_POST_NOTIFICATIONS) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                config.addLog("Notification permission granted via tamper resolution.")
+                updateUI()
+            } else {
+                config.addLog("Notification permission denied via tamper resolution.")
+            }
+        }
+    }
+
     /**
      * Starts the VPN service if it is not already starting.
      */
@@ -599,6 +612,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 4. Notification permission check when monitoring is active
+        if (config.isAppMonitorEnabled()) {
+            if (!config.hasNotificationPermission()) {
+                isTampered = true
+                messages.add("Notification permission is missing.")
+            }
+        }
+
         return Pair(isTampered, messages.joinToString(" "))
     }
 
@@ -637,6 +658,16 @@ class MainActivity : AppCompatActivity() {
                 } catch (ex: Exception) {
                     Toast.makeText(this, "Could not open settings", Toast.LENGTH_SHORT).show()
                 }
+            }
+            return
+        }
+        if (config.isAppMonitorEnabled() && !config.hasNotificationPermission()) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_POST_NOTIFICATIONS
+                )
             }
         }
     }

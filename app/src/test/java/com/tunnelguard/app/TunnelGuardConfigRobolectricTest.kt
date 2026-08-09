@@ -59,4 +59,32 @@ class TunnelGuardConfigRobolectricTest {
 
         assertFalse(config.hasUsageStatsPermission(spyContext))
     }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+    fun testHasNotificationPermissionTiramisuGranted() {
+        val spyContext = spy(context)
+        whenever(spyContext.checkPermission(
+            eq(android.Manifest.permission.POST_NOTIFICATIONS),
+            any(),
+            any()
+        )).thenReturn(android.content.pm.PackageManager.PERMISSION_GRANTED)
+
+        val configWithSpy = TunnelGuardConfig(spyContext)
+        assertTrue(configWithSpy.hasNotificationPermission())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+    fun testHasNotificationPermissionTiramisuDenied() {
+        val spyContext = spy(context)
+        whenever(spyContext.checkPermission(
+            eq(android.Manifest.permission.POST_NOTIFICATIONS),
+            any(),
+            any()
+        )).thenReturn(android.content.pm.PackageManager.PERMISSION_DENIED)
+
+        val configWithSpy = TunnelGuardConfig(spyContext)
+        assertFalse(configWithSpy.hasNotificationPermission())
+    }
 }
