@@ -140,6 +140,14 @@ class SettingsActivity : AppCompatActivity() {
                     Intent(Settings.ACTION_SETTINGS),
                     "ACTION_MANAGE_OVERLAY_PERMISSION"
                 )
+            } else if (!config.hasNotificationPermission()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                        REQUEST_POST_NOTIFICATIONS
+                    )
+                }
             } else {
                 val newChecked = !config.isAppMonitorEnabled()
                 config.setAppMonitorEnabled(newChecked)
@@ -205,6 +213,23 @@ class SettingsActivity : AppCompatActivity() {
             if (config.isAppMonitorEnabled()) {
                 config.setAppMonitorEnabled(false)
                 triggerVpnServiceUpdate()
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_POST_NOTIFICATIONS) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                config.addLog("Notification permission granted.")
+                // If other permissions are already granted, enable the monitor
+                if (config.hasUsageStatsPermission(this) && config.hasSystemAlertWindowPermission()) {
+                    config.setAppMonitorEnabled(true)
+                    cbPrefMonitor.isChecked = true
+                    triggerVpnServiceUpdate()
+                }
+            } else {
+                config.addLog("Notification permission denied.")
             }
         }
     }
@@ -378,6 +403,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val REQUEST_POST_NOTIFICATIONS = 2002
+
         fun calculateNextVersion(currentVersion: String): String {
             return try {
                 val parts = currentVersion.split(".")

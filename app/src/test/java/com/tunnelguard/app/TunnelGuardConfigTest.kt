@@ -137,6 +137,11 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testHasNotificationPermissionOnLegacySdk() {
+        assertTrue(config.hasNotificationPermission())
+    }
+
+    @Test
     fun testProtectionStateTransitions() {
         config.setProtectionEnabled(false)
         assertEquals(ProtectionState.INACTIVE, config.getProtectionState())
