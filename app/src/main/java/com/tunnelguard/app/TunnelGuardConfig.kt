@@ -561,7 +561,7 @@ class TunnelGuardConfig(private val context: Context) {
         }
     }
 
-    fun exportConfigToJson(): String {
+    fun exportConfigToJson(): String? {
         val obj = JSONObject()
         try {
             obj.put("start_on_boot", isStartOnBootEnabled())
@@ -573,10 +573,11 @@ class TunnelGuardConfig(private val context: Context) {
             if (profilesStr != null) {
                 obj.put("protection_profiles", JSONArray(profilesStr))
             }
+            return obj.toString()
         } catch (e: Exception) {
             addLog("Failed to export configuration: ${e.message}", "ERROR")
+            return null
         }
-        return obj.toString()
     }
 
     fun importConfigFromJson(jsonStr: String): Boolean {
@@ -616,11 +617,16 @@ class TunnelGuardConfig(private val context: Context) {
             setStartOnBootEnabled(startOnBoot)
             setAppMonitorEnabled(appMonitorEnabled)
             setForcedUpdatesEnabled(forcedUpdatesEnabled)
-            setSelectedProfileId(selectedProfileId)
 
             if (validatedProfiles.isNotEmpty()) {
                 saveProfiles(validatedProfiles)
             }
+
+            // Validate selectedProfileId against imported profiles + existing profiles
+            val existingProfiles = getProfiles()
+            val validProfileIds = (validatedProfiles.map { it.id } + existingProfiles.map { it.id }).toSet()
+            val finalProfileId = if (validProfileIds.contains(selectedProfileId)) selectedProfileId else "streaming"
+            setSelectedProfileId(finalProfileId)
 
             addLog("Configuration imported successfully.", "INFO")
             return true

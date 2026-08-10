@@ -54,26 +54,24 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvIpv6Info: TextView
 
     private var isUpdateChecking = false
+    private var loadingDialog: AlertDialog? = null
 
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
+        private const val REQUEST_POST_NOTIFICATIONS = 2002
 
         fun calculateNextVersion(currentVersion: String): String {
-            return try {
-                val parts = currentVersion.split(".")
-                if (parts.size >= 3) {
-                    val major = parts[0]
-                    val minor = parts[1]
-                    val patch = (parts[2].toIntOrNull() ?: 0) + 1
-                    "$major.$minor.$patch"
-                } else if (parts.size == 2) {
-                    val major = parts[0]
-                    val minor = parts[1]
-                    "$major.$minor.1"
-                } else {
-                    "1.0.1"
-                }
-            } catch (e: Exception) {
+            val parts = currentVersion.split(".")
+            return if (parts.size >= 3) {
+                val major = parts[0]
+                val minor = parts[1]
+                val patch = (parts[2].toIntOrNull() ?: 0) + 1
+                "$major.$minor.$patch"
+            } else if (parts.size == 2) {
+                val major = parts[0]
+                val minor = parts[1]
+                "$major.$minor.1"
+            } else {
                 "1.0.1"
             }
         }
@@ -122,6 +120,11 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
         cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
 
+        updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
+        updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", config.isStartOnBootEnabled())
+        updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
+        updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
+
         updateVersionDisplay()
         updateVpnAppOfChoiceDisplay()
         updateSimulatedControlsVisibility()
@@ -132,6 +135,7 @@ class SettingsActivity : AppCompatActivity() {
             if (isEnabled) {
                 config.setProtectionEnabled(false)
                 cbPrefProtection.isChecked = false
+                updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", false)
                 config.addLog("User stopped protection from Settings.")
                 stopVpnService()
             } else {
@@ -140,7 +144,7 @@ class SettingsActivity : AppCompatActivity() {
                     config.addLog("VpnService.prepare requires user approval from Settings. Launching permission request.")
                     startActivityForResult(intent, REQUEST_VPN_PREPARE)
                 } else {
-                    onActivityResult(REQUEST_VPN_PREPARE, RESULT_OK, null)
+                    enableProtection()
                 }
             }
         }
@@ -153,6 +157,7 @@ class SettingsActivity : AppCompatActivity() {
             val newChecked = !config.isStartOnBootEnabled()
             config.setStartOnBootEnabled(newChecked)
             cbPrefBoot.isChecked = newChecked
+            updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", newChecked)
         }
 
         layoutPrefMonitor.setOnClickListener {
@@ -160,6 +165,7 @@ class SettingsActivity : AppCompatActivity() {
             if (!intendedState) {
                 config.setAppMonitorEnabled(false)
                 cbPrefMonitor.isChecked = false
+                updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", false)
                 triggerVpnServiceUpdate()
             } else {
                 if (!config.hasUsageStatsPermission(this)) {
@@ -188,12 +194,13 @@ class SettingsActivity : AppCompatActivity() {
                         androidx.core.app.ActivityCompat.requestPermissions(
                             this,
                             arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                            2002
+                            REQUEST_POST_NOTIFICATIONS
                         )
                     }
                 } else {
                     config.setAppMonitorEnabled(true)
                     cbPrefMonitor.isChecked = true
+                    updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", true)
                     triggerVpnServiceUpdate()
                 }
             }
@@ -222,6 +229,7 @@ class SettingsActivity : AppCompatActivity() {
             val newChecked = !config.isSimulatedVpnEnabled()
             config.setSimulatedVpnEnabled(newChecked)
             cbPrefSimulation.isChecked = newChecked
+            updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", newChecked)
             updateSimulatedControlsVisibility()
             triggerVpnServiceUpdate()
         }
@@ -278,6 +286,14 @@ class SettingsActivity : AppCompatActivity() {
         layoutPrefProtection.requestFocus()
     }
 
+    private fun enableProtection() {
+        config.setProtectionEnabled(true)
+        cbPrefProtection.isChecked = true
+        updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", true)
+        config.addLog("User enabled TunnelGuard protection from Settings.")
+        startVpnService()
+    }
+
     private fun startVpnService() {
         if (TunnelGuardVpnService.isServiceStarting) {
             return
@@ -286,10 +302,15 @@ class SettingsActivity : AppCompatActivity() {
         val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
             action = TunnelGuardVpnService.ACTION_START
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            config.addLog("Failed to start VPN service from Settings: ${e.message}", "ERROR")
+            TunnelGuardVpnService.isServiceStarting = false
         }
     }
 
@@ -303,14 +324,39 @@ class SettingsActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_VPN_PREPARE && resultCode == RESULT_OK) {
-            config.setProtectionEnabled(true)
-            cbPrefProtection.isChecked = true
-            config.addLog("User enabled TunnelGuard protection from Settings.")
-            startVpnService()
+            enableProtection()
         } else if (requestCode == REQUEST_VPN_PREPARE) {
             config.addLog("VPN permission request rejected by user in Settings.")
             Toast.makeText(this, "VPN permission is required to enable TunnelGuard protection.", Toast.LENGTH_LONG).show()
         }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_POST_NOTIFICATIONS) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                config.addLog("Notification permission granted in Settings.")
+                config.setAppMonitorEnabled(true)
+                cbPrefMonitor.isChecked = true
+                updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", true)
+                triggerVpnServiceUpdate()
+            } else {
+                config.addLog("Notification permission denied in Settings.")
+                Toast.makeText(this, "Notification permission is required to post security warnings.", Toast.LENGTH_LONG).show()
+                cbPrefMonitor.isChecked = false
+                updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", false)
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        loadingDialog?.let {
+            if (it.isShowing) {
+                it.dismiss()
+            }
+        }
+        loadingDialog = null
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -426,6 +472,14 @@ class SettingsActivity : AppCompatActivity() {
     private fun performConfigExport() {
         try {
             val jsonStr = config.exportConfigToJson()
+            if (jsonStr == null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Export Failed")
+                    .setMessage("Failed to serialize the active configuration.")
+                    .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                    .show()
+                return
+            }
 
             // 1. Write to local backup file
             val backupFile = File(getExternalFilesDir(null), "tunnelguard_backup.json")
@@ -433,16 +487,22 @@ class SettingsActivity : AppCompatActivity() {
                 writer.write(jsonStr)
             }
 
-            // 2. Copy to clipboard
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("TunnelGuard Configuration", jsonStr)
-            clipboard.setPrimaryClip(clip)
-
+            // 2. Offer Clipboard copy in the success flow as an explicit choice
             AlertDialog.Builder(this)
                 .setTitle("Configuration Exported")
-                .setMessage("Your configuration backup has been successfully exported!\n\n" +
-                        "1. Copied JSON string to Clipboard.\n" +
-                        "2. Saved backup file to:\n${backupFile.absolutePath}")
+                .setMessage("Your configuration backup has been saved to file:\n${backupFile.absolutePath}")
+                .setNeutralButton("Copy to Clipboard") { dialog, _ ->
+                    dialog.dismiss()
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("TunnelGuard Configuration", jsonStr)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        clip.description.extras = android.os.PersistableBundle().apply {
+                            putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
+                        }
+                    }
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(this, "Configuration copied to clipboard!", Toast.LENGTH_SHORT).show()
+                }
                 .setPositiveButton("OK") { d, _ -> d.dismiss() }
                 .show()
         } catch (e: Exception) {
@@ -497,19 +557,62 @@ class SettingsActivity : AppCompatActivity() {
     private fun performImport(jsonStr: String) {
         val success = config.importConfigFromJson(jsonStr)
         if (success) {
-            // Update UI widgets
+            // 1. Reconcile VPN service and cbPrefProtection
+            var vpnAuthWarningRequired = false
+            if (config.isProtectionEnabled()) {
+                val intent = android.net.VpnService.prepare(this)
+                if (intent == null) {
+                    cbPrefProtection.isChecked = true
+                    startVpnService()
+                } else {
+                    config.setProtectionEnabled(false)
+                    cbPrefProtection.isChecked = false
+                    vpnAuthWarningRequired = true
+                }
+            } else {
+                cbPrefProtection.isChecked = false
+                stopVpnService()
+            }
+
+            // 2. Enforce permission requirements immediately for imported monitor settings
+            if (config.isAppMonitorEnabled()) {
+                if (!config.hasUsageStatsPermission(this) || !config.hasSystemAlertWindowPermission()) {
+                    config.setAppMonitorEnabled(false)
+                    cbPrefMonitor.isChecked = false
+                } else {
+                    cbPrefMonitor.isChecked = true
+                    triggerVpnServiceUpdate()
+                }
+            } else {
+                cbPrefMonitor.isChecked = false
+            }
+
+            // 3. Update remaining check widgets
             cbPrefBoot.isChecked = config.isStartOnBootEnabled()
-            cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
             cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
+
+            // 4. Update row accessibility descriptions
+            updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
+            updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", config.isStartOnBootEnabled())
+            updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
+            updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
+
             updateVpnAppOfChoiceDisplay()
             updateSimulatedControlsVisibility()
-            triggerVpnServiceUpdate()
 
-            AlertDialog.Builder(this)
-                .setTitle("Import Successful")
-                .setMessage("Configuration backup has been imported successfully! All settings and profiles have been restored.")
-                .setPositiveButton("OK") { d, _ -> d.dismiss() }
-                .show()
+            if (vpnAuthWarningRequired) {
+                AlertDialog.Builder(this)
+                    .setTitle("Import Successful (Manual Action Required)")
+                    .setMessage("Configuration has been imported successfully. However, VPN permission is required to enable protection. Please enable protection manually to authorize.")
+                    .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                    .show()
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("Import Successful")
+                    .setMessage("Configuration backup has been imported successfully! All settings and profiles have been restored.")
+                    .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                    .show()
+            }
         } else {
             AlertDialog.Builder(this)
                 .setTitle("Import Failed")
@@ -556,17 +659,20 @@ class SettingsActivity : AppCompatActivity() {
         isUpdateChecking = true
         btnCheckUpdates.isEnabled = false
 
-        val loadingDialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Checking for Updates")
             .setMessage("Connecting to GitHub to check for updates...")
             .setCancelable(false)
             .create()
-        loadingDialog.show()
+        loadingDialog = dialog
+        dialog.show()
 
         UpdateChecker.instance.checkForLatestRelease(
             onSuccess = { cleanTagName, apkUrl ->
                 runOnUiThread {
-                    loadingDialog.dismiss()
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    loadingDialog?.dismiss()
+                    loadingDialog = null
                     if (VersionComparator.isNewerVersion(config.getAppVersionName(), cleanTagName)) {
                         UpdateManager(this, config).showUpdateAvailableDialog(cleanTagName, apkUrl, true)
                     } else {
@@ -582,12 +688,19 @@ class SettingsActivity : AppCompatActivity() {
             },
             onFailure = { errorMessage ->
                 runOnUiThread {
-                    loadingDialog.dismiss()
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    loadingDialog?.dismiss()
+                    loadingDialog = null
                     UpdateManager(this, config).showUpdateErrorDialog(errorMessage)
                     isUpdateChecking = false
                     btnCheckUpdates.isEnabled = true
                 }
             }
         )
+    }
+
+    private fun updateRowAccessibilityDescription(layout: View, title: String, checked: Boolean) {
+        val stateText = if (checked) "enabled" else "disabled"
+        layout.contentDescription = "$title option, currently $stateText. Double click to toggle."
     }
 }

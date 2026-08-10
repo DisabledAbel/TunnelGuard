@@ -61,6 +61,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rvProtectedApps: RecyclerView
 
     private lateinit var adapter: HomeAppsAdapter
+    private var refreshJob: kotlinx.coroutines.Job? = null
+
+    private fun scheduleUiRefresh() {
+        refreshJob?.cancel()
+        refreshJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(300)
+            updateUI()
+        }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -285,13 +294,13 @@ class MainActivity : AppCompatActivity() {
                 .build()
             mainNetworkCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    runOnUiThread { updateUI() }
+                    runOnUiThread { scheduleUiRefresh() }
                 }
                 override fun onLost(network: Network) {
-                    runOnUiThread { updateUI() }
+                    runOnUiThread { scheduleUiRefresh() }
                 }
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                    runOnUiThread { updateUI() }
+                    runOnUiThread { scheduleUiRefresh() }
                 }
             }
             connectivityManager?.registerNetworkCallback(request, mainNetworkCallback!!)
@@ -416,10 +425,15 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, TunnelGuardVpnService::class.java).apply {
             action = TunnelGuardVpnService.ACTION_START
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            config.addLog("Failed to start VPN service: ${e.message}", "ERROR")
+            TunnelGuardVpnService.isServiceStarting = false
         }
     }
 
@@ -487,25 +501,22 @@ class MainActivity : AppCompatActivity() {
         when (securityState) {
             SecurityState.PROTECTED -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
-                btnToggleProtection.text = "Stop Protection"
             }
             SecurityState.BLOCKING -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_blocking))
-                btnToggleProtection.text = "Stop Protection"
             }
             SecurityState.INACTIVE -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_inactive))
-                btnToggleProtection.text = "Start Protection"
             }
             SecurityState.CONNECTING -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_connecting))
-                btnToggleProtection.text = "Stop Protection"
             }
-            SecurityState.ERROR -> {
+            SecurityState.ERROR, SecurityState.UNPROTECTED_FAULT -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_disconnected))
-                btnToggleProtection.text = "Start Protection"
             }
         }
+
+        btnToggleProtection.text = if (config.isProtectionEnabled()) "Stop Protection" else "Start Protection"
 
         if (isLocked) {
             btnToggleEmergency.text = "Unlock Network"
@@ -514,49 +525,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 3. Update IPv4 & IPv6 Protection Status and Allowed/Blocked Traffic
-        if (securityState == SecurityState.PROTECTED) {
-            tvIpv4Status.text = "Protected (VPN Routing)"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_active))
-            tvIpv6Status.text = "Protected (VPN Routing)"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_active))
+        val protInfo = ProtocolProtectionMapper.getInfo(securityState, config.isIpv6ProtectionActive())
+        tvIpv4Status.text = protInfo.ipv4Text
+        tvIpv4Status.setTextColor(resources.getColor(protInfo.ipv4ColorRes))
+        tvIpv6Status.text = protInfo.ipv6Text
+        tvIpv6Status.setTextColor(resources.getColor(protInfo.ipv6ColorRes))
 
+        if (securityState == SecurityState.PROTECTED) {
             tvTrafficStatus.text = "ALLOWED (Secured)"
             tvTrafficStatus.setTextColor(resources.getColor(R.color.status_active))
         } else if (securityState == SecurityState.BLOCKING) {
-            tvIpv4Status.text = "Blocked (Fail-Closed)"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_blocking))
-            if (config.isIpv6ProtectionActive()) {
-                tvIpv6Status.text = "Blocked (Fail-Closed)"
-                tvIpv6Status.setTextColor(resources.getColor(R.color.status_blocking))
-            } else {
-                tvIpv6Status.text = "Unprotected (IPv6 Unsupported)"
-                tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
-            }
-
             tvTrafficStatus.text = "BLOCKED"
             tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
         } else if (securityState == SecurityState.CONNECTING) {
-            tvIpv4Status.text = "Establishing..."
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_connecting))
-            tvIpv6Status.text = "Establishing..."
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_connecting))
-
             tvTrafficStatus.text = "BLOCKED (Safe-Mode)"
             tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
         } else if (securityState == SecurityState.ERROR) {
-            tvIpv4Status.text = "Error"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_disconnected))
-            tvIpv6Status.text = "Error"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
-
             tvTrafficStatus.text = "BLOCKED (Fail-Closed)"
             tvTrafficStatus.setTextColor(resources.getColor(R.color.status_blocking))
+        } else if (securityState == SecurityState.UNPROTECTED_FAULT) {
+            tvTrafficStatus.text = "ALLOWED (Unsecured Fault)"
+            tvTrafficStatus.setTextColor(resources.getColor(R.color.status_disconnected))
         } else {
-            tvIpv4Status.text = "Unprotected"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.text_secondary))
-            tvIpv6Status.text = "Unprotected"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.text_secondary))
-
             tvTrafficStatus.text = "ALLOWED (Unsecured)"
             tvTrafficStatus.setTextColor(resources.getColor(R.color.status_connecting))
         }
@@ -613,7 +603,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     "UNPROTECTED"
                 }
-                appInfos.add(AppStatusInfo(label, pkg, icon, statusText))
+                appInfos.add(AppStatusInfo(label, pkg, icon, statusText, securityState))
             } catch (e: Exception) {
                 // Skip displaying uninstalled/unavailable apps on the home screen
             }
@@ -737,7 +727,8 @@ class MainActivity : AppCompatActivity() {
         val name: String,
         val packageName: String,
         val icon: Drawable,
-        val statusText: String
+        val statusText: String,
+        val securityState: SecurityState
     )
 
     private class HomeAppsAdapter(
@@ -764,9 +755,9 @@ class MainActivity : AppCompatActivity() {
             holder.pkg.text = item.packageName
             holder.status.text = item.statusText
 
-            if (item.statusText == "INTERNET BLOCKED" || item.statusText == "EMERGENCY BLOCKED") {
+            if (item.securityState == SecurityState.BLOCKING || item.securityState == SecurityState.CONNECTING || item.securityState == SecurityState.ERROR) {
                 holder.status.setTextColor(context.resources.getColor(R.color.status_blocking))
-            } else if (item.statusText == "PROTECTED") {
+            } else if (item.securityState == SecurityState.PROTECTED) {
                 holder.status.setTextColor(context.resources.getColor(R.color.status_active))
             } else {
                 holder.status.setTextColor(context.resources.getColor(R.color.status_inactive))

@@ -413,7 +413,8 @@ class TunnelGuardConfigTest {
         assertFalse(protectedApps.contains(""))
 
         val exportedJson = config.exportConfigToJson()
-        assertTrue(exportedJson.contains("start_on_boot"))
+        assertNotNull(exportedJson)
+        assertTrue(exportedJson!!.contains("start_on_boot"))
         assertTrue(exportedJson.contains("app_monitor_enabled"))
         assertTrue(exportedJson.contains("protection_profiles"))
     }

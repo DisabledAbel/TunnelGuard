@@ -132,7 +132,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             SecurityState.BLOCKING -> tvProtectionState.setTextColor(resources.getColor(R.color.status_blocking))
             SecurityState.INACTIVE -> tvProtectionState.setTextColor(resources.getColor(R.color.status_inactive))
             SecurityState.CONNECTING -> tvProtectionState.setTextColor(resources.getColor(R.color.status_connecting))
-            SecurityState.ERROR -> tvProtectionState.setTextColor(resources.getColor(R.color.status_disconnected))
+            SecurityState.ERROR, SecurityState.UNPROTECTED_FAULT -> tvProtectionState.setTextColor(resources.getColor(R.color.status_disconnected))
         }
 
         tvAppsCount.text = "${config.getProtectedApps().size}"
@@ -160,37 +160,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         }
 
         // Traffic status and protocol routing details
-        if (securityState == SecurityState.PROTECTED) {
-            tvIpv4Status.text = "Protected (VPN Routing)"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_active))
-            tvIpv6Status.text = "Protected (VPN Routing)"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_active))
-        } else if (securityState == SecurityState.BLOCKING) {
-            tvIpv4Status.text = "Blocked (Fail-Closed active)"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_blocking))
-            if (config.isIpv6ProtectionActive()) {
-                tvIpv6Status.text = "Blocked (Fail-Closed active)"
-                tvIpv6Status.setTextColor(resources.getColor(R.color.status_blocking))
-            } else {
-                tvIpv6Status.text = "Unprotected (IPv6 Unsupported)"
-                tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
-            }
-        } else if (securityState == SecurityState.CONNECTING) {
-            tvIpv4Status.text = "Establishing..."
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_connecting))
-            tvIpv6Status.text = "Establishing..."
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_connecting))
-        } else if (securityState == SecurityState.ERROR) {
-            tvIpv4Status.text = "Error"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.status_disconnected))
-            tvIpv6Status.text = "Error"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.status_disconnected))
-        } else {
-            tvIpv4Status.text = "Unprotected"
-            tvIpv4Status.setTextColor(resources.getColor(R.color.text_secondary))
-            tvIpv6Status.text = "Unprotected"
-            tvIpv6Status.setTextColor(resources.getColor(R.color.text_secondary))
-        }
+        val protInfo = ProtocolProtectionMapper.getInfo(securityState, config.isIpv6ProtectionActive(), isDiagnostics = true)
+        tvIpv4Status.text = protInfo.ipv4Text
+        tvIpv4Status.setTextColor(resources.getColor(protInfo.ipv4ColorRes))
+        tvIpv6Status.text = protInfo.ipv6Text
+        tvIpv6Status.setTextColor(resources.getColor(protInfo.ipv6ColorRes))
 
         // Device and version info
         tvAndroidVersion.text = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
@@ -203,6 +177,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun copyDiagnosticsToClipboard() {
+        refreshDiagnostics()
         val lastTrans = config.getLastStateTransitionTime()
         val transStr = if (lastTrans == 0L) "Never" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(lastTrans))
 
@@ -235,6 +210,11 @@ class DiagnosticsActivity : AppCompatActivity() {
 
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("TunnelGuard Diagnostics", report)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = android.os.PersistableBundle().apply {
+                putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "Diagnostics copied to clipboard!", Toast.LENGTH_SHORT).show()
     }
