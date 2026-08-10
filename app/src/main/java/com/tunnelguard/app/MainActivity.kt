@@ -82,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_VPN_PREPARE = 2001
         private const val REQUEST_POST_NOTIFICATIONS = 2002
+        private const val REQUEST_VPN_PREPARE_EMERGENCY = 2003
     }
 
     private fun runMandatoryUpdateCheck() {
@@ -359,25 +360,33 @@ class MainActivity : AppCompatActivity() {
      */
     private fun toggleEmergencyLock() {
         val isLocked = config.isEmergencyLockEnabled()
-        val nextLockState = !isLocked
-        config.setEmergencyLockEnabled(nextLockState)
-
-        if (nextLockState) {
-            Toast.makeText(this, "Emergency Lock ENGAGED. All protected traffic BLOCKED.", Toast.LENGTH_LONG).show()
-            // Make sure service runs to hold the block
-            if (!TunnelGuardVpnService.isServiceRunning) {
-                val intent = VpnService.prepare(this)
-                if (intent == null) {
-                    startVpnService()
-                }
-            } else {
-                triggerVpnServiceUpdate()
-            }
-        } else {
+        if (isLocked) {
+            // Disengaging: no permission check required
+            config.setEmergencyLockEnabled(false)
             Toast.makeText(this, "Emergency Lock DISENGAGED.", Toast.LENGTH_SHORT).show()
             if (TunnelGuardVpnService.isServiceRunning) {
                 triggerVpnServiceUpdate()
             }
+            updateUI()
+        } else {
+            // Engaging: must verify VPN permission first
+            val intent = VpnService.prepare(this)
+            if (intent != null) {
+                config.addLog("Emergency Lock requires VPN permission. Launching permission request.")
+                startActivityForResult(intent, REQUEST_VPN_PREPARE_EMERGENCY)
+            } else {
+                engageEmergencyLockDirect()
+            }
+        }
+    }
+
+    private fun engageEmergencyLockDirect() {
+        config.setEmergencyLockEnabled(true)
+        Toast.makeText(this, "Emergency Lock ENGAGED. All protected traffic BLOCKED.", Toast.LENGTH_LONG).show()
+        if (!TunnelGuardVpnService.isServiceRunning) {
+            startVpnService()
+        } else {
+            triggerVpnServiceUpdate()
         }
         updateUI()
     }
@@ -399,6 +408,15 @@ class MainActivity : AppCompatActivity() {
         } else if (requestCode == REQUEST_VPN_PREPARE) {
             config.addLog("VPN permission request rejected by user.")
             Toast.makeText(this, "VPN permission is required for TunnelGuard protection.", Toast.LENGTH_LONG).show()
+        } else if (requestCode == REQUEST_VPN_PREPARE_EMERGENCY) {
+            if (resultCode == Activity.RESULT_OK) {
+                engageEmergencyLockDirect()
+            } else {
+                config.setEmergencyLockEnabled(false)
+                config.addLog("VPN permission request rejected by user for Emergency Lock.")
+                Toast.makeText(this, "VPN permission is required to engage Emergency Lock.", Toast.LENGTH_LONG).show()
+                updateUI()
+            }
         }
     }
 
