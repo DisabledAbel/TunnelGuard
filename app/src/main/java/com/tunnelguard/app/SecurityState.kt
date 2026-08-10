@@ -9,7 +9,8 @@ enum class SecurityState {
     BLOCKING,   // Traffic is fail-closed blocked because no secure VPN is active
     INACTIVE,   // Protection is disabled
     CONNECTING, // VPN / tunnel is connecting/establishing
-    ERROR       // Tunnel failed to establish or another fatal error occurred
+    ERROR,      // Tunnel failed to establish or another fatal error occurred
+    UNPROTECTED_FAULT // Protection is supposed to be active, but is currently faulted/unprotected
 }
 
 object SecurityStateMachine {
@@ -81,6 +82,49 @@ object SecurityStateMachine {
             return SecurityState.ERROR
         }
 
-        return SecurityState.CONNECTING
+        return SecurityState.UNPROTECTED_FAULT
+    }
+}
+
+data class ProtocolProtectionInfo(
+    val ipv4Text: String,
+    val ipv4ColorRes: Int,
+    val ipv6Text: String,
+    val ipv6ColorRes: Int
+)
+
+object ProtocolProtectionMapper {
+    fun getInfo(state: SecurityState, isIpv6Active: Boolean, isDiagnostics: Boolean = false): ProtocolProtectionInfo {
+        val blockedSuffix = if (isDiagnostics) " (Fail-Closed active)" else " (Fail-Closed)"
+        return when (state) {
+            SecurityState.PROTECTED -> ProtocolProtectionInfo(
+                "Protected (VPN Routing)", R.color.status_active,
+                "Protected (VPN Routing)", R.color.status_active
+            )
+            SecurityState.BLOCKING -> {
+                val ipv6Txt = if (isIpv6Active) "Blocked$blockedSuffix" else "Unprotected (IPv6 Unsupported)"
+                val ipv6Col = if (isIpv6Active) R.color.status_blocking else R.color.status_disconnected
+                ProtocolProtectionInfo(
+                    "Blocked$blockedSuffix", R.color.status_blocking,
+                    ipv6Txt, ipv6Col
+                )
+            }
+            SecurityState.CONNECTING -> ProtocolProtectionInfo(
+                "Establishing...", R.color.status_connecting,
+                "Establishing...", R.color.status_connecting
+            )
+            SecurityState.ERROR -> ProtocolProtectionInfo(
+                "Error", R.color.status_disconnected,
+                "Error", R.color.status_disconnected
+            )
+            SecurityState.UNPROTECTED_FAULT -> ProtocolProtectionInfo(
+                "Unprotected (Fault)", R.color.status_disconnected,
+                "Unprotected (Fault)", R.color.status_disconnected
+            )
+            else -> ProtocolProtectionInfo(
+                "Unprotected", R.color.text_secondary,
+                "Unprotected", R.color.text_secondary
+            )
+        }
     }
 }

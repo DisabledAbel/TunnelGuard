@@ -58,7 +58,8 @@
                 android:nextFocusDown="@+id/btn_settings_manage_apps"
                 android:orientation="horizontal"
                 android:padding="12dp"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:contentDescription="Enable Protection option, currently disabled. Double click to toggle.">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -114,7 +115,8 @@
                 android:nextFocusDown="@+id/layout_pref_monitor"
                 android:orientation="horizontal"
                 android:padding="12dp"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:contentDescription="Start on Boot option, currently disabled. Double click to toggle.">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -156,7 +158,8 @@
                 android:nextFocusDown="@+id/layout_pref_vpn_choice"
                 android:orientation="horizontal"
                 android:padding="12dp"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:contentDescription="Monitor Protected Apps option, currently disabled. Double click to toggle.">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -283,9 +286,11 @@
                 android:gravity="center_vertical"
                 android:nextFocusUp="@+id/btn_settings_export_logs"
                 android:nextFocusDown="@+id/btn_import_config"
+                android:nextFocusRight="@+id/btn_simulate_connected"
                 android:orientation="horizontal"
                 android:padding="12dp"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:contentDescription="Simulation Mode option, currently disabled. Double click to toggle.">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -490,7 +495,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/tv_input_selector"
-            android:padding="12dp">
+            android:padding="12dp"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -507,6 +513,9 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
+                android:nextFocusLeft="@+id/layout_pref_simulation"
+                android:nextFocusUp="@+id/layout_pref_simulation"
+                android:nextFocusDown="@+id/btn_simulate_disconnected"
                 android:textSize="12sp"
                 android:text="Simulate VPN PROTECTED"
                 android:textColor="@color/text_primary"
@@ -518,6 +527,9 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
+                android:nextFocusLeft="@+id/layout_pref_simulation"
+                android:nextFocusUp="@+id/btn_simulate_connected"
+                android:nextFocusDown="@+id/btn_check_updates"
                 android:textSize="12sp"
                 android:text="Simulate VPN DISCONNECTED"
                 android:textColor="@color/text_primary"/>

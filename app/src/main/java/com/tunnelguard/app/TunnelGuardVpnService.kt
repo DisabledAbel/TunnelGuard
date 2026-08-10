@@ -527,11 +527,13 @@ class TunnelGuardVpnService : VpnService() {
             vpnInterface?.close()
         } catch (e: IOException) {
             config.addLog("Error closing VPN interface: ${e.message}")
+        } finally {
+            vpnInterface = null
+            isTunnelEstablished = false
+            config.setIpv6ProtectionActive(false)
+            lastEstablishedApps = null
+            lastEmergencyLock = null
         }
-        vpnInterface = null
-        isTunnelEstablished = false
-        lastEstablishedApps = null
-        lastEmergencyLock = null
     }
 
     /**
