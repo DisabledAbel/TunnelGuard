@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.LinkProperties
+import android.net.VpnService
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -436,41 +437,47 @@ class TunnelGuardConfigTest {
     @Test
     fun testDeterministicSecurityStateMachine() {
         val mockConnectivity = mock(ConnectivityManager::class.java)
+        val mockVpnStatic: org.mockito.MockedStatic<VpnService> = org.mockito.Mockito.mockStatic(VpnService::class.java)
+        try {
+            mockVpnStatic.`when`<Intent> { VpnService.prepare(any()) }.thenReturn(null)
 
-        config.setProtectionEnabled(false)
-        config.setEmergencyLockEnabled(false)
-        var state = SecurityStateMachine.getSecurityState(mockContext, config, false, false, false, mockConnectivity)
-        assertEquals(SecurityState.INACTIVE, state)
+            config.setProtectionEnabled(false)
+            config.setEmergencyLockEnabled(false)
+            var state = SecurityStateMachine.getSecurityState(mockContext, config, false, false, false, mockConnectivity)
+            assertEquals(SecurityState.INACTIVE, state)
 
-        config.setEmergencyLockEnabled(true)
-        config.setVPNState(VPNState.BLOCKED)
-        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, true, mockConnectivity)
-        assertEquals(SecurityState.BLOCKING, state)
+            config.setEmergencyLockEnabled(true)
+            config.setVPNState(VPNState.BLOCKED)
+            state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, true, mockConnectivity)
+            assertEquals(SecurityState.BLOCKING, state)
 
-        state = SecurityStateMachine.getSecurityState(mockContext, config, true, true, false, mockConnectivity)
-        assertEquals(SecurityState.CONNECTING, state)
+            state = SecurityStateMachine.getSecurityState(mockContext, config, true, true, false, mockConnectivity)
+            assertEquals(SecurityState.CONNECTING, state)
 
-        config.setEmergencyLockEnabled(false)
-        config.setProtectionEnabled(true)
-        config.setSimulatedVpnEnabled(true)
+            config.setEmergencyLockEnabled(false)
+            config.setProtectionEnabled(true)
+            config.setSimulatedVpnEnabled(true)
 
-        config.setVPNState(VPNState.PROTECTED)
-        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
-        assertEquals(SecurityState.PROTECTED, state)
+            config.setVPNState(VPNState.PROTECTED)
+            state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+            assertEquals(SecurityState.PROTECTED, state)
 
-        config.setVPNState(VPNState.DISCONNECTED)
-        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
-        assertEquals(SecurityState.BLOCKING, state)
+            config.setVPNState(VPNState.DISCONNECTED)
+            state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+            assertEquals(SecurityState.BLOCKING, state)
 
-        config.setSimulatedVpnEnabled(false)
-        val mockNet = mock(Network::class.java)
-        val mockCaps = mock(NetworkCapabilities::class.java)
-        whenever(mockConnectivity.allNetworks).thenReturn(arrayOf(mockNet))
-        whenever(mockConnectivity.getNetworkCapabilities(mockNet)).thenReturn(mockCaps)
-        whenever(mockCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
-        whenever(mockConnectivity.getLinkProperties(mockNet)).thenReturn(null)
+            config.setSimulatedVpnEnabled(false)
+            val mockNet = mock(Network::class.java)
+            val mockCaps = mock(NetworkCapabilities::class.java)
+            whenever(mockConnectivity.allNetworks).thenReturn(arrayOf(mockNet))
+            whenever(mockConnectivity.getNetworkCapabilities(mockNet)).thenReturn(mockCaps)
+            whenever(mockCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+            whenever(mockConnectivity.getLinkProperties(mockNet)).thenReturn(null)
 
-        state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
-        assertEquals(SecurityState.PROTECTED, state)
+            state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
+            assertEquals(SecurityState.PROTECTED, state)
+        } finally {
+            mockVpnStatic.close()
+        }
     }
 }

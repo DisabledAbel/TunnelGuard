@@ -113,6 +113,16 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun refreshDiagnostics() {
+        if (!TunnelGuardVpnService.isServiceRunning && !config.isSimulatedVpnEnabled()) {
+            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
+            val currentVpnState = if (isUpstreamVpnConnected) {
+                VPNState.PROTECTED
+            } else {
+                VPNState.DISCONNECTED
+            }
+            config.setVPNState(currentVpnState)
+        }
+
         val vpnState = config.getVPNState()
         val securityState = SecurityStateMachine.getSecurityState(
             this,

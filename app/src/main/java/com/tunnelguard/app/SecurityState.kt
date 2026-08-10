@@ -31,6 +31,10 @@ object SecurityStateMachine {
             if (config.isSimulatedVpnEnabled()) {
                 return SecurityState.BLOCKING
             }
+            val vpnPrepared = VpnService.prepare(context) == null
+            if (!vpnPrepared) {
+                return SecurityState.UNPROTECTED_FAULT
+            }
             return if (isTunnelEstablished) {
                 SecurityState.BLOCKING
             } else if (config.getVPNState() == VPNState.ERROR) {
@@ -71,15 +75,15 @@ object SecurityStateMachine {
             return SecurityState.BLOCKING
         }
 
-        // If service is running or starting but tunnel not yet established
-        if (isServiceStarting || isServiceRunning) {
-            return SecurityState.CONNECTING
-        }
-
         // Check if VPN permission has been revoked or not granted
         val vpnPrepared = VpnService.prepare(context) == null
         if (!vpnPrepared) {
-            return SecurityState.ERROR
+            return SecurityState.UNPROTECTED_FAULT
+        }
+
+        // If service is running or starting but tunnel not yet established
+        if (isServiceStarting || isServiceRunning) {
+            return SecurityState.CONNECTING
         }
 
         return SecurityState.UNPROTECTED_FAULT
