@@ -125,28 +125,34 @@ class TunnelGuardVpnService : VpnService() {
         if (monitorJob != null) return
         monitorJob = serviceScope.launch {
             var lastForegroundApp: String? = null
+            var wasVpnOn: Boolean? = null
             while (isActive) {
                 try {
                     if (config.isAppMonitorEnabled() && config.hasUsageStatsPermission(this@TunnelGuardVpnService) && config.hasSystemAlertWindowPermission()) {
-                        val currentApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
-                        if (currentApp != null && currentApp != lastForegroundApp) {
-                            lastForegroundApp = currentApp
+                        val detectedApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
+                        // Retain the last known foreground app if current detection is null
+                        val currentApp = detectedApp ?: lastForegroundApp
 
-                            // Check if the current app is a protected app
-                            if (config.isAppProtected(currentApp) && currentApp != packageName) {
-                                // Check if VPN is connected
-                                val isVpnOn = if (config.isSimulatedVpnEnabled()) {
-                                    val state = config.getVPNState()
-                                    state == VPNState.CONNECTED || state == VPNState.PROTECTED
-                                } else {
-                                    config.detectRealVpnCapabilities(connectivityManager)
-                                }
+                        if (currentApp != null) {
+                            val isVpnOn = if (config.isSimulatedVpnEnabled()) {
+                                val state = config.getVPNState()
+                                state == VPNState.CONNECTED || state == VPNState.PROTECTED
+                            } else {
+                                config.detectRealVpnCapabilities(connectivityManager)
+                            }
 
-                                if (!isVpnOn && !isPackageSuppressed(currentApp)) {
+                            // Check if currentApp is a protected app
+                            val isProtected = config.isAppProtected(currentApp) && currentApp != packageName
+
+                            if (isProtected) {
+                                val shouldTrigger = !isVpnOn && !isPackageSuppressed(currentApp) &&
+                                    (currentApp != lastForegroundApp || wasVpnOn == true)
+
+                                if (shouldTrigger) {
                                     val warningId = java.util.UUID.randomUUID().toString()
                                     pendingWarningId = warningId
 
-                                    config.addLog("Protected app opened without VPN: $currentApp. Automatically opening warning and VPN redirection.")
+                                    config.addLog("Protected app opened or VPN dropped: $currentApp. Automatically opening warning and VPN redirection.")
 
                                     val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
                                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -207,6 +213,9 @@ class TunnelGuardVpnService : VpnService() {
                                     manager.notify(1002, warningNotification)
                                 }
                             }
+
+                            lastForegroundApp = currentApp
+                            wasVpnOn = isVpnOn
                         }
                     }
                 } catch (e: Exception) {

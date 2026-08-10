@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
+import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.os.Build
 import android.os.Process
@@ -721,7 +722,7 @@ class TunnelGuardConfig(private val context: Context) {
     fun getForegroundPackageName(ctx: Context): String? {
         val usageStatsManager = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val time = System.currentTimeMillis()
-        val events = usageStatsManager.queryEvents(time - 10000, time) ?: return null
+        val events = usageStatsManager.queryEvents(time - 15000, time) ?: return null
         val event = UsageEvents.Event()
         var lastForegroundApp: String? = null
         while (events.hasNextEvent()) {
@@ -730,6 +731,25 @@ class TunnelGuardConfig(private val context: Context) {
                 lastForegroundApp = event.packageName
             }
         }
-        return lastForegroundApp
+        if (lastForegroundApp != null) {
+            return lastForegroundApp
+        }
+
+        // Fallback to queryUsageStats if queryEvents did not return any recent ACTIVITY_RESUMED event
+        try {
+            val appList = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 1000 * 60 * 5, time) // last 5 minutes
+            if (appList != null && appList.isNotEmpty()) {
+                var mostRecentApp: UsageStats? = null
+                for (usageStats in appList) {
+                    if (mostRecentApp == null || usageStats.lastTimeUsed > mostRecentApp.lastTimeUsed) {
+                        mostRecentApp = usageStats
+                    }
+                }
+                return mostRecentApp?.packageName
+            }
+        } catch (e: Exception) {
+            addLog("Error in fallback getForegroundPackageName: ${e.message}")
+        }
+        return null
     }
 }
