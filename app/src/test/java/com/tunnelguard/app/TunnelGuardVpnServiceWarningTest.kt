@@ -38,23 +38,31 @@ class TunnelGuardVpnServiceWarningTest {
         val mockEvents = mock(UsageEvents::class.java)
         whenever(mockUsageStatsManager.queryEvents(any(), any())).thenReturn(mockEvents)
 
-        // Simulate having one ACTIVITY_RESUMED event
-        whenever(mockEvents.hasNextEvent()).thenReturn(true, false)
+        // Simulate having two chronologically ordered ACTIVITY_RESUMED events (older and newer)
+        var eventCount = 0
+        whenever(mockEvents.hasNextEvent()).thenAnswer { eventCount < 2 }
 
         doAnswer { invocation ->
             val outEvent = invocation.getArgument<UsageEvents.Event>(0)
             val pkgField = UsageEvents.Event::class.java.getDeclaredField("mPackage")
             pkgField.isAccessible = true
-            pkgField.set(outEvent, "com.target.testapp")
 
             val typeField = UsageEvents.Event::class.java.getDeclaredField("mEventType")
             typeField.isAccessible = true
-            typeField.set(outEvent, UsageEvents.Event.ACTIVITY_RESUMED)
+
+            if (eventCount == 0) {
+                pkgField.set(outEvent, "com.older.app")
+                typeField.set(outEvent, UsageEvents.Event.ACTIVITY_RESUMED)
+            } else {
+                pkgField.set(outEvent, "com.newer.app")
+                typeField.set(outEvent, UsageEvents.Event.ACTIVITY_RESUMED)
+            }
+            eventCount++
             null
         }.whenever(mockEvents).getNextEvent(any())
 
         val foregroundPkg = config.getForegroundPackageName(spyContext)
-        assertEquals("com.target.testapp", foregroundPkg)
+        assertEquals("com.newer.app", foregroundPkg)
     }
 
     @Test
@@ -68,15 +76,24 @@ class TunnelGuardVpnServiceWarningTest {
         whenever(mockUsageStatsManager.queryEvents(any(), any())).thenReturn(mockEvents)
         whenever(mockEvents.hasNextEvent()).thenReturn(false)
 
-        // Mock queryUsageStats to return a list of UsageStats
-        val mockUsageStats = mock(UsageStats::class.java)
-        whenever(mockUsageStats.packageName).thenReturn("com.fallback.testapp")
-        whenever(mockUsageStats.lastTimeUsed).thenReturn(100000L)
+        // Mock queryUsageStats to return multiple UsageStats objects in non-chronological order
+        val statsOlder = mock(UsageStats::class.java)
+        whenever(statsOlder.packageName).thenReturn("com.older.fallback")
+        whenever(statsOlder.lastTimeUsed).thenReturn(50000L)
 
-        whenever(mockUsageStatsManager.queryUsageStats(any(), any(), any())).thenReturn(listOf(mockUsageStats))
+        val statsNewer = mock(UsageStats::class.java)
+        whenever(statsNewer.packageName).thenReturn("com.newer.fallback")
+        whenever(statsNewer.lastTimeUsed).thenReturn(150000L)
+
+        val statsMiddle = mock(UsageStats::class.java)
+        whenever(statsMiddle.packageName).thenReturn("com.middle.fallback")
+        whenever(statsMiddle.lastTimeUsed).thenReturn(100000L)
+
+        whenever(mockUsageStatsManager.queryUsageStats(any(), any(), any()))
+            .thenReturn(listOf(statsOlder, statsNewer, statsMiddle))
 
         val foregroundPkg = config.getForegroundPackageName(spyContext)
-        assertEquals("com.fallback.testapp", foregroundPkg)
+        assertEquals("com.newer.fallback", foregroundPkg)
     }
 
     @Test
@@ -94,25 +111,56 @@ class TunnelGuardVpnServiceWarningTest {
 
         assertTrue(config.isAppProtected(currentApp))
 
-        // Trigger condition helper mimicking our startMonitoring() implementation:
-        // shouldTrigger = !isVpnOn && !isPackageSuppressed && (currentApp != lastForegroundApp || wasVpnOn == true)
-        fun checkShouldTrigger(isVpnOn: Boolean, lastForegroundApp: String?, wasVpnOn: Boolean?): Boolean {
-            val isProtected = config.isAppProtected(currentApp) && currentApp != context.packageName
-            if (!isProtected) return false
-            return !isVpnOn && (currentApp != lastForegroundApp || wasVpnOn == true)
-        }
-
-        // Case 1: App opened when VPN is already OFF (currentApp != lastForegroundApp)
-        assertTrue(checkShouldTrigger(isVpnOn = false, lastForegroundApp = lastForegroundAppDiff, wasVpnOn = false))
-        assertTrue(checkShouldTrigger(isVpnOn = false, lastForegroundApp = lastForegroundAppNull, wasVpnOn = false))
+        // Case 1: App opened when VPN is already OFF (currentApp != lastForegroundApp), not suppressed
+        assertTrue(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppDiff,
+            isVpnOn = false,
+            wasVpnOn = false,
+            isSuppressed = false
+        ))
+        assertTrue(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppNull,
+            isVpnOn = false,
+            wasVpnOn = false,
+            isSuppressed = false
+        ))
 
         // Case 2: App opened when VPN is ON -> No Trigger
-        assertFalse(checkShouldTrigger(isVpnOn = true, lastForegroundApp = lastForegroundAppDiff, wasVpnOn = true))
+        assertFalse(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppDiff,
+            isVpnOn = true,
+            wasVpnOn = true,
+            isSuppressed = false
+        ))
 
         // Case 3: Inside protected app, VPN drops (currentApp == lastForegroundApp, wasVpnOn == true)
-        assertTrue(checkShouldTrigger(isVpnOn = false, lastForegroundApp = lastForegroundAppSame, wasVpnOn = true))
+        assertTrue(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppSame,
+            isVpnOn = false,
+            wasVpnOn = true,
+            isSuppressed = false
+        ))
 
         // Case 4: Inside protected app, VPN remains OFF after warning triggered once (currentApp == lastForegroundApp, wasVpnOn == false) -> No Trigger (prevent warning loop)
-        assertFalse(checkShouldTrigger(isVpnOn = false, lastForegroundApp = lastForegroundAppSame, wasVpnOn = false))
+        assertFalse(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppSame,
+            isVpnOn = false,
+            wasVpnOn = false,
+            isSuppressed = false
+        ))
+
+        // Case 5: App opened when VPN is OFF, but package warning is suppressed -> No Trigger
+        assertFalse(TunnelGuardVpnService.shouldTriggerWarning(
+            currentApp = currentApp,
+            lastForegroundApp = lastForegroundAppDiff,
+            isVpnOn = false,
+            wasVpnOn = false,
+            isSuppressed = true
+        ))
     }
 }
