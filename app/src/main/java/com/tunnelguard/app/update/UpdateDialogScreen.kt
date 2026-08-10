@@ -72,7 +72,26 @@ fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp:
                 state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onUpdateNow, enabled = !state.isDownloading, modifier = Modifier.weight(1f).height(56.dp).focusRequester(focusRequester)) { Text("Update Now") }
+                    val context = LocalContext.current
+                    val browserUrl = state.releaseUrl.ifBlank { state.apkUrl.orEmpty() }
+
+                    if (!state.errorMessage.isNullOrBlank() && browserUrl.isNotBlank()) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(browserUrl))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    // ignore browser launch failures gracefully
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(56.dp)
+                        ) {
+                            Text("Open in Browser")
+                        }
+                    } else {
+                        Button(onClick = onUpdateNow, enabled = !state.isDownloading, modifier = Modifier.weight(1f).height(56.dp).focusRequester(focusRequester)) { Text("Update Now") }
+                    }
                     OutlinedButton(onClick = onExitApp, enabled = !state.isDownloading, modifier = Modifier.weight(1f).height(56.dp)) { Text("Exit App") }
                 }
             }

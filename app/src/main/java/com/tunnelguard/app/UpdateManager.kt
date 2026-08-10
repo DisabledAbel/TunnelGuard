@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.tunnelguard.app.update.UpdateRepository
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -424,12 +425,27 @@ class UpdateManager(
     }
 
     fun showUpdateErrorDialog(errorMessage: String) {
-        androidx.appcompat.app.AlertDialog.Builder(activity)
+        val repo = UpdateRepository.getInstance(activity)
+        val targetUrl = repo.getCachedReleaseUrl()?.ifBlank { null } ?: repo.getCachedApkUrl()
+
+        val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle("Update Check Failed")
             .setMessage("Could not check for updates or download update.\n\nDetails: $errorMessage")
             .setPositiveButton("OK") { dialog, _ ->
                 dialog.dismiss()
             }
-            .show()
+
+        if (!targetUrl.isNullOrBlank()) {
+            builder.setNeutralButton("Open in Browser") { dialog, _ ->
+                dialog.dismiss()
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                    activity.startActivity(intent)
+                } catch (e: Exception) {
+                    config.addLog("Failed to open browser for update: ${e.message}")
+                }
+            }
+        }
+        builder.show()
     }
 }
