@@ -108,6 +108,16 @@ class TunnelGuardVpnService : VpnService() {
             }
             return true
         }
+
+        fun shouldTriggerWarning(
+            currentApp: String,
+            lastForegroundApp: String?,
+            isVpnOn: Boolean,
+            wasVpnOn: Boolean?,
+            isSuppressed: Boolean
+        ): Boolean {
+            return !isVpnOn && !isSuppressed && (currentApp != lastForegroundApp || wasVpnOn == true)
+        }
     }
 
     /**
@@ -145,8 +155,14 @@ class TunnelGuardVpnService : VpnService() {
                             val isProtected = config.isAppProtected(currentApp) && currentApp != packageName
 
                             if (isProtected) {
-                                val shouldTrigger = !isVpnOn && !isPackageSuppressed(currentApp) &&
-                                    (currentApp != lastForegroundApp || wasVpnOn == true)
+                                val isSuppressed = isPackageSuppressed(currentApp)
+                                val shouldTrigger = shouldTriggerWarning(
+                                    currentApp = currentApp,
+                                    lastForegroundApp = lastForegroundApp,
+                                    isVpnOn = isVpnOn,
+                                    wasVpnOn = wasVpnOn,
+                                    isSuppressed = isSuppressed
+                                )
 
                                 if (shouldTrigger) {
                                     val warningId = java.util.UUID.randomUUID().toString()
