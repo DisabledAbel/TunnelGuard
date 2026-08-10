@@ -82,7 +82,9 @@ fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp:
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(browserUrl))
                                     context.startActivity(intent)
                                 } catch (e: Exception) {
-                                    // ignore browser launch failures gracefully
+                                    val config = com.tunnelguard.app.TunnelGuardConfig(context)
+                                    config.addLog("Failed to open browser for update: ${e.message}", "ERROR")
+                                    android.widget.Toast.makeText(context, "Failed to launch browser. Please open the link manually.", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             },
                             modifier = Modifier.weight(1f).height(56.dp)
