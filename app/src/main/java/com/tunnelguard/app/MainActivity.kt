@@ -656,12 +656,12 @@ class MainActivity : AppCompatActivity() {
         val messages = mutableListOf<String>()
         var isTampered = false
 
-        // 1. VPN permission check when protection is active
-        if (config.isProtectionEnabled()) {
+        // 1. VPN permission check when protection or emergency lock is active
+        if (config.isProtectionEnabled() || config.isEmergencyLockEnabled()) {
             val vpnIntent = VpnService.prepare(this)
             if (vpnIntent != null) {
                 isTampered = true
-                messages.add("VPN permission has been revoked.")
+                messages.add("VPN permission has been revoked or is missing.")
             }
         }
 
@@ -693,10 +693,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resolveTamper() {
-        if (config.isProtectionEnabled() && VpnService.prepare(this) != null) {
+        val needsVpnPrepare = (config.isProtectionEnabled() || config.isEmergencyLockEnabled()) && VpnService.prepare(this) != null
+        if (needsVpnPrepare) {
             val intent = VpnService.prepare(this)
             if (intent != null) {
-                startActivityForResult(intent, REQUEST_VPN_PREPARE)
+                val code = if (config.isEmergencyLockEnabled()) REQUEST_VPN_PREPARE_EMERGENCY else REQUEST_VPN_PREPARE
+                startActivityForResult(intent, code)
                 return
             }
         }
