@@ -25,6 +25,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 
+enum class ServiceState {
+    NO_VPN,
+    TUNNELGUARD_STARTING,
+    TUNNELGUARD_ACTIVE,
+    TUNNELGUARD_STOPPING,
+    UPSTREAM_VPN,
+    VPN_CONFLICT,
+    ERROR
+}
+
 class TunnelGuardVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
@@ -94,6 +104,14 @@ class TunnelGuardVpnService : VpnService() {
         @Volatile
         var pendingWarningId: String? = null
 
+        @Volatile
+        var currentServiceState = ServiceState.NO_VPN
+            private set
+
+        fun updateServiceState(state: ServiceState) {
+            currentServiceState = state
+        }
+
         private val suppressedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
         fun suppressPackage(packageName: String, durationMs: Long = 15000) {
@@ -123,15 +141,32 @@ class TunnelGuardVpnService : VpnService() {
     /**
      * Initializes the VPN service and its connectivity configuration.
      */
+    private fun transitionTo(newState: ServiceState) {
+        val oldState = currentServiceState
+        if (oldState != newState) {
+            updateServiceState(newState)
+            config.addLog("Service State Transition: $oldState -> $newState")
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         isServiceStarting = false
         config = TunnelGuardConfig(this)
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         isServiceRunning = true
+        transitionTo(ServiceState.TUNNELGUARD_STARTING)
     }
 
     private fun startMonitoring() {
+        val enabled = config.isAppMonitorEnabled() &&
+                      config.hasUsageStatsPermission(this) &&
+                      config.hasSystemAlertWindowPermission()
+
+        if (!enabled) {
+            stopMonitoring()
+            return
+        }
         if (monitorJob != null) return
         monitorJob = serviceScope.launch {
             var lastForegroundApp: String? = null
@@ -253,6 +288,7 @@ class TunnelGuardVpnService : VpnService() {
 
         if (action == ACTION_STOP) {
             config.setLastDisconnectReason("User stopped protection")
+            transitionTo(ServiceState.TUNNELGUARD_STOPPING)
             stopVpn()
             return START_NOT_STICKY
         }
@@ -304,6 +340,8 @@ class TunnelGuardVpnService : VpnService() {
         isServiceRunning = false
         isServiceStarting = false
         stopMonitoring()
+        // Cancel all coroutines in serviceScope to prevent leaks
+        serviceScope.coroutineContext[Job]?.cancel()
         if (isCallbackRegistered) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback)
@@ -327,6 +365,7 @@ class TunnelGuardVpnService : VpnService() {
     override fun onRevoke() {
         config.addLog("VpnService revoked by the system (another VPN started).")
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")
+        transitionTo(ServiceState.VPN_CONFLICT)
         closeVpnInterface()
         checkAndRunVpnRouting()
         super.onRevoke()
@@ -418,6 +457,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("No apps selected for protection. Closing local tunnel interface.")
             config.setLastDisconnectReason("No apps selected for protection")
             closeVpnInterface()
+            transitionTo(ServiceState.NO_VPN)
             sendBroadcast(broadcastIntent)
             return
         }
@@ -431,12 +471,14 @@ class TunnelGuardVpnService : VpnService() {
         } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
+            transitionTo(ServiceState.UPSTREAM_VPN)
             return
         }
 
         // Avoid redundant rebuilding of the local block interface if already active and config hasn't changed
         if (vpnInterface != null && protectedApps == lastEstablishedApps && isEmergencyLock == lastEmergencyLock) {
             config.addLog("Routing check: local interface is already active and configuration has not changed. No-op.")
+            transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
             return
         }
 
@@ -517,6 +559,7 @@ class TunnelGuardVpnService : VpnService() {
                 }
                 sendBroadcast(failureBroadcastIntent)
                 closeVpnInterface()
+                transitionTo(ServiceState.ERROR)
                 return
             }
         }
@@ -530,6 +573,7 @@ class TunnelGuardVpnService : VpnService() {
             }
             sendBroadcast(failureBroadcastIntent)
             closeVpnInterface()
+            transitionTo(ServiceState.ERROR)
             return
         }
 
@@ -542,6 +586,7 @@ class TunnelGuardVpnService : VpnService() {
             }
             sendBroadcast(successBroadcastIntent)
         }
+        transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
     }
 
     /**
@@ -581,6 +626,7 @@ class TunnelGuardVpnService : VpnService() {
             setPackage(packageName)
         }
         sendBroadcast(broadcastIntent)
+        transitionTo(ServiceState.NO_VPN)
         stopSelf()
     }
 }
