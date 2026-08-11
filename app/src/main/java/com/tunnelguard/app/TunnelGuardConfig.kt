@@ -57,23 +57,25 @@ class TunnelGuardConfig(private val context: Context) {
                 val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
 
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    // 1. On Android 30+ (API 30), we can check ownerUid to identify our own VPN network
+                    // 1. On Android 30+ (API 30), we check ownerUid to identify our own VPN network
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         if (caps.ownerUid == android.os.Process.myUid()) {
                             continue // Skip our own local interface
+                        } else {
+                            return true // Return true immediately for other VPNs on R+
                         }
                     } else {
                         // 2. On older versions, if TunnelGuard's tunnel is established, any VPN network must be ours
                         if (TunnelGuardVpnService.isTunnelEstablished) {
                             continue // Skip our own local interface
                         }
-                    }
 
-                    // 3. Fallback: Exclude the local VPN interface using link addresses
-                    val linkProperties = connectivityManager.getLinkProperties(network)
-                    val addresses = linkProperties?.linkAddresses ?: emptyList()
-                    if (isOurOurVpn(addresses)) {
-                        continue // Skip our own local interface
+                        // 3. Fallback: Exclude the local VPN interface using link addresses (pre-R only)
+                        val linkProperties = connectivityManager.getLinkProperties(network)
+                        val addresses = linkProperties?.linkAddresses ?: emptyList()
+                        if (isOurOurVpn(addresses)) {
+                            continue // Skip our own local interface
+                        }
                     }
 
                     return true

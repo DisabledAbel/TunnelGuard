@@ -127,6 +127,30 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    @Config(sdk = [Build.VERSION_CODES.R])
+    fun testDetectRealVpnCapabilitiesOnAndroidRRegression() {
+        val mockConnectivityManager = mock(ConnectivityManager::class.java)
+        val mockNetwork = mock(android.net.Network::class.java)
+        val mockCapabilities = mock(NetworkCapabilities::class.java)
+        val mockLinkProperties = mock(android.net.LinkProperties::class.java)
+
+        whenever(mockConnectivityManager.allNetworks).thenReturn(arrayOf(mockNetwork))
+        whenever(mockConnectivityManager.getNetworkCapabilities(mockNetwork)).thenReturn(mockCapabilities)
+        whenever(mockCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+
+        // Return a LinkAddress matching our local VPN tunnel address to test bypass
+        val mockLinkAddress = mock(android.net.LinkAddress::class.java)
+        val ourInetAddress = java.net.InetAddress.getByName(TunnelGuardConfig.TUNNEL_ADDRESS)
+        whenever(mockLinkAddress.address).thenReturn(ourInetAddress)
+        whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(mockLinkProperties)
+        whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddress))
+
+        // Set ownerUid to a non-own UID. It must return true immediately on R+, completely bypassing isOurOurVpn checks.
+        whenever(mockCapabilities.ownerUid).thenReturn(android.os.Process.myUid() + 1)
+        assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
+    }
+
+    @Test
     @Config(sdk = [Build.VERSION_CODES.Q])
     fun testDetectRealVpnCapabilitiesOnLegacySdk() {
         val mockConnectivityManager = mock(ConnectivityManager::class.java)
