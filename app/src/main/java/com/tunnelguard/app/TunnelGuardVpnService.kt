@@ -104,12 +104,16 @@ class TunnelGuardVpnService : VpnService() {
         @Volatile
         var pendingWarningId: String? = null
 
+        val stateLock = Any()
+
         @Volatile
         var currentServiceState = ServiceState.NO_VPN
             private set
 
         fun updateServiceState(state: ServiceState) {
-            currentServiceState = state
+            synchronized(stateLock) {
+                currentServiceState = state
+            }
         }
 
         private val suppressedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -142,10 +146,12 @@ class TunnelGuardVpnService : VpnService() {
      * Initializes the VPN service and its connectivity configuration.
      */
     private fun transitionTo(newState: ServiceState) {
-        val oldState = currentServiceState
-        if (oldState != newState) {
-            updateServiceState(newState)
-            config.addLog("Service State Transition: $oldState -> $newState")
+        synchronized(stateLock) {
+            val oldState = currentServiceState
+            if (oldState != newState) {
+                updateServiceState(newState)
+                config.addLog("Service State Transition: $oldState -> $newState")
+            }
         }
     }
 
@@ -173,10 +179,18 @@ class TunnelGuardVpnService : VpnService() {
             var wasVpnOn: Boolean? = null
             while (isActive) {
                 try {
-                    if (config.isAppMonitorEnabled() && config.hasUsageStatsPermission(this@TunnelGuardVpnService) && config.hasSystemAlertWindowPermission()) {
-                        val detectedApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
-                        // Retain the last known foreground app if current detection is null
-                        val currentApp = detectedApp ?: lastForegroundApp
+                    val loopEnabled = config.isAppMonitorEnabled() &&
+                                  config.hasUsageStatsPermission(this@TunnelGuardVpnService) &&
+                                  config.hasSystemAlertWindowPermission()
+                    if (!loopEnabled) {
+                        config.addLog("App monitor or permissions revoked/disabled. Cancelling monitoring loop.")
+                        stopMonitoring()
+                        break
+                    }
+
+                    val detectedApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
+                    // Retain the last known foreground app if current detection is null
+                    val currentApp = detectedApp ?: lastForegroundApp
 
                         if (currentApp != null) {
                             val isVpnOn = if (config.isSimulatedVpnEnabled()) {
@@ -268,7 +282,6 @@ class TunnelGuardVpnService : VpnService() {
                             lastForegroundApp = currentApp
                             wasVpnOn = isVpnOn
                         }
-                    }
                 } catch (e: Exception) {
                     config.addLog("Error in app monitor loop: ${e.message}")
                 }
@@ -288,8 +301,10 @@ class TunnelGuardVpnService : VpnService() {
 
         if (action == ACTION_STOP) {
             config.setLastDisconnectReason("User stopped protection")
-            transitionTo(ServiceState.TUNNELGUARD_STOPPING)
-            stopVpn()
+            synchronized(stateLock) {
+                transitionTo(ServiceState.TUNNELGUARD_STOPPING)
+                stopVpn()
+            }
             return START_NOT_STICKY
         }
 
@@ -414,9 +429,9 @@ class TunnelGuardVpnService : VpnService() {
      * Closes the local interface when no applications are protected or an upstream VPN is active without Emergency Lock.
      * Establishes or reuses a local blocking interface when required, updating and broadcasting state changes as needed.
      */
-    @Synchronized
     private fun checkAndRunVpnRouting() {
-        val simulated = config.isSimulatedVpnEnabled()
+        synchronized(stateLock) {
+            val simulated = config.isSimulatedVpnEnabled()
         val currentVpnState: VPNState
 
         if (simulated) {
@@ -587,6 +602,7 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(successBroadcastIntent)
         }
         transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
+        }
     }
 
     /**
@@ -610,23 +626,25 @@ class TunnelGuardVpnService : VpnService() {
      * Stops VPN operation, clears its state, removes the foreground notification, and stops the service.
      */
     private fun stopVpn() {
-        stopMonitoring()
-        closeVpnInterface()
-        isServiceStarting = false
-        val simulated = config.isSimulatedVpnEnabled()
-        if (!simulated) {
-            config.setVPNState(VPNState.DISCONNECTED)
+        synchronized(stateLock) {
+            stopMonitoring()
+            closeVpnInterface()
+            isServiceStarting = false
+            val simulated = config.isSimulatedVpnEnabled()
+            if (!simulated) {
+                config.setVPNState(VPNState.DISCONNECTED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                stopForeground(true)
+            }
+            val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(broadcastIntent)
+            transitionTo(ServiceState.NO_VPN)
+            stopSelf()
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            stopForeground(true)
-        }
-        val broadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
-            setPackage(packageName)
-        }
-        sendBroadcast(broadcastIntent)
-        transitionTo(ServiceState.NO_VPN)
-        stopSelf()
     }
 }
