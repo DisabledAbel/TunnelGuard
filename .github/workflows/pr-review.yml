@@ -4,29 +4,34 @@ on:
   pull_request:
     branches: [ "**" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  review-and-test:
+  run-tests-and-diff:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0 # Fetch all history so git diff can be run accurately
+        persist-credentials: false
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4.5.0
       with:
         distribution: 'temurin'
         java-version: '17'
         cache: 'gradle'
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
       with:
         python-version: '3.10'
 
@@ -34,23 +39,26 @@ jobs:
       run: chmod +x gradlew
 
     - name: Run Unit Tests
-      id: test-step
       run: |
+        echo "Clearing stale test-failure markers..."
+        rm -f "${{ runner.temp }}/test_failed.txt"
         echo "Running all unit tests..."
-        ./gradlew test > test_execution.log 2>&1 || touch test_failed.txt
+        ./gradlew test > test_execution.log 2>&1 || touch "${{ runner.temp }}/test_failed.txt"
         cat test_execution.log
 
     - name: Generate PR Diff
+      env:
+        BASE_SHA: "${{ github.event.pull_request.base.sha }}"
       run: |
         echo "Generating PR diff..."
-        git diff origin/${{ github.base_ref }}...HEAD > pr_diff.diff
+        git diff "$BASE_SHA"...HEAD > pr_diff.diff
         echo "=== PR Diff Summary ==="
         wc -l pr_diff.diff
 
     - name: Prepare Test Run Summary
       run: |
         echo "Creating test summary report..."
-        if [ -f test_failed.txt ]; then
+        if [ -f "${{ runner.temp }}/test_failed.txt" ]; then
           echo "Status: FAILED" > test_summary.txt
         else
           echo "Status: PASSED" > test_summary.txt
@@ -59,7 +67,45 @@ jobs:
         echo "Tail of execution logs:" >> test_summary.txt
         tail -n 150 test_execution.log >> test_summary.txt
 
-    - name: Run OpenRouter Code Review
+    - name: Upload PR Diff and Test Summary
+      uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+      with:
+        name: pr-artifacts
+        path: |
+          pr_diff.diff
+          test_summary.txt
+
+    - name: Fail Workflow If Tests Failed
+      run: |
+        if [ -f "${{ runner.temp }}/test_failed.txt" ]; then
+          echo "Unit tests failed. Failing the workflow build."
+          exit 1
+        fi
+
+  ai-review:
+    runs-on: ubuntu-latest
+    needs: run-tests-and-diff
+    # Run review even if tests fail (so developer gets feedback), but skip if runs are cancelled
+    if: always() && needs.run-tests-and-diff.result != 'cancelled'
+
+    steps:
+    - name: Checkout Base Branch (Trusted Codebase Only)
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      with:
+        python-version: '3.10'
+
+    - name: Download PR Diff and Test Summary Artifacts
+      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+      with:
+        name: pr-artifacts
+
+    - name: Run OpenRouter Code Review (Trusted Script)
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         PR_DIFF_PATH: pr_diff.diff
@@ -69,21 +115,23 @@ jobs:
         chmod +x scripts/pr_review.py
         python3 scripts/pr_review.py
 
-    - name: Post PR Review Comment
+    - name: Post or Update PR Review Comment
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         if [ -f review_feedback.md ]; then
-          echo "Posting review comment to PR #${PR_NUMBER}..."
-          gh pr comment "$PR_NUMBER" --body-file review_feedback.md
+          echo "Listing existing comments on PR #${PR_NUMBER} to check for previous review..."
+          # Find comment ID containing unique CodeRabbit signature
+          EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("🐰 CodeRabbit PR Review Summary") or contains("Review of Batch")) | .id' | head -n 1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            echo "Updating existing comment $EXISTING_COMMENT_ID..."
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT_ID" -F body=@review_feedback.md
+          else
+            echo "Posting new comment..."
+            gh pr comment "$PR_NUMBER" --body-file review_feedback.md
+          fi
         else
           echo "No review feedback file generated."
-        fi
-
-    - name: Fail Workflow If Tests Failed
-      run: |
-        if [ -f test_failed.txt ]; then
-          echo "Unit tests failed. Failing the workflow build."
-          exit 1
         fi
