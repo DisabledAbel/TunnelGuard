@@ -163,4 +163,108 @@ class TunnelGuardVpnServiceWarningTest {
             isSuppressed = true
         ))
     }
+
+    @org.junit.After
+    fun tearDown() {
+        TunnelGuardVpnService.pendingWarningId = null
+    }
+
+    @Test
+    fun testFallbackSkippedAfterSuccessfulActivityLaunch() {
+        // Case 1: Fallback is skipped after successful activity launch
+        val knownId = "warning-123"
+        TunnelGuardVpnService.pendingWarningId = knownId
+
+        // Simulate VpnWarningActivity acknowledging the warning (by clearing pendingWarningId)
+        synchronized(TunnelGuardVpnService.warningLock) {
+            if (TunnelGuardVpnService.pendingWarningId == knownId) {
+                TunnelGuardVpnService.pendingWarningId = null
+            }
+        }
+
+        // Verify that the delayed fallback condition no longer matches the original warning ID
+        val shouldPost = TunnelGuardVpnService.shouldPostFallbackWarning(knownId)
+        assertFalse(shouldPost)
+    }
+
+    @Test
+    fun testFallbackOccursWhenActivityDoesNotLaunch() {
+        // Case 2: Fallback occurs when activity does not launch
+        val knownId = "warning-456"
+        TunnelGuardVpnService.pendingWarningId = knownId
+
+        // Do not clear it. Verify that the fallback condition still matches the original warning ID
+        val shouldPost = TunnelGuardVpnService.shouldPostFallbackWarning(knownId)
+        assertTrue(shouldPost)
+    }
+
+    @Test
+    fun testStaleWarningIdsAreIgnored() {
+        // Case 3: Stale warning IDs are ignored
+        TunnelGuardVpnService.pendingWarningId = "current-warning"
+
+        // Check the fallback using an old/stale warning ID
+        val shouldPost = TunnelGuardVpnService.shouldPostFallbackWarning("old-warning")
+        assertFalse(shouldPost)
+    }
+
+    @Test
+    fun testWarningIdAcknowledgementIsAtomic() {
+        // Case 4: Warning ID acknowledgement is atomic
+        val knownId = "warning-atomic"
+        TunnelGuardVpnService.pendingWarningId = knownId
+
+        val threadCheckedBeforeClearing: Boolean
+        val threadCheckedAfterClearing: Boolean
+
+        // Start checking in a synchronized block representing the warning/acknowledgement transaction
+        synchronized(TunnelGuardVpnService.warningLock) {
+            // Check fallback inside the lock
+            threadCheckedBeforeClearing = TunnelGuardVpnService.shouldPostFallbackWarning(knownId)
+
+            // Acknowledge/clear it inside the lock
+            TunnelGuardVpnService.pendingWarningId = null
+
+            // Check fallback again under lock after clearing
+            threadCheckedAfterClearing = TunnelGuardVpnService.shouldPostFallbackWarning(knownId)
+        }
+
+        assertTrue(threadCheckedBeforeClearing)
+        assertFalse(threadCheckedAfterClearing)
+    }
+
+    @Test
+    fun testDuplicateOrStaleActivityLaunches() {
+        // Case 5: Verify that an activity receiving an old warning ID does not clear the current warning ID
+        val currentId = "current-active-warning"
+        val oldId = "stale-old-warning"
+
+        TunnelGuardVpnService.pendingWarningId = currentId
+
+        // Simulate an activity starting with an old/stale warning ID and attempting to acknowledge
+        synchronized(TunnelGuardVpnService.warningLock) {
+            if (oldId == TunnelGuardVpnService.pendingWarningId) {
+                TunnelGuardVpnService.pendingWarningId = null
+            }
+        }
+
+        // The current warning ID should remain untouched/active
+        assertEquals(currentId, TunnelGuardVpnService.pendingWarningId)
+    }
+
+    @Test
+    fun testMultipleWarningIds() {
+        // Case 6: Set warning ID A, replace it with warning ID B, verify A's delayed fallback does not post, while B remains valid
+        val warningIdA = "warning-A"
+        val warningIdB = "warning-B"
+
+        TunnelGuardVpnService.pendingWarningId = warningIdA
+        // Replace with B
+        TunnelGuardVpnService.pendingWarningId = warningIdB
+
+        // A's delayed fallback check should return false
+        assertFalse(TunnelGuardVpnService.shouldPostFallbackWarning(warningIdA))
+        // B's delayed fallback check should return true
+        assertTrue(TunnelGuardVpnService.shouldPostFallbackWarning(warningIdB))
+    }
 }
