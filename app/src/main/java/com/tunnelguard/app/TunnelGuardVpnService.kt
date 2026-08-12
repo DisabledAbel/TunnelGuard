@@ -107,6 +107,12 @@ class TunnelGuardVpnService : VpnService() {
         val stateLock = Any()
         val warningLock = Any()
 
+        fun shouldPostFallbackWarning(warningId: String): Boolean {
+            synchronized(warningLock) {
+                return pendingWarningId == warningId
+            }
+        }
+
         @Volatile
         var currentServiceState = ServiceState.NO_VPN
             private set
@@ -237,7 +243,7 @@ class TunnelGuardVpnService : VpnService() {
                                 serviceScope.launch {
                                     delay(1000)
                                     synchronized(warningLock) {
-                                        if (pendingWarningId == warningId) {
+                                        if (shouldPostFallbackWarning(warningId)) {
                                             config.addLog("VpnWarningActivity did not launch in time. Posting fallback warning notification.")
                                             val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                                                 android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
