@@ -1,0 +1,89 @@
+name: PR Code Review and Testing
+
+on:
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetch all history so git diff can be run accurately
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: 'gradle'
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Grant Execute Permission to Gradlew
+      run: chmod +x gradlew
+
+    - name: Run Unit Tests
+      id: test-step
+      run: |
+        echo "Running all unit tests..."
+        ./gradlew test > test_execution.log 2>&1 || touch test_failed.txt
+        cat test_execution.log
+
+    - name: Generate PR Diff
+      run: |
+        echo "Generating PR diff..."
+        git diff origin/${{ github.base_ref }}...HEAD > pr_diff.diff
+        echo "=== PR Diff Summary ==="
+        wc -l pr_diff.diff
+
+    - name: Prepare Test Run Summary
+      run: |
+        echo "Creating test summary report..."
+        if [ -f test_failed.txt ]; then
+          echo "Status: FAILED" > test_summary.txt
+        else
+          echo "Status: PASSED" > test_summary.txt
+        fi
+        echo "--------------------------------------" >> test_summary.txt
+        echo "Tail of execution logs:" >> test_summary.txt
+        tail -n 150 test_execution.log >> test_summary.txt
+
+    - name: Run OpenRouter Code Review
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        PR_DIFF_PATH: pr_diff.diff
+        TEST_RESULTS_PATH: test_summary.txt
+        REVIEW_OUTPUT_PATH: review_feedback.md
+      run: |
+        chmod +x scripts/pr_review.py
+        python3 scripts/pr_review.py
+
+    - name: Post PR Review Comment
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        if [ -f review_feedback.md ]; then
+          echo "Posting review comment to PR #${PR_NUMBER}..."
+          gh pr comment "$PR_NUMBER" --body-file review_feedback.md
+        else
+          echo "No review feedback file generated."
+        fi
+
+    - name: Fail Workflow If Tests Failed
+      run: |
+        if [ -f test_failed.txt ]; then
+          echo "Unit tests failed. Failing the workflow build."
+          exit 1
+        fi
