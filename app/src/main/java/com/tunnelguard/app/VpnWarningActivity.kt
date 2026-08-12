@@ -34,27 +34,31 @@ class VpnWarningActivity : AppCompatActivity() {
 
         // Handle the per-warning one-shot state and cancel notification on entry
         val incomingWarningId = intent.getStringExtra("warning_id")
-        val activePendingId = TunnelGuardVpnService.pendingWarningId
 
         if (incomingWarningId != null) {
-            if (incomingWarningId == activePendingId) {
-                // Acknowledge the event
-                TunnelGuardVpnService.pendingWarningId = null
-                config.addLog("VpnWarningActivity acknowledged warning ID: $incomingWarningId")
+            synchronized(TunnelGuardVpnService.warningLock) {
+                val activePendingId = TunnelGuardVpnService.pendingWarningId
+                if (incomingWarningId == activePendingId) {
+                    // Acknowledge the event
+                    TunnelGuardVpnService.pendingWarningId = null
+                    config.addLog("VpnWarningActivity acknowledged warning ID: $incomingWarningId")
 
-                // Cancel notification 1002 immediately on entry
-                val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                manager.cancel(1002)
-            } else {
-                // Discard stale or duplicate event to prevent duplicate countdowns
-                config.addLog("VpnWarningActivity discarded duplicate/stale warning ID: $incomingWarningId (pending: $activePendingId)")
-                finish()
-                return
+                    // Cancel notification 1002 immediately on entry
+                    val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                    manager.cancel(1002)
+                } else {
+                    // Discard stale or duplicate event to prevent duplicate countdowns
+                    config.addLog("VpnWarningActivity discarded duplicate/stale warning ID: $incomingWarningId (pending: $activePendingId)")
+                    finish()
+                    return
+                }
             }
         } else {
-            // Cancel notification 1002 on entry as well
-            val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            manager.cancel(1002)
+            synchronized(TunnelGuardVpnService.warningLock) {
+                // Cancel notification 1002 on entry as well
+                val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                manager.cancel(1002)
+            }
         }
 
         setContentView(R.layout.activity_vpn_warning)
