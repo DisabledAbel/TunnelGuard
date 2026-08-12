@@ -233,49 +233,57 @@ class TunnelGuardVpnService : VpnService() {
                                     config.addLog("Could not start VpnWarningActivity directly from background: ${e.message}")
                                 }
 
-                                val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                    android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
-                                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                                    ).toBundle()
-                                } else {
-                                    null
+                                serviceScope.launch {
+                                    delay(1000)
+                                    if (pendingWarningId == warningId) {
+                                        config.addLog("VpnWarningActivity did not launch in time. Posting fallback warning notification.")
+                                        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                            android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
+                                                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                                            ).toBundle()
+                                        } else {
+                                            null
+                                        }
+
+                                        val pendingIntent = PendingIntent.getActivity(
+                                            this@TunnelGuardVpnService,
+                                            1002,
+                                            warningIntent,
+                                            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                                            options
+                                        )
+
+                                        var appLabel = currentApp
+                                        try {
+                                            val pm = packageManager
+                                            val appInfo = pm.getApplicationInfo(currentApp, 0)
+                                            appLabel = pm.getApplicationLabel(appInfo).toString()
+                                        } catch (e: Exception) {
+                                            // Ignore
+                                        }
+
+                                        val warningNotificationBuilder = NotificationCompat.Builder(this@TunnelGuardVpnService, ALERT_CHANNEL_ID)
+                                            .setContentTitle("Security Warning")
+                                            .setContentText("$appLabel opened without an active VPN connection!")
+                                            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                            .setCategory(NotificationCompat.CATEGORY_ALARM)
+                                            .setAutoCancel(true)
+                                            .setContentIntent(pendingIntent)
+
+                                        // Only call setFullScreenIntent when permission is available according to NotificationManagerCompat
+                                        val managerCompat = androidx.core.app.NotificationManagerCompat.from(this@TunnelGuardVpnService)
+                                        if (managerCompat.canUseFullScreenIntent()) {
+                                            warningNotificationBuilder.setFullScreenIntent(pendingIntent, true)
+                                        }
+
+                                        val warningNotification = warningNotificationBuilder.build()
+                                        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                        manager.notify(1002, warningNotification)
+                                    } else {
+                                        config.addLog("VpnWarningActivity launched successfully. Skipping fallback notification.")
+                                    }
                                 }
-
-                                val pendingIntent = PendingIntent.getActivity(
-                                    this@TunnelGuardVpnService,
-                                    1002,
-                                    warningIntent,
-                                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                                    options
-                                )
-
-                                var appLabel = currentApp
-                                try {
-                                    val pm = packageManager
-                                    val appInfo = pm.getApplicationInfo(currentApp, 0)
-                                    appLabel = pm.getApplicationLabel(appInfo).toString()
-                                } catch (e: Exception) {
-                                    // Ignore
-                                }
-
-                                val warningNotificationBuilder = NotificationCompat.Builder(this@TunnelGuardVpnService, ALERT_CHANNEL_ID)
-                                    .setContentTitle("Security Warning")
-                                    .setContentText("$appLabel opened without an active VPN connection!")
-                                    .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                                    .setCategory(NotificationCompat.CATEGORY_ALARM)
-                                    .setAutoCancel(true)
-                                    .setContentIntent(pendingIntent)
-
-                                // Only call setFullScreenIntent when permission is available according to NotificationManagerCompat
-                                val managerCompat = androidx.core.app.NotificationManagerCompat.from(this@TunnelGuardVpnService)
-                                if (managerCompat.canUseFullScreenIntent()) {
-                                    warningNotificationBuilder.setFullScreenIntent(pendingIntent, true)
-                                }
-
-                                val warningNotification = warningNotificationBuilder.build()
-                                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                                manager.notify(1002, warningNotification)
                             }
                         }
 
