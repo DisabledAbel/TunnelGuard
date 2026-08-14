@@ -179,5 +179,9 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddressOtherVpn))
 
         assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
+
+        // 3. If linkProperties is null, it should treat as unknown/skip and return false (preserving fail-closed)
+        whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(null)
+        assertFalse(config.detectRealVpnCapabilities(mockConnectivityManager))
     }
 }
