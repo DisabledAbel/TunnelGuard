@@ -30,7 +30,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
 
 ---
 
-## New Features & Enhancements
+## Features & Enhancements
 
 1. **First-Run Onboarding Screen:**
    * Explains what TunnelGuard does, "fail-closed" mechanics, the one active VPN constraint, and explicit user enablement.
