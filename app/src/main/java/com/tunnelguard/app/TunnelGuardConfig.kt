@@ -65,12 +65,7 @@ class TunnelGuardConfig(private val context: Context) {
                             return true // Return true immediately for other VPNs on R+
                         }
                     } else {
-                        // 2. On older versions, if TunnelGuard's tunnel is established, any VPN network must be ours
-                        if (TunnelGuardVpnService.isTunnelEstablished) {
-                            continue // Skip our own local interface
-                        }
-
-                        // 3. Fallback: Exclude the local VPN interface using link addresses (pre-R only)
+                        // Exclude the local VPN interface using link addresses (pre-R)
                         val linkProperties = connectivityManager.getLinkProperties(network)
                         val addresses = linkProperties?.linkAddresses ?: emptyList()
                         if (isOurOurVpn(addresses)) {

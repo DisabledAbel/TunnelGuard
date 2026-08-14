@@ -457,11 +457,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
-            val isUpstreamVpnConnected = if (vpnInterface != null) {
-                false
-            } else {
-                config.detectRealVpnCapabilities(connectivityManager)
-            }
+            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
             val prevState = config.getVPNState()
             currentVpnState = if (isUpstreamVpnConnected) {
                 VPNState.PROTECTED
