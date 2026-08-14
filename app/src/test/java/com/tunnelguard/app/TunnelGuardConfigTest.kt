@@ -469,10 +469,15 @@ class TunnelGuardConfigTest {
             config.setSimulatedVpnEnabled(false)
             val mockNet = mock(Network::class.java)
             val mockCaps = mock(NetworkCapabilities::class.java)
+            val mockLinkProps = mock(LinkProperties::class.java)
+            val mockLinkAddr = mock(android.net.LinkAddress::class.java)
+            whenever(mockLinkAddr.address).thenReturn(java.net.InetAddress.getByName("10.8.0.2"))
+            whenever(mockLinkProps.linkAddresses).thenReturn(listOf(mockLinkAddr))
+
             whenever(mockConnectivity.allNetworks).thenReturn(arrayOf(mockNet))
             whenever(mockConnectivity.getNetworkCapabilities(mockNet)).thenReturn(mockCaps)
             whenever(mockCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
-            whenever(mockConnectivity.getLinkProperties(mockNet)).thenReturn(null)
+            whenever(mockConnectivity.getLinkProperties(mockNet)).thenReturn(mockLinkProps)
 
             state = SecurityStateMachine.getSecurityState(mockContext, config, true, false, false, mockConnectivity)
             assertEquals(SecurityState.PROTECTED, state)

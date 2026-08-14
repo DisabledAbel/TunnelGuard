@@ -66,8 +66,8 @@ class TunnelGuardConfig(private val context: Context) {
                         }
                     } else {
                         // Exclude the local VPN interface using link addresses (pre-R)
-                        val linkProperties = connectivityManager.getLinkProperties(network)
-                        val addresses = linkProperties?.linkAddresses ?: emptyList()
+                        val linkProperties = connectivityManager.getLinkProperties(network) ?: continue
+                        val addresses = linkProperties.linkAddresses
                         if (isOurOurVpn(addresses)) {
                             continue // Skip our own local interface
                         }
