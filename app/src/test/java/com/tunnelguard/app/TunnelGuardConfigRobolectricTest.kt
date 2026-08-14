@@ -156,18 +156,28 @@ class TunnelGuardConfigRobolectricTest {
         val mockConnectivityManager = mock(ConnectivityManager::class.java)
         val mockNetwork = mock(android.net.Network::class.java)
         val mockCapabilities = mock(NetworkCapabilities::class.java)
+        val mockLinkProperties = mock(android.net.LinkProperties::class.java)
 
         whenever(mockConnectivityManager.allNetworks).thenReturn(arrayOf(mockNetwork))
         whenever(mockConnectivityManager.getNetworkCapabilities(mockNetwork)).thenReturn(mockCapabilities)
         whenever(mockCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+        whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(mockLinkProperties)
 
-        // 1. If our tunnel is established, it should skip it and return false
+        // 1. If link addresses match TunnelGuard's local tunnel address, it should skip and return false
+        val mockLinkAddressOurVpn = mock(android.net.LinkAddress::class.java)
+        val ourInetAddress = java.net.InetAddress.getByName(TunnelGuardConfig.TUNNEL_ADDRESS)
+        whenever(mockLinkAddressOurVpn.address).thenReturn(ourInetAddress)
+        whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddressOurVpn))
+
         TunnelGuardVpnService.isTunnelEstablished = true
         assertFalse(config.detectRealVpnCapabilities(mockConnectivityManager))
 
-        // 2. If tunnel is not established, it should check link addresses (our fallback)
-        TunnelGuardVpnService.isTunnelEstablished = false
-        // Without mock link addresses, isOurOurVpn returns false, so it should return true
+        // 2. If link addresses belong to an external upstream VPN, it should return true even if isTunnelEstablished is true
+        val mockLinkAddressOtherVpn = mock(android.net.LinkAddress::class.java)
+        val externalInetAddress = java.net.InetAddress.getByName("10.8.0.2")
+        whenever(mockLinkAddressOtherVpn.address).thenReturn(externalInetAddress)
+        whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddressOtherVpn))
+
         assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
     }
 }
