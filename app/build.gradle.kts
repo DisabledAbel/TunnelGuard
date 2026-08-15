@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.tunnelguard.app"
-    compileSdk = 34
+    compileSdk = 35
 
     // Retrieve version info dynamically from project properties if passed (e.g. from CI/CD Release pipeline)
     val verName = if (project.hasProperty("versionName")) {

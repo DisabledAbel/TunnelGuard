@@ -65,12 +65,13 @@ object SecurityStateMachine {
         }
 
         // Real Mode check
-        val isUpstreamVpnActive = config.detectRealVpnCapabilities(connectivityManager)
-        if (isUpstreamVpnActive) {
+        val vpnDetection = config.detectRealVpnCapabilities(connectivityManager)
+        if (vpnDetection == VpnDetectionResult.VPN_DETECTED) {
             return SecurityState.PROTECTED
         }
 
-        // Upstream VPN is not connected, check if local block tunnel is active
+        // Upstream VPN is NOT confirmed detected (VPN_NOT_DETECTED or VPN_UNKNOWN).
+        // Protected traffic must remain BLOCKED (or UNPROTECTED_FAULT if permissions/service issue).
         if (isTunnelEstablished) {
             return SecurityState.BLOCKING
         }

@@ -44,42 +44,64 @@ class TunnelGuardConfig(private val context: Context) {
     )
 
     /**
-     * Determines whether an external VPN is currently active.
+     * Determines whether an external VPN is currently active, returning a tri-state result.
      *
      * @param connectivityManager The connectivity manager used to inspect available networks.
-     * @return `true` if an external VPN network is detected, `false` otherwise.
+     * @return [VpnDetectionResult.VPN_DETECTED] if an external VPN network is confirmed,
+     *         [VpnDetectionResult.VPN_NOT_DETECTED] if all networks were inspected and no external VPN was found,
+     *         or [VpnDetectionResult.VPN_UNKNOWN] if network inspection was incomplete or encountered an exception.
      */
-    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): Boolean {
-        if (connectivityManager == null) return false
+    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): VpnDetectionResult {
+        if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
             val networks = connectivityManager.allNetworks
+            if (networks == null) return VpnDetectionResult.VPN_UNKNOWN
+            var encounteredUnknown = false
+
             for (network in networks) {
-                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+                val caps = connectivityManager.getNetworkCapabilities(network)
+                if (caps == null) {
+                    encounteredUnknown = true
+                    continue
+                }
 
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                     // 1. On Android 30+ (API 30), we check ownerUid to identify our own VPN network
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        if (caps.ownerUid == android.os.Process.myUid()) {
+                        if (caps.ownerUid == Process.myUid()) {
                             continue // Skip our own local interface
                         } else {
-                            return true // Return true immediately for other VPNs on R+
+                            return VpnDetectionResult.VPN_DETECTED // Confirmed external VPN on R+
                         }
                     } else {
                         // Exclude the local VPN interface using link addresses (pre-R)
-                        val linkProperties = connectivityManager.getLinkProperties(network) ?: continue
+                        val linkProperties = connectivityManager.getLinkProperties(network)
+                        if (linkProperties == null) {
+                            encounteredUnknown = true
+                            continue
+                        }
                         val addresses = linkProperties.linkAddresses
+                        if (addresses == null || addresses.isEmpty()) {
+                            encounteredUnknown = true
+                            continue
+                        }
                         if (isOurOurVpn(addresses)) {
                             continue // Skip our own local interface
+                        } else {
+                            return VpnDetectionResult.VPN_DETECTED
                         }
                     }
-
-                    return true
                 }
             }
+
+            if (encounteredUnknown) {
+                return VpnDetectionResult.VPN_UNKNOWN
+            }
+            return VpnDetectionResult.VPN_NOT_DETECTED
         } catch (e: Exception) {
             addLog("Error detecting active VPN capabilities: ${e.message}")
+            return VpnDetectionResult.VPN_UNKNOWN
         }
-        return false
     }
 
     /**
