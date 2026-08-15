@@ -802,8 +802,8 @@ class TunnelGuardConfig(private val context: Context) {
         val target = prefs.getString("pending_vpn_redirect_target", null) ?: return null
         val timestamp = prefs.getLong("pending_vpn_redirect_timestamp", 0L)
         val now = System.currentTimeMillis()
-        // 3 minutes (180,000 ms) expiration timeout
-        if (now - timestamp > 180000L) {
+        // Clear if timestamp is invalid (<= 0), in the future (> now), or expired (> 3 mins / 180,000 ms)
+        if (timestamp <= 0L || timestamp > now || (now - timestamp) > 180000L) {
             clearPendingVpnRedirectTarget()
             return null
         }

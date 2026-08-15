@@ -474,29 +474,10 @@ class TunnelGuardVpnService : VpnService() {
         }
         sendBroadcast(broadcastIntent)
 
-        // Fetch selected applications for protection
-        val protectedApps = config.getProtectedApps()
-        if (protectedApps.isEmpty()) {
-            config.addLog("No apps selected for protection. Closing local tunnel interface.")
-            config.setLastDisconnectReason("No apps selected for protection")
-            closeVpnInterface()
-            transitionTo(ServiceState.NO_VPN)
-            sendBroadcast(broadcastIntent)
-            return
-        }
-
-        // --- PREVENT UNCONDITIONAL VPN TAKEOVER ---
-        // If the upstream VPN is active/connected, we MUST NOT establish our local VpnService
-        // unless Emergency Lock is enabled!
         val isEmergencyLock = config.isEmergencyLockEnabled()
-        if (isEmergencyLock) {
-            config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
-        } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
-            config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
-            closeVpnInterface()
-            transitionTo(ServiceState.UPSTREAM_VPN)
 
-            // Check if user was redirected to turn on VPN and automatically launch target app
+        // Check if user was redirected to turn on VPN and automatically launch target app when VPN is active and Emergency Lock is off
+        if (!isEmergencyLock && (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED)) {
             val pendingTarget = config.getPendingVpnRedirectTarget()
             if (pendingTarget != null) {
                 config.clearPendingVpnRedirectTarget()
@@ -513,7 +494,28 @@ class TunnelGuardVpnService : VpnService() {
                     config.addLog("Failed to auto-redirect to target app $pendingTarget: ${e.message}", "ERROR")
                 }
             }
+        }
 
+        // Fetch selected applications for protection
+        val protectedApps = config.getProtectedApps()
+        if (protectedApps.isEmpty()) {
+            config.addLog("No apps selected for protection. Closing local tunnel interface.")
+            config.setLastDisconnectReason("No apps selected for protection")
+            closeVpnInterface()
+            transitionTo(ServiceState.NO_VPN)
+            sendBroadcast(broadcastIntent)
+            return
+        }
+
+        // --- PREVENT UNCONDITIONAL VPN TAKEOVER ---
+        // If the upstream VPN is active/connected, we MUST NOT establish our local VpnService
+        // unless Emergency Lock is enabled!
+        if (isEmergencyLock) {
+            config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
+        } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
+            config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
+            closeVpnInterface()
+            transitionTo(ServiceState.UPSTREAM_VPN)
             return
         }
 

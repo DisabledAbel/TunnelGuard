@@ -515,5 +515,22 @@ class TunnelGuardConfigTest {
             .apply()
 
         assertNull(config.getPendingVpnRedirectTarget())
+
+        // Test future timestamp invalidation (> now)
+        val futureTimestamp = System.currentTimeMillis() + 60000L
+        mockPrefs.edit()
+            .putString("pending_vpn_redirect_target", testPkg)
+            .putLong("pending_vpn_redirect_timestamp", futureTimestamp)
+            .apply()
+
+        assertNull(config.getPendingVpnRedirectTarget())
+
+        // Test invalid <= 0 timestamp
+        mockPrefs.edit()
+            .putString("pending_vpn_redirect_target", testPkg)
+            .putLong("pending_vpn_redirect_timestamp", 0L)
+            .apply()
+
+        assertNull(config.getPendingVpnRedirectTarget())
     }
 }
