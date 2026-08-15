@@ -210,7 +210,9 @@ class TunnelGuardVpnService : VpnService() {
                         is MonitoringCheckResult.TriggerWarning -> {
                             val currentApp = evalResult.targetPackage
                             val warningId = java.util.UUID.randomUUID().toString()
-                            pendingWarningId = warningId
+                            synchronized(warningLock) {
+                                pendingWarningId = warningId
+                            }
 
                             config.addLog("Protected app opened or VPN dropped: $currentApp. Automatically opening warning and VPN redirection.")
 

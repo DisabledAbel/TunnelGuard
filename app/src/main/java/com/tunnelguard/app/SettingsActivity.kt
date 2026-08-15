@@ -673,7 +673,8 @@ class SettingsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val repository = UpdateRepository.getInstance(applicationContext)
-            val result = repository.checkForUpdate(config.getAppVersionName())
+            val normalizedVersion = VersionComparator.validateAndNormalizeVersion(config.getAppVersionName())
+            val result = repository.checkForUpdate(normalizedVersion)
 
             if (isFinishing || isDestroyed) return@launch
             loadingDialog?.dismiss()

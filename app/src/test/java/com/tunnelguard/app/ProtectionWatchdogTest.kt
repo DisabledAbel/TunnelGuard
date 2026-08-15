@@ -78,4 +78,39 @@ class ProtectionWatchdogTest {
 
         assertTrue(result.isHealthy)
     }
+
+    @Test
+    fun testWatchdogDetectsMissingTunnelWhenServiceRunningVpnUnknown() {
+        config.setProtectionEnabled(true)
+        val mockCm = mock(ConnectivityManager::class.java)
+        whenever(mockVpnDetector.detectVpnState(mockCm)).thenReturn(VpnDetectionResult.VPN_UNKNOWN)
+
+        val result = watchdog.verifyProtectionHealth(
+            isServiceRunning = true,
+            isServiceStarting = false,
+            isTunnelEstablished = false, // Anomaly: tunnel missing!
+            connectivityManager = mockCm
+        )
+
+        assertFalse(result.isHealthy)
+        assertNotNull(result.issueDescription)
+        assertTrue(result.issueDescription!!.contains("Local blackhole tunnel interface is missing"))
+    }
+
+    @Test
+    fun testWatchdogDetectsUnprotectedFaultWhenVpnPermissionMissing() {
+        config.setProtectionEnabled(true)
+        ShadowVpnService.setPrepareResult(android.content.Intent("mock_vpn_permission_intent"))
+
+        val result = watchdog.verifyProtectionHealth(
+            isServiceRunning = false,
+            isServiceStarting = false,
+            isTunnelEstablished = false,
+            connectivityManager = null
+        )
+
+        assertFalse(result.isHealthy)
+        assertNotNull(result.issueDescription)
+        assertTrue(result.issueDescription!!.contains("VPN permission is unready"))
+    }
 }

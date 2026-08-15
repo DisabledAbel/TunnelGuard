@@ -29,6 +29,10 @@ class VpnSecurityMatrixTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         config = TunnelGuardConfig(context)
+        config.setProtectionEnabled(false)
+        config.setSimulatedVpnEnabled(false)
+        config.setEmergencyLockEnabled(false)
+        config.setVPNState(VPNState.DISCONNECTED)
         TunnelGuardVpnService.isTunnelEstablished = false
         TunnelGuardVpnService.isServiceStarting = false
         TunnelGuardVpnService.updateServiceState(ServiceState.NO_VPN)

@@ -24,6 +24,11 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
+    - name: Install Android 35 SDK
+      run: |
+        yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-35"
+
     - name: Run Android Lint
       run: ./gradlew lintDebug
 
