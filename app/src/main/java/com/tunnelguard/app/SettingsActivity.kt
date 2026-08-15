@@ -16,6 +16,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.tunnelguard.app.update.UpdateCheckResult
+import com.tunnelguard.app.update.UpdateRepository
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 
@@ -667,36 +671,36 @@ class SettingsActivity : AppCompatActivity() {
         loadingDialog = dialog
         dialog.show()
 
-        UpdateChecker.instance.checkForLatestRelease(
-            onSuccess = { cleanTagName, apkUrl ->
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    loadingDialog?.dismiss()
-                    loadingDialog = null
-                    if (VersionComparator.isNewerVersion(config.getAppVersionName(), cleanTagName)) {
-                        UpdateManager(this, config).showUpdateAvailableDialog(cleanTagName, apkUrl, true)
-                    } else {
-                        AlertDialog.Builder(this)
-                            .setTitle("Up to Date")
-                            .setMessage("TunnelGuard is already up to date!\n\nCurrent version: ${config.getAppVersionName()}")
-                            .setPositiveButton("OK") { d, _ -> d.dismiss() }
-                            .show()
-                    }
-                    isUpdateChecking = false
-                    btnCheckUpdates.isEnabled = true
+        lifecycleScope.launch {
+            val repository = UpdateRepository.getInstance(applicationContext)
+            val result = repository.checkForUpdate(config.getAppVersionName())
+
+            if (isFinishing || isDestroyed) return@launch
+            loadingDialog?.dismiss()
+            loadingDialog = null
+
+            when (result) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    UpdateManager(this@SettingsActivity, config).showUpdateAvailableDialog(
+                        result.latestVersion,
+                        result.apkUrl,
+                        true
+                    )
                 }
-            },
-            onFailure = { errorMessage ->
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    loadingDialog?.dismiss()
-                    loadingDialog = null
-                    UpdateManager(this, config).showUpdateErrorDialog(errorMessage)
-                    isUpdateChecking = false
-                    btnCheckUpdates.isEnabled = true
+                is UpdateCheckResult.NoUpdate, is UpdateCheckResult.NotModified -> {
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle("Up to Date")
+                        .setMessage("TunnelGuard is already up to date!\n\nCurrent version: ${config.getAppVersionName()}")
+                        .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                        .show()
+                }
+                is UpdateCheckResult.Failure -> {
+                    UpdateManager(this@SettingsActivity, config).showUpdateErrorDialog(result.errorMessage)
                 }
             }
-        )
+            isUpdateChecking = false
+            btnCheckUpdates.isEnabled = true
+        }
     }
 
     private fun updateRowAccessibilityDescription(layout: View, title: String, checked: Boolean) {

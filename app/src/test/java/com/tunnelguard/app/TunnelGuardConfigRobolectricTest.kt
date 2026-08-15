@@ -117,13 +117,13 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockConnectivityManager.getNetworkCapabilities(mockNetwork)).thenReturn(mockCapabilities)
         whenever(mockCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
 
-        // 1. If it's our own VPN, it should skip it and return false
+        // 1. If it's our own VPN, it should skip it and return VPN_NOT_DETECTED
         whenever(mockCapabilities.ownerUid).thenReturn(android.os.Process.myUid())
-        assertFalse(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_NOT_DETECTED, config.detectRealVpnCapabilities(mockConnectivityManager))
 
-        // 2. If it's another VPN (different ownerUid), it should detect it as upstream and return true
+        // 2. If it's another VPN (different ownerUid), it should detect it as upstream and return VPN_DETECTED
         whenever(mockCapabilities.ownerUid).thenReturn(android.os.Process.myUid() + 1)
-        assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_DETECTED, config.detectRealVpnCapabilities(mockConnectivityManager))
     }
 
     @Test
@@ -145,9 +145,9 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(mockLinkProperties)
         whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddress))
 
-        // Set ownerUid to a non-own UID. It must return true immediately on R+, completely bypassing isOurOurVpn checks.
+        // Set ownerUid to a non-own UID. It must return VPN_DETECTED immediately on R+, completely bypassing isOurOurVpn checks.
         whenever(mockCapabilities.ownerUid).thenReturn(android.os.Process.myUid() + 1)
-        assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_DETECTED, config.detectRealVpnCapabilities(mockConnectivityManager))
     }
 
     @Test
@@ -163,25 +163,25 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
         whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(mockLinkProperties)
 
-        // 1. If link addresses match TunnelGuard's local tunnel address, it should skip and return false
+        // 1. If link addresses match TunnelGuard's local tunnel address, it should skip and return VPN_NOT_DETECTED
         val mockLinkAddressOurVpn = mock(android.net.LinkAddress::class.java)
         val ourInetAddress = java.net.InetAddress.getByName(TunnelGuardConfig.TUNNEL_ADDRESS)
         whenever(mockLinkAddressOurVpn.address).thenReturn(ourInetAddress)
         whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddressOurVpn))
 
         TunnelGuardVpnService.isTunnelEstablished = true
-        assertFalse(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_NOT_DETECTED, config.detectRealVpnCapabilities(mockConnectivityManager))
 
-        // 2. If link addresses belong to an external upstream VPN, it should return true even if isTunnelEstablished is true
+        // 2. If link addresses belong to an external upstream VPN, it should return VPN_DETECTED even if isTunnelEstablished is true
         val mockLinkAddressOtherVpn = mock(android.net.LinkAddress::class.java)
         val externalInetAddress = java.net.InetAddress.getByName("10.8.0.2")
         whenever(mockLinkAddressOtherVpn.address).thenReturn(externalInetAddress)
         whenever(mockLinkProperties.linkAddresses).thenReturn(listOf(mockLinkAddressOtherVpn))
 
-        assertTrue(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_DETECTED, config.detectRealVpnCapabilities(mockConnectivityManager))
 
-        // 3. If linkProperties is null, it should treat as unknown/skip and return false (preserving fail-closed)
+        // 3. If linkProperties is null, it should treat as unknown and return VPN_UNKNOWN (preserving fail-closed)
         whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(null)
-        assertFalse(config.detectRealVpnCapabilities(mockConnectivityManager))
+        assertEquals(VpnDetectionResult.VPN_UNKNOWN, config.detectRealVpnCapabilities(mockConnectivityManager))
     }
 }

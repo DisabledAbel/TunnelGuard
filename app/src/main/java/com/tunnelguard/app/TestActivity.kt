@@ -62,8 +62,8 @@ class TestActivity : AppCompatActivity() {
             tvTestVpn.text = "✓ PASS (SIMULATED $vpnState)"
             tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
         } else {
-            val isVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
-            if (isVpnConnected) {
+            val vpnDetection = config.detectRealVpnCapabilities(connectivityManager)
+            if (vpnDetection == VpnDetectionResult.VPN_DETECTED) {
                 tvTestVpn.text = "✓ PASS (VPN CONNECTED)"
                 tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
             } else if (TunnelGuardVpnService.isServiceRunning && config.isProtectionEnabled()) {

@@ -42,6 +42,8 @@ class TunnelGuardVpnService : VpnService() {
     private var lastEmergencyLock: Boolean? = null
     private lateinit var config: TunnelGuardConfig
     private lateinit var connectivityManager: ConnectivityManager
+    private lateinit var vpnDetector: VpnDetector
+    private lateinit var appMonitor: ProtectedAppMonitor
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var monitorJob: Job? = null
@@ -167,6 +169,8 @@ class TunnelGuardVpnService : VpnService() {
         isServiceStarting = false
         config = TunnelGuardConfig(this)
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        vpnDetector = DefaultVpnDetector(config)
+        appMonitor = ProtectedAppMonitor(config, vpnDetector)
         isServiceRunning = true
         transitionTo(ServiceState.TUNNELGUARD_STARTING)
     }
@@ -195,109 +199,99 @@ class TunnelGuardVpnService : VpnService() {
                         break
                     }
 
-                    val detectedApp = config.getForegroundPackageName(this@TunnelGuardVpnService)
-                    // Retain the last known foreground app if current detection is null
-                    val currentApp = detectedApp ?: lastForegroundApp
+                    val evalResult = appMonitor.evaluateMonitoringState(
+                        context = this@TunnelGuardVpnService,
+                        connectivityManager = connectivityManager,
+                        lastForegroundApp = lastForegroundApp,
+                        wasVpnOn = wasVpnOn
+                    )
 
-                    if (currentApp != null) {
-                        val isVpnOn = if (config.isSimulatedVpnEnabled()) {
-                            val state = config.getVPNState()
-                            state == VPNState.CONNECTED || state == VPNState.PROTECTED
-                        } else {
-                            config.detectRealVpnCapabilities(connectivityManager)
-                        }
+                    when (evalResult) {
+                        is MonitoringCheckResult.TriggerWarning -> {
+                            val currentApp = evalResult.targetPackage
+                            val warningId = java.util.UUID.randomUUID().toString()
+                            pendingWarningId = warningId
 
-                        // Check if currentApp is a protected app
-                        val isProtected = config.isAppProtected(currentApp) && currentApp != packageName
+                            config.addLog("Protected app opened or VPN dropped: $currentApp. Automatically opening warning and VPN redirection.")
 
-                        if (isProtected) {
-                            val isSuppressed = isPackageSuppressed(currentApp)
-                            val shouldTrigger = shouldTriggerWarning(
-                                currentApp = currentApp,
-                                lastForegroundApp = lastForegroundApp,
-                                isVpnOn = isVpnOn,
-                                wasVpnOn = wasVpnOn,
-                                isSuppressed = isSuppressed
-                            )
+                            val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                putExtra("target_package", currentApp)
+                                putExtra("warning_id", warningId)
+                            }
 
-                            if (shouldTrigger) {
-                                val warningId = java.util.UUID.randomUUID().toString()
-                                pendingWarningId = warningId
+                            // Attempt to directly launch the warning/redirection activity
+                            config.addLog("Attempting direct launch of VpnWarningActivity for $currentApp.")
+                            try {
+                                this@TunnelGuardVpnService.startActivity(warningIntent)
+                            } catch (e: Exception) {
+                                config.addLog("Could not start VpnWarningActivity directly from background: ${e.message}")
+                            }
 
-                                config.addLog("Protected app opened or VPN dropped: $currentApp. Automatically opening warning and VPN redirection.")
-
-                                val warningIntent = Intent(this@TunnelGuardVpnService, VpnWarningActivity::class.java).apply {
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                    putExtra("target_package", currentApp)
-                                    putExtra("warning_id", warningId)
-                                }
-
-                                // Attempt to directly launch the warning/redirection activity
-                                config.addLog("Attempting direct launch of VpnWarningActivity for $currentApp.")
-                                try {
-                                    this@TunnelGuardVpnService.startActivity(warningIntent)
-                                } catch (e: Exception) {
-                                    config.addLog("Could not start VpnWarningActivity directly from background: ${e.message}")
-                                }
-
-                                serviceScope.launch {
-                                    delay(1000)
-                                    synchronized(warningLock) {
-                                        if (shouldPostFallbackWarning(warningId)) {
-                                            config.addLog("VpnWarningActivity did not launch in time. Posting fallback warning notification.")
-                                            val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                                android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
-                                                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                                                ).toBundle()
-                                            } else {
-                                                null
-                                            }
-
-                                            val pendingIntent = PendingIntent.getActivity(
-                                                this@TunnelGuardVpnService,
-                                                1002,
-                                                warningIntent,
-                                                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                                                options
-                                            )
-
-                                            var appLabel = currentApp
-                                            try {
-                                                val pm = packageManager
-                                                val appInfo = pm.getApplicationInfo(currentApp, 0)
-                                                appLabel = pm.getApplicationLabel(appInfo).toString()
-                                            } catch (e: Exception) {
-                                                // Ignore
-                                            }
-
-                                            val warningNotificationBuilder = NotificationCompat.Builder(this@TunnelGuardVpnService, ALERT_CHANNEL_ID)
-                                                .setContentTitle("Security Warning")
-                                                .setContentText("$appLabel opened without an active VPN connection!")
-                                                .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                                                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                                                .setCategory(NotificationCompat.CATEGORY_ALARM)
-                                                .setAutoCancel(true)
-                                                .setContentIntent(pendingIntent)
-
-                                            // Only call setFullScreenIntent when permission is available according to NotificationManagerCompat
-                                            val managerCompat = androidx.core.app.NotificationManagerCompat.from(this@TunnelGuardVpnService)
-                                            if (managerCompat.canUseFullScreenIntent()) {
-                                                warningNotificationBuilder.setFullScreenIntent(pendingIntent, true)
-                                            }
-
-                                            val warningNotification = warningNotificationBuilder.build()
-                                            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                                            manager.notify(1002, warningNotification)
+                            serviceScope.launch {
+                                delay(1000)
+                                synchronized(warningLock) {
+                                    if (shouldPostFallbackWarning(warningId)) {
+                                        config.addLog("VpnWarningActivity did not launch in time. Posting fallback warning notification.")
+                                        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                            android.app.ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(
+                                                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                                            ).toBundle()
                                         } else {
-                                            config.addLog("VpnWarningActivity launched successfully. Skipping fallback notification.")
+                                            null
                                         }
+
+                                        val pendingIntent = PendingIntent.getActivity(
+                                            this@TunnelGuardVpnService,
+                                            1002,
+                                            warningIntent,
+                                            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                                            options
+                                        )
+
+                                        var appLabel = currentApp
+                                        try {
+                                            val pm = packageManager
+                                            val appInfo = pm.getApplicationInfo(currentApp, 0)
+                                            appLabel = pm.getApplicationLabel(appInfo).toString()
+                                        } catch (e: Exception) {
+                                            // Ignore
+                                        }
+
+                                        val warningNotificationBuilder = NotificationCompat.Builder(this@TunnelGuardVpnService, ALERT_CHANNEL_ID)
+                                            .setContentTitle("Security Warning")
+                                            .setContentText("$appLabel opened without an active VPN connection!")
+                                            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                            .setCategory(NotificationCompat.CATEGORY_ALARM)
+                                            .setAutoCancel(true)
+                                            .setContentIntent(pendingIntent)
+
+                                        // Only call setFullScreenIntent when permission is available according to NotificationManagerCompat
+                                        val managerCompat = androidx.core.app.NotificationManagerCompat.from(this@TunnelGuardVpnService)
+                                        if (managerCompat.canUseFullScreenIntent()) {
+                                            warningNotificationBuilder.setFullScreenIntent(pendingIntent, true)
+                                        }
+
+                                        val warningNotification = warningNotificationBuilder.build()
+                                        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                        manager.notify(1002, warningNotification)
+                                    } else {
+                                        config.addLog("VpnWarningActivity launched successfully. Skipping fallback notification.")
                                     }
                                 }
                             }
+                            lastForegroundApp = evalResult.targetPackage
+                            wasVpnOn = evalResult.isVpnOn
                         }
-
-                        lastForegroundApp = currentApp
-                        wasVpnOn = isVpnOn
+                        is MonitoringCheckResult.NoAction -> {
+                            if (evalResult.currentApp != null) {
+                                lastForegroundApp = evalResult.currentApp
+                            }
+                            if (evalResult.isVpnOn != null) {
+                                wasVpnOn = evalResult.isVpnOn
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     config.addLog("Error in app monitor loop: ${e.message}")
@@ -457,14 +451,13 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
-            val isUpstreamVpnConnected = config.detectRealVpnCapabilities(connectivityManager)
+            val detectionResult = vpnDetector.detectVpnState(connectivityManager)
             val prevState = config.getVPNState()
-            currentVpnState = if (isUpstreamVpnConnected) {
-                VPNState.PROTECTED
-            } else if (vpnInterface != null) {
-                VPNState.BLOCKED
-            } else {
-                VPNState.DISCONNECTED
+            currentVpnState = when (detectionResult) {
+                VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
+                VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+                    if (vpnInterface != null) VPNState.BLOCKED else VPNState.DISCONNECTED
+                }
             }
             if ((prevState == VPNState.CONNECTED || prevState == VPNState.PROTECTED) && currentVpnState == VPNState.DISCONNECTED) {
                 config.setLastDisconnectReason("Loss of network connectivity")

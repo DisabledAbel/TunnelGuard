@@ -33,6 +33,9 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug
 
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+
     - name: Upload Test Reports
       if: always()
       uses: EnricoMi/publish-unit-test-result-action@v2
