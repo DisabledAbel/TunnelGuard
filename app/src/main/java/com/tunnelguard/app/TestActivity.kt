@@ -63,15 +63,29 @@ class TestActivity : AppCompatActivity() {
             tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
         } else {
             val vpnDetection = config.detectRealVpnCapabilities(connectivityManager)
-            if (vpnDetection == VpnDetectionResult.VPN_DETECTED) {
-                tvTestVpn.text = "✓ PASS (VPN CONNECTED)"
-                tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
-            } else if (TunnelGuardVpnService.isServiceRunning && config.isProtectionEnabled()) {
-                tvTestVpn.text = "✓ PASS (BLOCKING INTERNET)"
-                tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
-            } else {
-                tvTestVpn.text = "✓ PASS (DISCONNECTED)"
-                tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
+            when (vpnDetection) {
+                VpnDetectionResult.VPN_DETECTED -> {
+                    tvTestVpn.text = "✓ PASS (VPN CONNECTED)"
+                    tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
+                }
+                VpnDetectionResult.VPN_NOT_DETECTED -> {
+                    if (TunnelGuardVpnService.isServiceRunning && config.isProtectionEnabled()) {
+                        tvTestVpn.text = "✓ PASS (BLOCKING INTERNET)"
+                        tvTestVpn.setTextColor(resources.getColor(R.color.status_blocking))
+                    } else {
+                        tvTestVpn.text = "✓ PASS (DISCONNECTED)"
+                        tvTestVpn.setTextColor(resources.getColor(R.color.status_connected))
+                    }
+                }
+                VpnDetectionResult.VPN_UNKNOWN -> {
+                    if (TunnelGuardVpnService.isServiceRunning && config.isProtectionEnabled()) {
+                        tvTestVpn.text = "✓ PASS (BLOCKING INTERNET - STATUS UNKNOWN)"
+                        tvTestVpn.setTextColor(resources.getColor(R.color.status_blocking))
+                    } else {
+                        tvTestVpn.text = "✗ FAIL (VPN STATUS UNKNOWN)"
+                        tvTestVpn.setTextColor(resources.getColor(R.color.status_disconnected))
+                    }
+                }
             }
         }
 

@@ -24,7 +24,8 @@ object SecurityStateMachine {
         isServiceRunning: Boolean,
         isServiceStarting: Boolean,
         isTunnelEstablished: Boolean,
-        connectivityManager: ConnectivityManager?
+        connectivityManager: ConnectivityManager?,
+        vpnDetector: VpnDetector = DefaultVpnDetector(config)
     ): SecurityState {
         // If Emergency Lock is enabled
         if (config.isEmergencyLockEnabled()) {
@@ -65,7 +66,7 @@ object SecurityStateMachine {
         }
 
         // Real Mode check
-        val vpnDetection = config.detectRealVpnCapabilities(connectivityManager)
+        val vpnDetection = vpnDetector.detectVpnState(connectivityManager)
         if (vpnDetection == VpnDetectionResult.VPN_DETECTED) {
             return SecurityState.PROTECTED
         }

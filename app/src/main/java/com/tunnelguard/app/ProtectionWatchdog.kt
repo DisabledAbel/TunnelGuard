@@ -30,7 +30,8 @@ class ProtectionWatchdog(
             isServiceRunning = isServiceRunning,
             isServiceStarting = isServiceStarting,
             isTunnelEstablished = isTunnelEstablished,
-            connectivityManager = connectivityManager
+            connectivityManager = connectivityManager,
+            vpnDetector = vpnDetector
         )
 
         // Unprotected fault indicates missing VPN preparation / service died when protection was supposed to be active
