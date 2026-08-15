@@ -485,4 +485,35 @@ class TunnelGuardConfigTest {
             mockVpnStatic.close()
         }
     }
+
+    @Test
+    fun testPendingVpnRedirectTarget_setGetClearAndExpiration() {
+        val testPkg = "com.example.targetapp"
+
+        // Test initial state is null
+        assertNull(config.getPendingVpnRedirectTarget())
+
+        // Test set and get
+        config.setPendingVpnRedirectTarget(testPkg)
+        assertEquals(testPkg, config.getPendingVpnRedirectTarget())
+
+        // Test explicit clear
+        config.clearPendingVpnRedirectTarget()
+        assertNull(config.getPendingVpnRedirectTarget())
+
+        // Test setting null clears
+        config.setPendingVpnRedirectTarget(testPkg)
+        assertEquals(testPkg, config.getPendingVpnRedirectTarget())
+        config.setPendingVpnRedirectTarget(null)
+        assertNull(config.getPendingVpnRedirectTarget())
+
+        // Test expiration after timeout (> 180,000 ms)
+        val pastTimestamp = System.currentTimeMillis() - 200000L
+        mockPrefs.edit()
+            .putString("pending_vpn_redirect_target", testPkg)
+            .putLong("pending_vpn_redirect_timestamp", pastTimestamp)
+            .apply()
+
+        assertNull(config.getPendingVpnRedirectTarget())
+    }
 }

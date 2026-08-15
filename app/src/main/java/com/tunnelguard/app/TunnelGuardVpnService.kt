@@ -495,6 +495,25 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
             transitionTo(ServiceState.UPSTREAM_VPN)
+
+            // Check if user was redirected to turn on VPN and automatically launch target app
+            val pendingTarget = config.getPendingVpnRedirectTarget()
+            if (pendingTarget != null) {
+                config.clearPendingVpnRedirectTarget()
+                try {
+                    val launchIntent = packageManager.getLaunchIntentForPackage(pendingTarget)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(launchIntent)
+                        config.addLog("Auto-redirected to target application after VPN connection: $pendingTarget")
+                    } else {
+                        config.addLog("Could not find launch intent for pending target app: $pendingTarget", "WARN")
+                    }
+                } catch (e: Exception) {
+                    config.addLog("Failed to auto-redirect to target app $pendingTarget: ${e.message}", "ERROR")
+                }
+            }
+
             return
         }
 

@@ -782,4 +782,38 @@ class TunnelGuardConfig(private val context: Context) {
         }
         return null
     }
+
+    /**
+     * Pending VPN Redirect Target methods for auto-redirecting to the target app once VPN connects.
+     */
+    fun setPendingVpnRedirectTarget(packageName: String?) {
+        if (packageName == null) {
+            clearPendingVpnRedirectTarget()
+        } else {
+            prefs.edit()
+                .putString("pending_vpn_redirect_target", packageName)
+                .putLong("pending_vpn_redirect_timestamp", System.currentTimeMillis())
+                .apply()
+            addLog("Set pending VPN redirect target: $packageName")
+        }
+    }
+
+    fun getPendingVpnRedirectTarget(): String? {
+        val target = prefs.getString("pending_vpn_redirect_target", null) ?: return null
+        val timestamp = prefs.getLong("pending_vpn_redirect_timestamp", 0L)
+        val now = System.currentTimeMillis()
+        // 3 minutes (180,000 ms) expiration timeout
+        if (now - timestamp > 180000L) {
+            clearPendingVpnRedirectTarget()
+            return null
+        }
+        return target
+    }
+
+    fun clearPendingVpnRedirectTarget() {
+        prefs.edit()
+            .remove("pending_vpn_redirect_target")
+            .remove("pending_vpn_redirect_timestamp")
+            .apply()
+    }
 }

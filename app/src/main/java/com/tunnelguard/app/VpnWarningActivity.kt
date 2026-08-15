@@ -116,6 +116,7 @@ class VpnWarningActivity : AppCompatActivity() {
 
         btnCancelWarning.setOnClickListener {
             cancelCountdown()
+            config.clearPendingVpnRedirectTarget()
             targetPackage?.let { pkg ->
                 TunnelGuardVpnService.suppressPackage(pkg, 15000)
             }
@@ -219,6 +220,9 @@ class VpnWarningActivity : AppCompatActivity() {
     }
 
     private fun redirectAndFinish() {
+        targetPackage?.let { pkg ->
+            config.setPendingVpnRedirectTarget(pkg)
+        }
         val vpnAppChoice = config.getVpnAppOfChoice()
         if (vpnAppChoice != null) {
             try {
