@@ -242,6 +242,7 @@ class VpnSecurityMatrixTest {
 
     @Test
     fun testMissingLinkPropertiesResultsInUnknown() {
+        TunnelGuardVpnService.isTunnelEstablished = true
         val mockCm = mock(ConnectivityManager::class.java)
         val mockNetwork = mock(Network::class.java)
         val mockCaps = mock(NetworkCapabilities::class.java)
@@ -257,6 +258,7 @@ class VpnSecurityMatrixTest {
 
     @Test
     fun testEmptyLinkAddressesResultsInUnknown() {
+        TunnelGuardVpnService.isTunnelEstablished = true
         val mockCm = mock(ConnectivityManager::class.java)
         val mockNetwork = mock(Network::class.java)
         val mockCaps = mock(NetworkCapabilities::class.java)
@@ -270,6 +272,48 @@ class VpnSecurityMatrixTest {
 
         val result = config.detectRealVpnCapabilities(mockCm)
         assertEquals(VpnDetectionResult.VPN_UNKNOWN, result)
+    }
+
+    @Test
+    fun testExternalVpnDetectedEvenWithNullCapabilityPhysicalNetwork() {
+        val mockCm = mock(ConnectivityManager::class.java)
+        val physicalNet = mock(Network::class.java)
+        val vpnNet = mock(Network::class.java)
+        val vpnCaps = mock(NetworkCapabilities::class.java)
+        val vpnLp = mock(LinkProperties::class.java)
+
+        whenever(mockCm.allNetworks).thenReturn(arrayOf(physicalNet, vpnNet))
+        whenever(mockCm.getNetworkCapabilities(physicalNet)).thenReturn(null) // Physical network capabilities null
+
+        whenever(mockCm.getNetworkCapabilities(vpnNet)).thenReturn(vpnCaps)
+        whenever(vpnCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+        whenever(mockCm.getLinkProperties(vpnNet)).thenReturn(vpnLp)
+        val mockAddr = mock(LinkAddress::class.java)
+        whenever(mockAddr.address).thenReturn(InetAddress.getByName("10.8.0.2"))
+        whenever(vpnLp.linkAddresses).thenReturn(listOf(mockAddr))
+
+        val result = config.detectRealVpnCapabilities(mockCm)
+        assertEquals(VpnDetectionResult.VPN_DETECTED, result)
+    }
+
+    @Test
+    fun testExternalVpnDetectedViaActiveNetwork() {
+        val mockCm = mock(ConnectivityManager::class.java)
+        val activeVpnNet = mock(Network::class.java)
+        val vpnCaps = mock(NetworkCapabilities::class.java)
+        val vpnLp = mock(LinkProperties::class.java)
+
+        whenever(mockCm.activeNetwork).thenReturn(activeVpnNet)
+        whenever(mockCm.allNetworks).thenReturn(emptyArray())
+        whenever(mockCm.getNetworkCapabilities(activeVpnNet)).thenReturn(vpnCaps)
+        whenever(vpnCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+        whenever(mockCm.getLinkProperties(activeVpnNet)).thenReturn(vpnLp)
+        val mockAddr = mock(LinkAddress::class.java)
+        whenever(mockAddr.address).thenReturn(InetAddress.getByName("10.8.0.2"))
+        whenever(vpnLp.linkAddresses).thenReturn(listOf(mockAddr))
+
+        val result = config.detectRealVpnCapabilities(mockCm)
+        assertEquals(VpnDetectionResult.VPN_DETECTED, result)
     }
 
     @Test

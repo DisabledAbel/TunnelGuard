@@ -54,11 +54,30 @@ class TunnelGuardConfig(private val context: Context) {
     fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): VpnDetectionResult {
         if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
-            val networks = connectivityManager.allNetworks
-            if (networks == null) return VpnDetectionResult.VPN_UNKNOWN
+            val networksList = mutableListOf<android.net.Network>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    val activeNet = connectivityManager.activeNetwork
+                    if (activeNet != null) {
+                        networksList.add(activeNet)
+                    }
+                } catch (e: Exception) {
+                    // Ignore activeNetwork lookup failure
+                }
+            }
+            val allNets = try { connectivityManager.allNetworks } catch (e: Exception) { null }
+            if (allNets != null) {
+                for (net in allNets) {
+                    if (!networksList.contains(net)) {
+                        networksList.add(net)
+                    }
+                }
+            }
+            if (networksList.isEmpty()) return VpnDetectionResult.VPN_UNKNOWN
+
             var encounteredUnknown = false
 
-            for (network in networks) {
+            for (network in networksList) {
                 val caps = connectivityManager.getNetworkCapabilities(network)
                 if (caps == null) {
                     encounteredUnknown = true
@@ -66,30 +85,30 @@ class TunnelGuardConfig(private val context: Context) {
                 }
 
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    // 1. On Android 30+ (API 30), we check ownerUid to identify our own VPN network
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        if (caps.ownerUid == Process.myUid()) {
-                            continue // Skip our own local interface
-                        } else {
-                            return VpnDetectionResult.VPN_DETECTED // Confirmed external VPN on R+
-                        }
+                    val isOurInterface = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        caps.ownerUid == Process.myUid()
                     } else {
-                        // Exclude the local VPN interface using link addresses (pre-R)
-                        val linkProperties = connectivityManager.getLinkProperties(network)
-                        if (linkProperties == null) {
-                            encounteredUnknown = true
-                            continue
-                        }
-                        val addresses = linkProperties.linkAddresses
-                        if (addresses == null || addresses.isEmpty()) {
-                            encounteredUnknown = true
-                            continue
-                        }
-                        if (isOurOurVpn(addresses)) {
-                            continue // Skip our own local interface
+                        if (TunnelGuardVpnService.isTunnelEstablished) {
+                            val linkProperties = connectivityManager.getLinkProperties(network)
+                            if (linkProperties == null) {
+                                encounteredUnknown = true
+                                continue
+                            }
+                            val addresses = linkProperties.linkAddresses
+                            if (addresses == null || addresses.isEmpty()) {
+                                encounteredUnknown = true
+                                continue
+                            }
+                            isOurOurVpn(addresses)
                         } else {
-                            return VpnDetectionResult.VPN_DETECTED
+                            false
                         }
+                    }
+
+                    if (isOurInterface) {
+                        continue // Skip our own local interface
+                    } else {
+                        return VpnDetectionResult.VPN_DETECTED
                     }
                 }
             }
