@@ -113,12 +113,13 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun refreshDiagnostics() {
-        if (!TunnelGuardVpnService.isServiceRunning && !config.isSimulatedVpnEnabled()) {
+        if (!config.isSimulatedVpnEnabled()) {
             val detection = config.detectRealVpnCapabilities(connectivityManager)
-            val currentVpnState = if (detection == VpnDetectionResult.VPN_DETECTED) {
-                VPNState.PROTECTED
-            } else {
-                VPNState.DISCONNECTED
+            val currentVpnState = when (detection) {
+                VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
+                VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+                    if (TunnelGuardVpnService.isTunnelEstablished) VPNState.BLOCKED else VPNState.DISCONNECTED
+                }
             }
             config.setVPNState(currentVpnState)
         }

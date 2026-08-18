@@ -516,6 +516,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
             transitionTo(ServiceState.UPSTREAM_VPN)
+            sendBroadcast(broadcastIntent)
             return
         }
 
