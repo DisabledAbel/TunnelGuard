@@ -368,4 +368,95 @@ class VpnSecurityMatrixTest {
         val result = config.detectRealVpnCapabilities(mockCm)
         assertEquals(VpnDetectionResult.VPN_DETECTED, result)
     }
+
+    @Test
+    fun testRealModeVpnStateUpdatesAndTransitions() {
+        config.setProtectionEnabled(true)
+        val mockCm = mock(ConnectivityManager::class.java)
+
+        // 1. Initial state: No VPN detected, local tunnel established
+        whenever(mockCm.allNetworks).thenReturn(emptyArray())
+        TunnelGuardVpnService.isTunnelEstablished = true
+
+        var detection = config.detectRealVpnCapabilities(mockCm)
+        var stateToPersist = when (detection) {
+            VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
+            VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+                if (TunnelGuardVpnService.isTunnelEstablished) VPNState.BLOCKED else VPNState.DISCONNECTED
+            }
+        }
+        config.setVPNState(stateToPersist)
+
+        assertEquals(VPNState.BLOCKED, config.getVPNState())
+        var secState = SecurityStateMachine.getSecurityState(
+            context = context,
+            config = config,
+            isServiceRunning = true,
+            isServiceStarting = false,
+            isTunnelEstablished = true,
+            connectivityManager = mockCm
+        )
+        assertEquals(SecurityState.BLOCKING, secState)
+
+        // 2. Upstream VPN connects while TunnelGuard is active
+        val upstreamNetwork = mock(Network::class.java)
+        val upstreamCaps = mock(NetworkCapabilities::class.java)
+        val upstreamLp = mock(LinkProperties::class.java)
+        val upstreamAddr = mock(LinkAddress::class.java)
+
+        whenever(mockCm.allNetworks).thenReturn(arrayOf(upstreamNetwork))
+        whenever(mockCm.getNetworkCapabilities(upstreamNetwork)).thenReturn(upstreamCaps)
+        whenever(upstreamCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+        whenever(mockCm.getLinkProperties(upstreamNetwork)).thenReturn(upstreamLp)
+        whenever(upstreamAddr.address).thenReturn(InetAddress.getByName("10.8.0.2"))
+        whenever(upstreamLp.linkAddresses).thenReturn(listOf(upstreamAddr))
+
+        detection = config.detectRealVpnCapabilities(mockCm)
+        assertEquals(VpnDetectionResult.VPN_DETECTED, detection)
+
+        stateToPersist = when (detection) {
+            VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
+            VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+                if (TunnelGuardVpnService.isTunnelEstablished) VPNState.BLOCKED else VPNState.DISCONNECTED
+            }
+        }
+        config.setVPNState(stateToPersist)
+
+        assertEquals(VPNState.PROTECTED, config.getVPNState())
+        secState = SecurityStateMachine.getSecurityState(
+            context = context,
+            config = config,
+            isServiceRunning = true,
+            isServiceStarting = false,
+            isTunnelEstablished = false,
+            connectivityManager = mockCm
+        )
+        assertEquals(SecurityState.PROTECTED, secState)
+
+        // 3. Upstream VPN disconnects
+        whenever(mockCm.allNetworks).thenReturn(emptyArray())
+        TunnelGuardVpnService.isTunnelEstablished = true
+
+        detection = config.detectRealVpnCapabilities(mockCm)
+        assertEquals(VpnDetectionResult.VPN_NOT_DETECTED, detection)
+
+        stateToPersist = when (detection) {
+            VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
+            VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+                if (TunnelGuardVpnService.isTunnelEstablished) VPNState.BLOCKED else VPNState.DISCONNECTED
+            }
+        }
+        config.setVPNState(stateToPersist)
+
+        assertEquals(VPNState.BLOCKED, config.getVPNState())
+        secState = SecurityStateMachine.getSecurityState(
+            context = context,
+            config = config,
+            isServiceRunning = true,
+            isServiceStarting = false,
+            isTunnelEstablished = true,
+            connectivityManager = mockCm
+        )
+        assertEquals(SecurityState.BLOCKING, secState)
+    }
 }
