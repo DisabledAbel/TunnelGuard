@@ -54,6 +54,7 @@ class TunnelGuardConfig(private val context: Context) {
     fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): VpnDetectionResult {
         if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
+            var encounteredUnknown = false
             val networksList = mutableListOf<android.net.Network>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
@@ -62,10 +63,15 @@ class TunnelGuardConfig(private val context: Context) {
                         networksList.add(activeNet)
                     }
                 } catch (e: Exception) {
-                    // Ignore activeNetwork lookup failure
+                    encounteredUnknown = true
                 }
             }
-            val allNets = try { connectivityManager.allNetworks } catch (e: Exception) { null }
+            val allNets = try {
+                connectivityManager.allNetworks
+            } catch (e: Exception) {
+                encounteredUnknown = true
+                null
+            }
             if (allNets != null) {
                 for (net in allNets) {
                     if (!networksList.contains(net)) {
@@ -73,9 +79,9 @@ class TunnelGuardConfig(private val context: Context) {
                     }
                 }
             }
-            if (networksList.isEmpty()) return VpnDetectionResult.VPN_UNKNOWN
-
-            var encounteredUnknown = false
+            if (networksList.isEmpty()) {
+                return if (encounteredUnknown) VpnDetectionResult.VPN_UNKNOWN else VpnDetectionResult.VPN_NOT_DETECTED
+            }
 
             for (network in networksList) {
                 val caps = connectivityManager.getNetworkCapabilities(network)
