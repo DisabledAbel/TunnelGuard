@@ -369,9 +369,31 @@ class TunnelGuardConfigTest {
         val secondStartTime = prefsStore["vpn_connection_start_time"] as Long
         assertEquals(firstStartTime, secondStartTime)
 
+        // Transition to BLOCKED (TunnelGuard local tunnel active) should maintain start time
+        config.setVPNState(VPNState.BLOCKED)
+        val blockedStartTime = prefsStore["vpn_connection_start_time"] as Long
+        assertEquals(firstStartTime, blockedStartTime)
+        assertTrue(config.getConnectionUptimeMillis() >= 0L)
+
+        // Transition from BLOCKED to PROTECTED should also preserve the original start time
+        config.setVPNState(VPNState.PROTECTED)
+        val protectedStartTime = prefsStore["vpn_connection_start_time"] as Long
+        assertEquals(firstStartTime, protectedStartTime)
+
         // Transition to DISCONNECTED should reset start time
         config.setVPNState(VPNState.DISCONNECTED)
         assertEquals(0L, config.getConnectionUptimeMillis())
+
+        // Test reboot recovery where SystemClock elapsed realtime is smaller than stored start time
+        var currentTime = 100000L
+        config.elapsedRealtimeProvider = { currentTime }
+        config.setVPNState(VPNState.BLOCKED)
+        assertEquals(100000L, prefsStore["vpn_connection_start_time"] as Long)
+
+        // Simulate device reboot (elapsedRealtime Provider resets to a smaller value)
+        currentTime = 5000L
+        assertEquals(0L, config.getConnectionUptimeMillis())
+        assertEquals(0L, prefsStore["vpn_connection_start_time"] as Long)
     }
 
     @Test
