@@ -355,38 +355,51 @@ class TunnelGuardConfigTest {
 
     @Test
     fun testConnectionUptimeCalculation() {
+        var currentTime = 10000L
+        config.elapsedRealtimeProvider = { currentTime }
+
         config.setVPNState(VPNState.DISCONNECTED)
         assertEquals(0L, config.getConnectionUptimeMillis())
 
-        // Transition to CONNECTED should set start time
+        // Transition to CONNECTED should set start time (10000L)
         config.setVPNState(VPNState.CONNECTED)
-        val uptime = config.getConnectionUptimeMillis()
-        assertTrue(uptime >= 0L)
+        assertEquals(0L, config.getConnectionUptimeMillis())
+
+        // Advance time by 5000ms
+        currentTime += 5000L
+        assertEquals(5000L, config.getConnectionUptimeMillis())
 
         // Verify that setting VPNState again does not overwrite start time
         val firstStartTime = prefsStore["vpn_connection_start_time"] as Long
+        assertEquals(10000L, firstStartTime)
         config.setVPNState(VPNState.CONNECTED)
         val secondStartTime = prefsStore["vpn_connection_start_time"] as Long
         assertEquals(firstStartTime, secondStartTime)
+
+        // Advance time by another 5000ms (total 10000ms elapsed since start)
+        currentTime += 5000L
 
         // Transition to BLOCKED (TunnelGuard local tunnel active) should maintain start time
         config.setVPNState(VPNState.BLOCKED)
         val blockedStartTime = prefsStore["vpn_connection_start_time"] as Long
         assertEquals(firstStartTime, blockedStartTime)
-        assertTrue(config.getConnectionUptimeMillis() >= 0L)
+        assertEquals(10000L, config.getConnectionUptimeMillis())
+
+        // Advance time by another 5000ms (total 15000ms elapsed since start)
+        currentTime += 5000L
 
         // Transition from BLOCKED to PROTECTED should also preserve the original start time
         config.setVPNState(VPNState.PROTECTED)
         val protectedStartTime = prefsStore["vpn_connection_start_time"] as Long
         assertEquals(firstStartTime, protectedStartTime)
+        assertEquals(15000L, config.getConnectionUptimeMillis())
 
         // Transition to DISCONNECTED should reset start time
         config.setVPNState(VPNState.DISCONNECTED)
         assertEquals(0L, config.getConnectionUptimeMillis())
 
         // Test reboot recovery where SystemClock elapsed realtime is smaller than stored start time
-        var currentTime = 100000L
-        config.elapsedRealtimeProvider = { currentTime }
+        currentTime = 100000L
         config.setVPNState(VPNState.BLOCKED)
         assertEquals(100000L, prefsStore["vpn_connection_start_time"] as Long)
 
