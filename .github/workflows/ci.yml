@@ -1,64 +1,67 @@
-name: TunnelGuard CI
+name: TunnelGuard Pre-Merge Checks
 
 on:
-  push:
-    branches: [ "**" ]
   pull_request:
-    branches: [ "**" ]
+    branches: [ "main" ]
+  merge_group:
+  push:
+    branches: [ "main" ]
+
+concurrency:
+  group: pre-merge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  ci-build:
+  pre-merge-checks:
+    name: Pre-Merge Checks
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
-        cache: 'gradle'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
 
-    - name: Grant Execute Permission to Gradlew
-      run: chmod +x gradlew
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
 
-    - name: Install Android 35 SDK
-      run: |
-        yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-35"
+      - name: Install Android 35 SDK
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35"
 
-    - name: Run Android Lint
-      run: ./gradlew lintDebug
+      - name: Run Android Lint
+        run: ./gradlew lintDebug --stacktrace
 
-    - name: Run Unit Tests
-      run: ./gradlew test
+      - name: Run Unit Tests
+        run: ./gradlew test --stacktrace
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-    - name: Build Release APK
-      run: ./gradlew assembleRelease
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
 
-    - name: Upload Test Reports
-      if: always()
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        github_token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        files: '**/build/test-results/**/*.xml'
-      continue-on-error: true
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/'
+          if-no-files-found: ignore
 
-    - name: Upload JUnit Reports Archive
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-reports
-        path: '**/build/reports/tests/'
-
-    - name: Upload Lint Reports Archive
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: lint-reports
-        path: '**/build/reports/lint-results-*'
+      - name: Upload Lint Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: '**/build/reports/lint-results-*'
+          if-no-files-found: ignore
