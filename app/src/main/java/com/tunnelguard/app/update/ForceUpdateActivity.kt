@@ -43,7 +43,11 @@ class ForceUpdateActivity : ComponentActivity() {
             UpdateDialogScreen(
                 state = state,
                 onUpdateNow = { startUpdate(state) },
-                onUninstallApp = { installerManager.uninstallCurrentVersion() },
+                onUninstallApp = {
+                    if (!installerManager.uninstallCurrentVersion()) {
+                        viewModel.setError("Failed to launch uninstaller for current version.", isSignatureMismatch = true)
+                    }
+                },
                 onExitApp = { finishAffinity() }
             )
         }
