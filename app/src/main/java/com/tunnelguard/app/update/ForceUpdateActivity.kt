@@ -43,6 +43,7 @@ class ForceUpdateActivity : ComponentActivity() {
             UpdateDialogScreen(
                 state = state,
                 onUpdateNow = { startUpdate(state) },
+                onUninstallApp = { installerManager.uninstallCurrentVersion() },
                 onExitApp = { finishAffinity() }
             )
         }
@@ -85,7 +86,9 @@ class ForceUpdateActivity : ComponentActivity() {
             if (!installerManager.install(versionName)) viewModel.setError("Failed to launch the Android package installer.")
         } else {
             apkFile.delete()
-            viewModel.setError(error.toString().ifBlank { "Downloaded APK file validation failed." })
+            val errorMsg = error.toString().ifBlank { "Downloaded APK file validation failed." }
+            val isMismatch = errorMsg.contains("Signature mismatch", ignoreCase = true)
+            viewModel.setError(errorMsg, isSignatureMismatch = isMismatch)
         }
     }
 
