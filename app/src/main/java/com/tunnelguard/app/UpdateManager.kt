@@ -16,6 +16,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
+enum class ApkValidationResult {
+    SUCCESS,
+    FILE_NOT_FOUND_OR_EMPTY,
+    PACKAGE_INFO_NULL,
+    PACKAGE_NAME_MISMATCH,
+    SIGNATURE_MISMATCH,
+    ERROR
+}
+
 class UpdateManager(
     private val activity: Activity,
     private val config: TunnelGuardConfig
@@ -275,6 +284,10 @@ class UpdateManager(
     }
 
     fun validateApkFile(apkFile: File, outError: StringBuilder? = null): Boolean {
+        return validateApkFileWithResult(apkFile, outError) == ApkValidationResult.SUCCESS
+    }
+
+    fun validateApkFileWithResult(apkFile: File, outError: StringBuilder? = null): ApkValidationResult {
         return try {
             val pm = activity.packageManager
 
@@ -282,7 +295,7 @@ class UpdateManager(
             if (!apkFile.exists() || apkFile.length() == 0L) {
                 outError?.append("Downloaded APK file does not exist or is empty.")
                 config.addLog("validateApkFile: APK file does not exist or is empty.")
-                return false
+                return ApkValidationResult.FILE_NOT_FOUND_OR_EMPTY
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -292,14 +305,14 @@ class UpdateManager(
                 if (packageInfo == null) {
                     outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
                     config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
-                    return false
+                    return ApkValidationResult.PACKAGE_INFO_NULL
                 }
 
                 // 1. Verify Package Name
                 if (packageInfo.packageName != activity.packageName) {
                     outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
                     config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
-                    return false
+                    return ApkValidationResult.PACKAGE_NAME_MISMATCH
                 }
 
                 val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
@@ -310,7 +323,7 @@ class UpdateManager(
                 if (archiveSigningInfo == null || currentSigningInfo == null) {
                     outError?.append("Signing information is missing.")
                     config.addLog("validateApkFile: SigningInfo is null.")
-                    return false
+                    return ApkValidationResult.SIGNATURE_MISMATCH
                 }
 
                 val archiveMultiple = archiveSigningInfo.hasMultipleSigners()
@@ -323,7 +336,7 @@ class UpdateManager(
                     if (archiveSigs != currentSigs) {
                         outError?.append("Signature mismatch on multi-signer package.")
                         config.addLog("validateApkFile: Multi-signer signature mismatch!")
-                        return false
+                        return ApkValidationResult.SIGNATURE_MISMATCH
                     }
                 } else {
                     // Use SigningInfo.signersMatchExactly() for single-signer APKs (supporting rotation/rotated single-signer)
@@ -332,7 +345,7 @@ class UpdateManager(
                                 "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
                                 "To install this update, please uninstall the current version and install the new version manually.")
                         config.addLog("validateApkFile: Signature mismatch!")
-                        return false
+                        return ApkValidationResult.SIGNATURE_MISMATCH
                     }
                 }
             } else {
@@ -341,14 +354,14 @@ class UpdateManager(
                 if (packageInfo == null) {
                     outError?.append("Failed to read package info from downloaded APK. The file might be corrupted.")
                     config.addLog("validateApkFile: PackageInfo is null for ${apkFile.name}")
-                    return false
+                    return ApkValidationResult.PACKAGE_INFO_NULL
                 }
 
                 // 1. Verify Package Name
                 if (packageInfo.packageName != activity.packageName) {
                     outError?.append("Package name mismatch.\n\nDownloaded package: ${packageInfo.packageName}\nInstalled package: ${activity.packageName}")
                     config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
-                    return false
+                    return ApkValidationResult.PACKAGE_NAME_MISMATCH
                 }
 
                 val archiveSignatures = packageInfo.signatures
@@ -358,7 +371,7 @@ class UpdateManager(
                 if (archiveSignatures.isNullOrEmpty() || currentSignatures.isNullOrEmpty()) {
                     outError?.append("Signing signatures are missing.")
                     config.addLog("validateApkFile: Signatures are null or empty.")
-                    return false
+                    return ApkValidationResult.SIGNATURE_MISMATCH
                 }
 
                 val archiveSigSet = archiveSignatures.toSet()
@@ -369,15 +382,15 @@ class UpdateManager(
                             "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
                             "To install this update, please uninstall the current version and install the new version manually.")
                     config.addLog("validateApkFile: Signature mismatch!")
-                    return false
+                    return ApkValidationResult.SIGNATURE_MISMATCH
                 }
             }
 
-            true
+            ApkValidationResult.SUCCESS
         } catch (e: Exception) {
             outError?.append("Error during APK validation: ${e.message}")
             config.addLog("validateApkFile failed: ${e.message}")
-            false
+            ApkValidationResult.ERROR
         }
     }
 

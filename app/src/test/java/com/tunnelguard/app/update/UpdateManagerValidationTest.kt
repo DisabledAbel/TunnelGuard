@@ -14,6 +14,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.*
 import org.mockito.Mockito.*
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -255,6 +260,16 @@ class UpdateManagerValidationTest {
     }
 
     @Test
+    fun testUninstallCurrentVersion_startActivityFailure_returnsFalseAndLogs() {
+        doThrow(RuntimeException("Activity not found")).whenever(mockActivity).startActivity(org.mockito.kotlin.isA<android.content.Intent>())
+
+        val result = updateManager.uninstallCurrentVersion()
+
+        assertFalse(result)
+        verify(mockConfig).addLog(argThat { contains("Failed to launch uninstall intent") }, eq("ERROR"))
+    }
+
+    @Test
     fun testInstallerManager_uninstallCurrentVersion_launchesUninstallIntent() {
         val installerManager = InstallerManager(mockActivity, mockConfig)
         val result = installerManager.uninstallCurrentVersion()
@@ -267,5 +282,16 @@ class UpdateManagerValidationTest {
         assertEquals("package:com.tunnelguard.app", capturedIntent.dataString)
         assertTrue(capturedIntent.getBooleanExtra(android.content.Intent.EXTRA_RETURN_RESULT, false))
         assertTrue(result)
+    }
+
+    @Test
+    fun testInstallerManager_uninstallCurrentVersion_startActivityFailure_returnsFalseAndLogs() {
+        doThrow(RuntimeException("Activity not found")).whenever(mockActivity).startActivity(org.mockito.kotlin.isA<android.content.Intent>())
+        val installerManager = InstallerManager(mockActivity, mockConfig)
+
+        val result = installerManager.uninstallCurrentVersion()
+
+        assertFalse(result)
+        verify(mockConfig).addLog(argThat { contains("Failed to launch uninstall intent") }, eq("ERROR"))
     }
 }
