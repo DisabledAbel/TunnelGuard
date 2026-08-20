@@ -28,6 +28,8 @@ class InstallerManager(private val activity: Activity, private val config: Tunne
 
     fun validate(apkFile: File, outError: StringBuilder): Boolean = UpdateManager(activity, config).validateApkFile(apkFile, outError)
 
+    fun validateWithResult(apkFile: File, outError: StringBuilder): com.tunnelguard.app.ApkValidationResult = UpdateManager(activity, config).validateApkFileWithResult(apkFile, outError)
+
     fun install(versionName: String): Boolean = UpdateManager(activity, config).installApkFile(versionName)
 
     fun uninstallCurrentVersion(): Boolean {

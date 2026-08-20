@@ -86,12 +86,13 @@ class ForceUpdateActivity : ComponentActivity() {
 
     private fun installIfValid(apkFile: File, versionName: String) {
         val error = StringBuilder()
-        if (installerManager.validate(apkFile, error)) {
+        val result = installerManager.validateWithResult(apkFile, error)
+        if (result == com.tunnelguard.app.ApkValidationResult.SUCCESS) {
             if (!installerManager.install(versionName)) viewModel.setError("Failed to launch the Android package installer.")
         } else {
             apkFile.delete()
             val errorMsg = error.toString().ifBlank { "Downloaded APK file validation failed." }
-            val isMismatch = errorMsg.contains("Signature mismatch", ignoreCase = true)
+            val isMismatch = result == com.tunnelguard.app.ApkValidationResult.SIGNATURE_MISMATCH
             viewModel.setError(errorMsg, isSignatureMismatch = isMismatch)
         }
     }
