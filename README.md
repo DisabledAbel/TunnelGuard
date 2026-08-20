@@ -24,7 +24,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
    * If TunnelGuard's protection is running, starting an external VPN app will instantly terminate TunnelGuard.
    * **TunnelGuard does NOT fake or spoof third-party VPN control.** Instead, TunnelGuard implements a **Local Loopback Fail-Closed Firewall**.
 2. **How TunnelGuard's Fail-Closed Protection Works:**
-   * **When the Upstream VPN is Active (or Simulated Connected):** TunnelGuard stays out of the way (`closeVpnInterface()`). This allows your protected apps to use the standard network path (e.g. routed through simulated/real gateways).
+   * **When the Upstream VPN is Active (or Simulated Connected):** TunnelGuard stays out of the way (`closeVpnInterface,()`). This allows your protected apps to use the standard network path (e.g. routed through simulated/real gateways).
    * **When the Upstream VPN fails / disconnects:** TunnelGuard instantly activates its local `VpnService` interface. Using Android's official `addAllowedApplication(packageName)` API, Android routes all outgoing traffic of your selected (protected) apps *exclusively* into TunnelGuard's local TUN interface. Since TunnelGuard acts as a local packet sink (blackhole) and **does not forward packets**, all network traffic from the protected apps is instantly dropped (fail-closed block).
    * This design achieves 100% reliable, system-level, non-root per-app internet blocking.
 
