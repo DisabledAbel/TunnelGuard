@@ -26,7 +26,12 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
-fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp: () -> Unit) {
+fun UpdateDialogScreen(
+    state: UpdateUiState,
+    onUpdateNow: () -> Unit,
+    onUninstallApp: () -> Unit = {},
+    onExitApp: () -> Unit
+) {
     val focusRequester = androidx.compose.runtime.remember { FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { focusRequester.requestFocus() }
     MaterialTheme(colorScheme = darkColorScheme()) {
@@ -75,7 +80,16 @@ fun UpdateDialogScreen(state: UpdateUiState, onUpdateNow: () -> Unit, onExitApp:
                     val context = LocalContext.current
                     val browserUrl = state.releaseUrl.ifBlank { state.apkUrl.orEmpty() }
 
-                    if (!state.errorMessage.isNullOrBlank() && browserUrl.isNotBlank()) {
+                    if (state.isSignatureMismatch) {
+                        Button(
+                            onClick = onUninstallApp,
+                            enabled = !state.isDownloading,
+                            modifier = Modifier.weight(1f).height(56.dp).focusRequester(focusRequester),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Uninstall Current App")
+                        }
+                    } else if (!state.errorMessage.isNullOrBlank() && browserUrl.isNotBlank()) {
                         Button(
                             onClick = {
                                 try {

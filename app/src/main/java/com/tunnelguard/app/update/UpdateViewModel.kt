@@ -18,7 +18,8 @@ data class UpdateUiState(
     val apkUrl: String? = null,
     val isDownloading: Boolean = false,
     val progress: Int = 0,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isSignatureMismatch: Boolean = false
 )
 
 class UpdateViewModel(
@@ -42,7 +43,9 @@ class UpdateViewModel(
         )
     }
 
-    fun setError(message: String?) { _state.value = _state.value.copy(errorMessage = message) }
+    fun setError(message: String?, isSignatureMismatch: Boolean = false) {
+        _state.value = _state.value.copy(errorMessage = message, isSignatureMismatch = isSignatureMismatch)
+    }
 
     fun download(apkFile: File, onDownloaded: (File) -> Unit) {
         val url = _state.value.apkUrl
