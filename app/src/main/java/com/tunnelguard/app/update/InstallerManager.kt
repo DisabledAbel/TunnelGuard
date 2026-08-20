@@ -30,15 +30,17 @@ class InstallerManager(private val activity: Activity, private val config: Tunne
 
     fun install(versionName: String): Boolean = UpdateManager(activity, config).installApkFile(versionName)
 
-    fun uninstallCurrentVersion() {
+    fun uninstallCurrentVersion(): Boolean {
         val uninstallIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
             data = Uri.parse("package:${activity.packageName}")
             putExtra(Intent.EXTRA_RETURN_RESULT, true)
         }
-        try {
+        return try {
             activity.startActivity(uninstallIntent)
+            true
         } catch (e: Exception) {
             config.addLog("Failed to launch uninstall intent: ${e.message}", "ERROR")
+            false
         }
     }
 }

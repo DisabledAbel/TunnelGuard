@@ -242,7 +242,7 @@ class UpdateManagerValidationTest {
 
     @Test
     fun testUninstallCurrentVersion_launchesUninstallIntent() {
-        updateManager.uninstallCurrentVersion()
+        val result = updateManager.uninstallCurrentVersion()
 
         val intentCaptor = org.mockito.kotlin.argumentCaptor<android.content.Intent>()
         verify(mockActivity).startActivity(intentCaptor.capture())
@@ -251,5 +251,21 @@ class UpdateManagerValidationTest {
         assertEquals(android.content.Intent.ACTION_UNINSTALL_PACKAGE, capturedIntent.action)
         assertEquals("package:com.tunnelguard.app", capturedIntent.dataString)
         assertTrue(capturedIntent.getBooleanExtra(android.content.Intent.EXTRA_RETURN_RESULT, false))
+        assertTrue(result)
+    }
+
+    @Test
+    fun testInstallerManager_uninstallCurrentVersion_launchesUninstallIntent() {
+        val installerManager = InstallerManager(mockActivity, mockConfig)
+        val result = installerManager.uninstallCurrentVersion()
+
+        val intentCaptor = org.mockito.kotlin.argumentCaptor<android.content.Intent>()
+        verify(mockActivity).startActivity(intentCaptor.capture())
+
+        val capturedIntent = intentCaptor.firstValue
+        assertEquals(android.content.Intent.ACTION_UNINSTALL_PACKAGE, capturedIntent.action)
+        assertEquals("package:com.tunnelguard.app", capturedIntent.dataString)
+        assertTrue(capturedIntent.getBooleanExtra(android.content.Intent.EXTRA_RETURN_RESULT, false))
+        assertTrue(result)
     }
 }

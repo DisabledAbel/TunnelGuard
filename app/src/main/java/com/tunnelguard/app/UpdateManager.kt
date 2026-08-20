@@ -381,15 +381,17 @@ class UpdateManager(
         }
     }
 
-    fun uninstallCurrentVersion() {
+    fun uninstallCurrentVersion(): Boolean {
         val uninstallIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
             data = Uri.parse("package:${activity.packageName}")
             putExtra(Intent.EXTRA_RETURN_RESULT, true)
         }
-        try {
+        return try {
             activity.startActivity(uninstallIntent)
+            true
         } catch (e: Exception) {
             config.addLog("Failed to launch uninstall intent: ${e.message}", "ERROR")
+            false
         }
     }
 
@@ -450,7 +452,9 @@ class UpdateManager(
         if (errorMessage.contains("Signature mismatch", ignoreCase = true)) {
             builder.setNeutralButton("Uninstall Current App") { dialog, _ ->
                 dialog.dismiss()
-                uninstallCurrentVersion()
+                if (!uninstallCurrentVersion()) {
+                    showUpdateErrorDialog("Failed to launch uninstaller for current version.")
+                }
             }
         } else if (!targetUrl.isNullOrBlank()) {
             builder.setNeutralButton("Open in Browser") { dialog, _ ->

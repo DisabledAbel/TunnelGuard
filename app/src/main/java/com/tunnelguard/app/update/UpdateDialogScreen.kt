@@ -29,7 +29,7 @@ import java.util.Locale
 fun UpdateDialogScreen(
     state: UpdateUiState,
     onUpdateNow: () -> Unit,
-    onUninstallApp: () -> Unit = {},
+    onUninstallApp: () -> Unit,
     onExitApp: () -> Unit
 ) {
     val focusRequester = androidx.compose.runtime.remember { FocusRequester() }
