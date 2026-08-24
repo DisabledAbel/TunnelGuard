@@ -629,6 +629,7 @@ class TunnelGuardConfig(private val context: Context) {
             obj.put("start_on_boot", isStartOnBootEnabled())
             obj.put("app_monitor_enabled", isAppMonitorEnabled())
             obj.put("forced_updates_enabled", isForcedUpdatesEnabled())
+            obj.put("auto_connect_vpn_enabled", isAutoConnectVpnEnabled())
             obj.put("selected_profile_id", getSelectedProfileId())
 
             val profilesStr = prefs.getString("protection_profiles", null)
@@ -648,6 +649,7 @@ class TunnelGuardConfig(private val context: Context) {
             val startOnBoot = obj.optBoolean("start_on_boot", false)
             val appMonitorEnabled = obj.optBoolean("app_monitor_enabled", false)
             val forcedUpdatesEnabled = obj.optBoolean("forced_updates_enabled", true)
+            val autoConnectVpnEnabled = obj.optBoolean("auto_connect_vpn_enabled", true)
             val selectedProfileId = obj.optString("selected_profile_id", "streaming")
 
             val pkgRegex = Regex("^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+$")
@@ -679,6 +681,7 @@ class TunnelGuardConfig(private val context: Context) {
             setStartOnBootEnabled(startOnBoot)
             setAppMonitorEnabled(appMonitorEnabled)
             setForcedUpdatesEnabled(forcedUpdatesEnabled)
+            setAutoConnectVpnEnabled(autoConnectVpnEnabled)
 
             if (validatedProfiles.isNotEmpty()) {
                 saveProfiles(validatedProfiles)

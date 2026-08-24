@@ -429,12 +429,14 @@ class TunnelGuardConfigTest {
         config.setStartOnBootEnabled(true)
         config.setAppMonitorEnabled(true)
         config.setForcedUpdatesEnabled(false)
+        config.setAutoConnectVpnEnabled(false)
 
         val rawJsonStr = """
             {
                 "start_on_boot": false,
                 "app_monitor_enabled": false,
                 "forced_updates_enabled": true,
+                "auto_connect_vpn_enabled": false,
                 "selected_profile_id": "custom",
                 "protection_profiles": [
                     {
@@ -453,6 +455,7 @@ class TunnelGuardConfigTest {
         assertFalse(config.isStartOnBootEnabled())
         assertFalse(config.isAppMonitorEnabled())
         assertTrue(config.isForcedUpdatesEnabled())
+        assertFalse(config.isAutoConnectVpnEnabled())
         assertEquals("custom", config.getSelectedProfileId())
 
         val protectedApps = config.getProtectedApps()
@@ -466,7 +469,17 @@ class TunnelGuardConfigTest {
         assertNotNull(exportedJson)
         assertTrue(exportedJson!!.contains("start_on_boot"))
         assertTrue(exportedJson.contains("app_monitor_enabled"))
+        assertTrue(exportedJson.contains("auto_connect_vpn_enabled"))
         assertTrue(exportedJson.contains("protection_profiles"))
+
+        // Test fallback when auto_connect_vpn_enabled is absent in JSON
+        val jsonWithoutAutoConnect = """
+            {
+                "start_on_boot": false
+            }
+        """.trimIndent()
+        config.importConfigFromJson(jsonWithoutAutoConnect)
+        assertTrue(config.isAutoConnectVpnEnabled())
     }
 
     @Test
