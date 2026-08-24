@@ -743,6 +743,15 @@ class TunnelGuardConfig(private val context: Context) {
         addLog("VPN App of Choice set to: $packageName")
     }
 
+    fun isAutoConnectVpnEnabled(): Boolean {
+        return prefs.getBoolean("auto_connect_vpn_enabled", true)
+    }
+
+    fun setAutoConnectVpnEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("auto_connect_vpn_enabled", enabled).apply()
+        addLog("Auto-Connect VPN set to: $enabled")
+    }
+
     fun hasSystemAlertWindowPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             android.provider.Settings.canDrawOverlays(context)

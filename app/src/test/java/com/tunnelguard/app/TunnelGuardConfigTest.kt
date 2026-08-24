@@ -282,6 +282,20 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testAutoConnectVpnPreference() {
+        // Default should be true
+        assertTrue(config.isAutoConnectVpnEnabled())
+
+        // Disable auto-connect
+        config.setAutoConnectVpnEnabled(false)
+        assertFalse(config.isAutoConnectVpnEnabled())
+
+        // Re-enable auto-connect
+        config.setAutoConnectVpnEnabled(true)
+        assertTrue(config.isAutoConnectVpnEnabled())
+    }
+
+    @Test
     fun testUsageStatsPermissionCheck() {
         val mockAppOpsManager = mock(android.app.AppOpsManager::class.java)
         whenever(mockContext.getSystemService(eq(Context.APP_OPS_SERVICE))).thenReturn(mockAppOpsManager)

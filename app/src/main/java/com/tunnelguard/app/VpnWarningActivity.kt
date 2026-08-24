@@ -160,26 +160,33 @@ class VpnWarningActivity : AppCompatActivity() {
                 launchTargetAppAndFinish()
             }
             countdownRunnable = runnable
-            handler.postDelayed(runnable, 2000)
+            handler.postDelayed(runnable, if (config.isAutoConnectVpnEnabled()) 0L else 2000L)
         } else {
-            // Real VPN connection cannot be programmatically connected, so we countdown to redirect
-            secondsLeft = 3
-            updateCountdownText()
+            // Check if Auto-Connect VPN is enabled and a VPN App of Choice is set
+            if (config.isAutoConnectVpnEnabled()) {
+                config.addLog("Auto-Connect VPN enabled. Redirecting immediately to VPN destination.")
+                tvCountdownStatus.text = "Redirecting to VPN app of choice..."
+                redirectAndFinish()
+            } else {
+                // Real VPN connection cannot be programmatically connected, so we countdown to redirect
+                secondsLeft = 3
+                updateCountdownText()
 
-            val runnable = object : Runnable {
-                override fun run() {
-                    secondsLeft--
-                    if (secondsLeft <= 0) {
-                        tvCountdownStatus.text = "Redirecting to VPN app of choice..."
-                        redirectAndFinish()
-                    } else {
-                        updateCountdownText()
-                        handler.postDelayed(this, 1000)
+                val runnable = object : Runnable {
+                    override fun run() {
+                        secondsLeft--
+                        if (secondsLeft <= 0) {
+                            tvCountdownStatus.text = "Redirecting to VPN app of choice..."
+                            redirectAndFinish()
+                        } else {
+                            updateCountdownText()
+                            handler.postDelayed(this, 1000)
+                        }
                     }
                 }
+                countdownRunnable = runnable
+                handler.postDelayed(runnable, 1000)
             }
-            countdownRunnable = runnable
-            handler.postDelayed(runnable, 1000)
         }
     }
 
