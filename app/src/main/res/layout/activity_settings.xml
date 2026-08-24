@@ -286,7 +286,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/layout_pref_vpn_choice"
+                android:nextFocusUp="@+id/layout_pref_auto_connect"
                 android:nextFocusDown="@+id/btn_settings_export_logs"
                 android:padding="12dp"
                 android:text="View Diagnostics Screen"
