@@ -36,6 +36,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var cbPrefMonitor: CheckBox
     private lateinit var layoutPrefVpnChoice: LinearLayout
     private lateinit var tvPrefVpnChoiceValue: TextView
+    private lateinit var layoutPrefAutoConnect: LinearLayout
+    private lateinit var cbPrefAutoConnect: CheckBox
 
     private lateinit var btnLaunchDiagnostics: Button
     private lateinit var btnExportLogs: Button
@@ -97,6 +99,8 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefMonitor = findViewById(R.id.cb_pref_monitor)
         layoutPrefVpnChoice = findViewById(R.id.layout_pref_vpn_choice)
         tvPrefVpnChoiceValue = findViewById(R.id.tv_pref_vpn_choice_value)
+        layoutPrefAutoConnect = findViewById(R.id.layout_pref_auto_connect)
+        cbPrefAutoConnect = findViewById(R.id.cb_pref_auto_connect)
 
         btnLaunchDiagnostics = findViewById(R.id.btn_launch_diagnostics)
         btnExportLogs = findViewById(R.id.btn_settings_export_logs)
@@ -123,11 +127,13 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefBoot.isChecked = config.isStartOnBootEnabled()
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
         cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
+        cbPrefAutoConnect.isChecked = config.isAutoConnectVpnEnabled()
 
         updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
         updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", config.isStartOnBootEnabled())
         updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
         updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
+        updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", config.isAutoConnectVpnEnabled())
 
         updateVersionDisplay()
         updateVpnAppOfChoiceDisplay()
@@ -212,6 +218,13 @@ class SettingsActivity : AppCompatActivity() {
 
         layoutPrefVpnChoice.setOnClickListener {
             showVpnAppOfChoiceDialog()
+        }
+
+        layoutPrefAutoConnect.setOnClickListener {
+            val newChecked = !config.isAutoConnectVpnEnabled()
+            config.setAutoConnectVpnEnabled(newChecked)
+            cbPrefAutoConnect.isChecked = newChecked
+            updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", newChecked)
         }
 
         // --- SECTION 2: DIAGNOSTICS ---
@@ -594,12 +607,14 @@ class SettingsActivity : AppCompatActivity() {
             // 3. Update remaining check widgets
             cbPrefBoot.isChecked = config.isStartOnBootEnabled()
             cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
+            cbPrefAutoConnect.isChecked = config.isAutoConnectVpnEnabled()
 
             // 4. Update row accessibility descriptions
             updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
             updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", config.isStartOnBootEnabled())
             updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
             updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
+            updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", config.isAutoConnectVpnEnabled())
 
             updateVpnAppOfChoiceDisplay()
             updateSimulatedControlsVisibility()
