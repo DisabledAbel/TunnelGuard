@@ -54,10 +54,15 @@ class TunnelGuardConfig(private val context: Context) {
      *         [VpnDetectionResult.VPN_NOT_DETECTED] if all networks were inspected and no external VPN was found,
      *         or [VpnDetectionResult.VPN_UNKNOWN] if network inspection was incomplete or encountered an exception.
      */
-    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?, networkCountryCode: String? = null): VpnDetectionResult {
+    fun detectRealVpnCapabilities(
+        connectivityManager: ConnectivityManager?,
+        networkCountryCode: String? = null,
+        networkCountryResolver: ((android.net.Network) -> String?)? = null
+    ): VpnDetectionResult {
         if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
             var encounteredUnknown = false
+            var foundMismatchedVpn = false
             val networksList = mutableListOf<android.net.Network>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
@@ -117,14 +122,19 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
-                        val evalCountry = networkCountryCode ?: getActiveVpnCountryCode()
+                        val evalCountry = networkCountryResolver?.invoke(network) ?: networkCountryCode ?: getActiveVpnCountryCode()
                         if (isCountryVpnSettingEnabled() && !isCountryVpnMatch(evalCountry)) {
                             addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: $evalCountry)", "WARN")
-                            return VpnDetectionResult.VPN_NOT_DETECTED
+                            foundMismatchedVpn = true
+                            continue
                         }
                         return VpnDetectionResult.VPN_DETECTED
                     }
                 }
+            }
+
+            if (foundMismatchedVpn) {
+                return VpnDetectionResult.VPN_NOT_DETECTED
             }
 
             if (encounteredUnknown) {

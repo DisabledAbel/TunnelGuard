@@ -483,6 +483,34 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testMultipleVpnNetworksWithCountryMatching() {
+        config.setCountryVpnSettingEnabled(true)
+        config.setCountryVpnTargetCountry("US")
+
+        val mockCm = mock(ConnectivityManager::class.java)
+        val mockNet1 = mock(Network::class.java)
+        val mockNet2 = mock(Network::class.java)
+
+        val mockCaps1 = mock(NetworkCapabilities::class.java)
+        whenever(mockCaps1.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+
+        val mockCaps2 = mock(NetworkCapabilities::class.java)
+        whenever(mockCaps2.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+
+        whenever(mockCm.allNetworks).thenReturn(arrayOf(mockNet1, mockNet2))
+        whenever(mockCm.getNetworkCapabilities(mockNet1)).thenReturn(mockCaps1)
+        whenever(mockCm.getNetworkCapabilities(mockNet2)).thenReturn(mockCaps2)
+
+        // Resolver returns "CA" for net1 (mismatch) and "US" for net2 (match)
+        val resolver: (Network) -> String? = { net ->
+            if (net == mockNet1) "CA" else "US"
+        }
+
+        val result = config.detectRealVpnCapabilities(mockCm, networkCountryResolver = resolver)
+        assertEquals(VpnDetectionResult.VPN_DETECTED, result)
+    }
+
+    @Test
     fun testCountryVpnPreferencesAndMatching() {
         // Defaults
         assertFalse(config.isCountryVpnSettingEnabled())
