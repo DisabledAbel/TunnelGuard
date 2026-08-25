@@ -16,6 +16,7 @@ import org.json.JSONObject
 class TunnelGuardConfig(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val defaultCountryResolver: VpnCountryResolver by lazy { VpnCountryResolver(this) }
 
     companion object {
         private const val PREFS_NAME = "tunnel_guard_prefs"
@@ -122,10 +123,13 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
-                        val evalCountry = networkCountryResolver?.invoke(network)
-                            ?: networkCountryCode
-                            ?: (if (isCountryVpnSettingEnabled()) VpnCountryResolver(this).resolveCountry(network) else null)
-                            ?: getActiveVpnCountryCode()
+                        val evalCountry = if (networkCountryResolver != null) {
+                            networkCountryResolver.invoke(network)
+                        } else {
+                            networkCountryCode
+                                ?: (if (isCountryVpnSettingEnabled()) defaultCountryResolver.resolveCountry(network) else null)
+                                ?: getActiveVpnCountryCode()
+                        }
                         if (isCountryVpnSettingEnabled() && !isCountryVpnMatch(evalCountry)) {
                             addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: $evalCountry)", "WARN")
                             foundMismatchedVpn = true

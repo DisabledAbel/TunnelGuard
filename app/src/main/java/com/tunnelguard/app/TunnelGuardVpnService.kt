@@ -55,14 +55,14 @@ class TunnelGuardVpnService : VpnService() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             config.addLog("Network Callback: onAvailable. Re-evaluating routing.")
-            checkAndRunVpnRouting()
+            serviceScope.launch { checkAndRunVpnRouting() }
         }
 
         override fun onLost(network: Network) {
             super.onLost(network)
             config.addLog("Network Callback: onLost. Re-evaluating routing.")
             (vpnDetector as? DefaultVpnDetector)?.countryResolver?.clearCacheForNetwork(network)
-            checkAndRunVpnRouting()
+            serviceScope.launch { checkAndRunVpnRouting() }
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -73,14 +73,14 @@ class TunnelGuardVpnService : VpnService() {
             if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) transports.add("ETHERNET")
             val transportStr = if (transports.isEmpty()) "OTHER" else transports.joinToString(", ")
             config.addLog("Network Capabilities Changed. Transports: $transportStr. Re-evaluating routing.")
-            checkAndRunVpnRouting()
+            serviceScope.launch { checkAndRunVpnRouting() }
         }
     }
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             config.addLog("Screen/Wake event: ${intent.action}. Re-evaluating protection.")
-            checkAndRunVpnRouting()
+            serviceScope.launch { checkAndRunVpnRouting() }
         }
     }
 
@@ -381,7 +381,7 @@ class TunnelGuardVpnService : VpnService() {
             }
         }
 
-        checkAndRunVpnRouting()
+        serviceScope.launch { checkAndRunVpnRouting() }
 
         return START_STICKY
     }
@@ -421,7 +421,7 @@ class TunnelGuardVpnService : VpnService() {
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")
         transitionTo(ServiceState.VPN_CONFLICT)
         closeVpnInterface()
-        checkAndRunVpnRouting()
+        serviceScope.launch { checkAndRunVpnRouting() }
         super.onRevoke()
     }
 
