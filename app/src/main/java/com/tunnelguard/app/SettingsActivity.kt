@@ -285,6 +285,9 @@ class SettingsActivity : AppCompatActivity() {
         // Simulation State triggers
         btnSimulateConnected.setOnClickListener {
             if (config.isSimulatedVpnEnabled()) {
+                if (config.getActiveVpnCountryCode().isEmpty()) {
+                    config.setActiveVpnCountryCode(config.getCountryVpnTargetCountry())
+                }
                 config.setVPNState(VPNState.PROTECTED)
                 config.addLog("Simulating VPN state change to PROTECTED.")
                 triggerVpnServiceUpdate()
