@@ -50,12 +50,32 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-skeleton.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android Emulator Tests
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew connectedCheck --stacktrace
+
       - name: Upload Test Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: '**/build/reports/tests/'
+          path: |
+            **/build/reports/tests/
+            **/build/reports/androidTests/
+            **/build/reports/connected/
           if-no-files-found: ignore
 
       - name: Upload Lint Reports
