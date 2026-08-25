@@ -3,7 +3,13 @@ package com.tunnelguard.app
 import android.net.ConnectivityManager
 
 interface VpnDetector {
-    fun detectVpnState(connectivityManager: ConnectivityManager?): VpnDetectionResult
+    /**
+ * Detects the current VPN state.
+ *
+ * @param connectivityManager The connectivity manager used to inspect network capabilities, or `null` to use the default behavior.
+ * @return The detected VPN state.
+ */
+fun detectVpnState(connectivityManager: ConnectivityManager?): VpnDetectionResult
 }
 
 class DefaultVpnDetector(

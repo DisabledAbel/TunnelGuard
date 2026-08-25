@@ -48,12 +48,14 @@ class TunnelGuardConfig(private val context: Context) {
     )
 
     /**
-     * Determines whether an external VPN is currently active, returning a tri-state result.
+     * Determines whether a matching external VPN is currently active.
      *
      * @param connectivityManager The connectivity manager used to inspect available networks.
-     * @return [VpnDetectionResult.VPN_DETECTED] if an external VPN network is confirmed,
-     *         [VpnDetectionResult.VPN_NOT_DETECTED] if all networks were inspected and no external VPN was found,
-     *         or [VpnDetectionResult.VPN_UNKNOWN] if network inspection was incomplete or encountered an exception.
+     * @param networkCountryCode The country code associated with the network, when available.
+     * @param networkCountryResolver Resolves the country code for a network when country-specific matching is enabled.
+     * @return [VpnDetectionResult.VPN_DETECTED] if a matching external VPN is found,
+     *         [VpnDetectionResult.VPN_NOT_DETECTED] if no matching external VPN is found,
+     *         or [VpnDetectionResult.VPN_UNKNOWN] if inspection is incomplete or fails.
      */
     fun detectRealVpnCapabilities(
         connectivityManager: ConnectivityManager?,

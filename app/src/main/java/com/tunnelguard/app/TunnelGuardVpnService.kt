@@ -52,12 +52,20 @@ class TunnelGuardVpnService : VpnService() {
     private var isCallbackRegistered = false
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        /**
+         * Re-evaluates VPN routing when a network becomes available.
+         */
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             config.addLog("Network Callback: onAvailable. Re-evaluating routing.")
             serviceScope.launch { checkAndRunVpnRouting() }
         }
 
+        /**
+         * Handles network loss by clearing cached network data and re-evaluating VPN routing.
+         *
+         * @param network The network that was lost.
+         */
         override fun onLost(network: Network) {
             super.onLost(network)
             config.addLog("Network Callback: onLost. Re-evaluating routing.")
@@ -65,6 +73,12 @@ class TunnelGuardVpnService : VpnService() {
             serviceScope.launch { checkAndRunVpnRouting() }
         }
 
+        /**
+         * Re-evaluates VPN routing when a network's capabilities change.
+         *
+         * @param network The network whose capabilities changed.
+         * @param networkCapabilities The updated capabilities of the network.
+         */
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             super.onCapabilitiesChanged(network, networkCapabilities)
             val transports = mutableListOf<String>()
@@ -78,6 +92,12 @@ class TunnelGuardVpnService : VpnService() {
     }
 
     private val screenReceiver = object : BroadcastReceiver() {
+        /**
+         * Re-evaluates VPN protection in response to a screen or user-presence event.
+         *
+         * @param context The context receiving the event.
+         * @param intent The event intent.
+         */
         override fun onReceive(context: Context, intent: Intent) {
             config.addLog("Screen/Wake event: ${intent.action}. Re-evaluating protection.")
             serviceScope.launch { checkAndRunVpnRouting() }
@@ -334,6 +354,11 @@ class TunnelGuardVpnService : VpnService() {
         monitorJob = null
     }
 
+    /**
+     * Handles service start, update, and stop commands, registering required callbacks and evaluating VPN routing.
+     *
+     * @return `START_NOT_STICKY` when the service is stopped; `START_STICKY` for normal operation.
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         config.addLog("VpnService received action: $action")
@@ -416,6 +441,9 @@ class TunnelGuardVpnService : VpnService() {
         config.addLog("VpnService destroyed")
     }
 
+    /**
+     * Handles system revocation of the VPN service when another VPN becomes active.
+     */
     override fun onRevoke() {
         config.addLog("VpnService revoked by the system (another VPN started).")
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")

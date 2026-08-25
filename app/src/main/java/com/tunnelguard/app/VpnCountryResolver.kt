@@ -33,9 +33,10 @@ class VpnCountryResolver(
     }
 
     /**
-     * Resolves the country code for the given [network].
+     * Resolves and caches the country code associated with the given network.
      *
-     * Returns cached country code if still valid, otherwise queries GeoIP providers.
+     * @param network The network whose country code should be resolved, or `null` for the default network.
+     * @return A country code, a stale cached code while lookup is pending, or `null` if no code is available.
      */
     fun resolveCountry(network: Network?): String? {
         val netKey = network?.toString() ?: "default"
@@ -55,6 +56,14 @@ class VpnCountryResolver(
         return performLookup(network, netKey, now)
     }
 
+    /**
+     * Resolves and caches the country code for a network using the configured GeoIP providers.
+     *
+     * @param network The network used for the lookup, when available.
+     * @param netKey The cache key associated with the network.
+     * @param now The timestamp to associate with the resolved country code.
+     * @return The resolved uppercase country code, or `null` if all providers fail.
+     */
     private fun performLookup(network: Network?, netKey: String, now: Long): String? {
         for (endpoint in GEOIP_ENDPOINTS) {
             try {
@@ -83,15 +92,28 @@ class VpnCountryResolver(
         return null
     }
 
+    /**
+     * Removes the cached country data for the specified network.
+     *
+     * @param network The network whose cached country data should be removed, or `null` for the default network.
+     */
     fun clearCacheForNetwork(network: Network?) {
         val netKey = network?.toString() ?: "default"
         cache.remove(netKey)
     }
 
+    /**
+     * Clears all cached country resolutions.
+     */
     fun clearCache() {
         cache.clear()
     }
 
+    /**
+     * Determines whether execution is currently on Android's main thread.
+     *
+     * @return `true` if execution is on the main thread, `false` otherwise.
+     */
     private fun isMainThread(): Boolean {
         return try {
             val mainLooper = android.os.Looper.getMainLooper()
@@ -102,6 +124,12 @@ class VpnCountryResolver(
         }
     }
 
+    /**
+     * Extracts and normalizes a country code from a GeoIP JSON response.
+     *
+     * @param jsonStr The JSON response containing a country or country_code field.
+     * @return The uppercase country code when it contains two or three characters, or null otherwise.
+     */
     private fun parseCountryCodeFromJson(jsonStr: String): String? {
         return try {
             val json = JSONObject(jsonStr)
@@ -125,6 +153,13 @@ class VpnCountryResolver(
         }
     }
 
+    /**
+     * Fetches the response body from a GeoIP endpoint over the specified network.
+     *
+     * @param network The network used for the request, or the default network when null.
+     * @param urlStr The URL of the GeoIP endpoint.
+     * @return The response body when the request succeeds with HTTP 200; null otherwise.
+     */
     private fun executeHttpRequest(network: Network?, urlStr: String): String? {
         var conn: HttpURLConnection? = null
         return try {
