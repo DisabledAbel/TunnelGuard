@@ -1,6 +1,9 @@
 package com.tunnelguard.app
 
 import android.net.Network
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -42,6 +45,17 @@ class VpnCountryResolver(
             return cached.countryCode
         }
 
+        if (isMainThread()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                performLookup(network, netKey, now)
+            }
+            return cached?.countryCode
+        }
+
+        return performLookup(network, netKey, now)
+    }
+
+    private fun performLookup(network: Network?, netKey: String, now: Long): String? {
         for (endpoint in GEOIP_ENDPOINTS) {
             try {
                 val responseText = if (fetcher != null) {
@@ -76,6 +90,16 @@ class VpnCountryResolver(
 
     fun clearCache() {
         cache.clear()
+    }
+
+    private fun isMainThread(): Boolean {
+        return try {
+            val mainLooper = android.os.Looper.getMainLooper()
+            val myLooper = android.os.Looper.myLooper()
+            mainLooper != null && myLooper == mainLooper
+        } catch (e: Throwable) {
+            false
+        }
     }
 
     private fun parseCountryCodeFromJson(jsonStr: String): String? {
