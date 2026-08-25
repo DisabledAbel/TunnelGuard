@@ -235,10 +235,10 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:nextFocusUp="@+id/layout_pref_vpn_choice"
-                android:nextFocusDown="@+id/btn_launch_diagnostics"
+                android:nextFocusDown="@+id/layout_pref_country_vpn"
                 android:orientation="horizontal"
                 android:padding="12dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="8dp"
                 android:contentDescription="Auto-Connect VPN option, currently enabled. Double click to toggle.">
 
                 <LinearLayout
@@ -268,6 +268,86 @@
                     android:focusable="false" />
             </LinearLayout>
 
+            <!-- Country-Specific VPN Enforcer Row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_country_vpn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:nextFocusUp="@+id/layout_pref_auto_connect"
+                android:nextFocusDown="@+id/layout_pref_target_country"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:layout_marginBottom="8dp"
+                android:contentDescription="Country-Specific VPN option, currently disabled. Double click to toggle.">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Country-Specific VPN Enforcer"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Require VPN connection to match a specific country"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+                <CheckBox
+                    android:id="@+id/cb_pref_country_vpn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
+            </LinearLayout>
+
+            <!-- Target Country Selection Row -->
+            <LinearLayout
+                android:id="@+id/layout_pref_target_country"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_item_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:nextFocusUp="@+id/layout_pref_country_vpn"
+                android:nextFocusDown="@+id/btn_launch_diagnostics"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Target Country"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/tv_pref_target_country_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="United States (US)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
 
             <!-- ================= DIAGNOSTICS SECTION ================= -->
             <TextView
@@ -286,7 +366,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/layout_pref_auto_connect"
+                android:nextFocusUp="@+id/layout_pref_target_country"
                 android:nextFocusDown="@+id/btn_settings_export_logs"
                 android:padding="12dp"
                 android:text="View Diagnostics Screen"
