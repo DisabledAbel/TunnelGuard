@@ -122,7 +122,10 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
-                        val evalCountry = networkCountryResolver?.invoke(network) ?: networkCountryCode ?: getActiveVpnCountryCode()
+                        val evalCountry = networkCountryResolver?.invoke(network)
+                            ?: networkCountryCode
+                            ?: (if (isCountryVpnSettingEnabled()) VpnCountryResolver(this).resolveCountry(network) else null)
+                            ?: getActiveVpnCountryCode()
                         if (isCountryVpnSettingEnabled() && !isCountryVpnMatch(evalCountry)) {
                             addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: $evalCountry)", "WARN")
                             foundMismatchedVpn = true

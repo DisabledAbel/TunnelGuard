@@ -61,6 +61,7 @@ class TunnelGuardVpnService : VpnService() {
         override fun onLost(network: Network) {
             super.onLost(network)
             config.addLog("Network Callback: onLost. Re-evaluating routing.")
+            (vpnDetector as? DefaultVpnDetector)?.countryResolver?.clearCacheForNetwork(network)
             checkAndRunVpnRouting()
         }
 
