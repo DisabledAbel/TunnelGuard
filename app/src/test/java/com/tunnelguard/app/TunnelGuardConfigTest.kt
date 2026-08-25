@@ -483,6 +483,41 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testCountryVpnPreferencesAndMatching() {
+        // Defaults
+        assertFalse(config.isCountryVpnSettingEnabled())
+        assertEquals("US", config.getCountryVpnTargetCountry())
+        assertEquals("", config.getActiveVpnCountryCode())
+
+        // Enable setting
+        config.setCountryVpnSettingEnabled(true)
+        assertTrue(config.isCountryVpnSettingEnabled())
+
+        // Set target country
+        config.setCountryVpnTargetCountry("gb")
+        assertEquals("GB", config.getCountryVpnTargetCountry())
+
+        // Set active country
+        config.setActiveVpnCountryCode("gb")
+        assertEquals("GB", config.getActiveVpnCountryCode())
+
+        // Test matching
+        assertTrue(config.isCountryVpnMatch("GB"))
+        assertTrue(config.isCountryVpnMatch("gb "))
+        assertFalse(config.isCountryVpnMatch("US"))
+        assertFalse(config.isCountryVpnMatch(""))
+
+        // Test Target ANY
+        config.setCountryVpnTargetCountry("ANY")
+        assertTrue(config.isCountryVpnMatch("CA"))
+
+        // Test setting disabled returns true regardless of country
+        config.setCountryVpnSettingEnabled(false)
+        config.setCountryVpnTargetCountry("DE")
+        assertTrue(config.isCountryVpnMatch("JP"))
+    }
+
+    @Test
     fun testOnboardingConfigPersistence() {
         assertFalse(config.isOnboardingCompleted())
         config.setOnboardingCompleted(true)

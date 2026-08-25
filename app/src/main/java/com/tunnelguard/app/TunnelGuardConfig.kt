@@ -28,6 +28,9 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_VERSION_NAME = "override_version_name"
         private const val KEY_FORCE_UPDATES = "forced_updates_enabled"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        private const val KEY_COUNTRY_VPN_ENABLED = "country_vpn_setting_enabled"
+        private const val KEY_COUNTRY_VPN_TARGET = "country_vpn_target_country"
+        private const val KEY_ACTIVE_VPN_COUNTRY = "active_vpn_country"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -114,6 +117,10 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
+                        if (isCountryVpnSettingEnabled() && !isCountryVpnMatch()) {
+                            addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: ${getActiveVpnCountryCode()})", "WARN")
+                            return VpnDetectionResult.VPN_NOT_DETECTED
+                        }
                         return VpnDetectionResult.VPN_DETECTED
                     }
                 }
@@ -630,6 +637,8 @@ class TunnelGuardConfig(private val context: Context) {
             obj.put("app_monitor_enabled", isAppMonitorEnabled())
             obj.put("forced_updates_enabled", isForcedUpdatesEnabled())
             obj.put("auto_connect_vpn_enabled", isAutoConnectVpnEnabled())
+            obj.put("country_vpn_setting_enabled", isCountryVpnSettingEnabled())
+            obj.put("country_vpn_target_country", getCountryVpnTargetCountry())
             obj.put("selected_profile_id", getSelectedProfileId())
 
             val profilesStr = prefs.getString("protection_profiles", null)
@@ -650,6 +659,8 @@ class TunnelGuardConfig(private val context: Context) {
             val appMonitorEnabled = obj.optBoolean("app_monitor_enabled", false)
             val forcedUpdatesEnabled = obj.optBoolean("forced_updates_enabled", true)
             val autoConnectVpnEnabled = obj.optBoolean("auto_connect_vpn_enabled", true)
+            val countryVpnEnabled = obj.optBoolean("country_vpn_setting_enabled", false)
+            val countryVpnTarget = obj.optString("country_vpn_target_country", "US")
             val selectedProfileId = obj.optString("selected_profile_id", "streaming")
 
             val pkgRegex = Regex("^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+$")
@@ -682,6 +693,8 @@ class TunnelGuardConfig(private val context: Context) {
             setAppMonitorEnabled(appMonitorEnabled)
             setForcedUpdatesEnabled(forcedUpdatesEnabled)
             setAutoConnectVpnEnabled(autoConnectVpnEnabled)
+            setCountryVpnSettingEnabled(countryVpnEnabled)
+            setCountryVpnTargetCountry(countryVpnTarget)
 
             if (validatedProfiles.isNotEmpty()) {
                 saveProfiles(validatedProfiles)
@@ -753,6 +766,47 @@ class TunnelGuardConfig(private val context: Context) {
     fun setAutoConnectVpnEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("auto_connect_vpn_enabled", enabled).apply()
         addLog("Auto-Connect VPN set to: $enabled")
+    }
+
+    /**
+     * Country-Specific VPN Preference & Utilities
+     */
+    fun isCountryVpnSettingEnabled(): Boolean {
+        return prefs.getBoolean(KEY_COUNTRY_VPN_ENABLED, false)
+    }
+
+    fun setCountryVpnSettingEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_COUNTRY_VPN_ENABLED, enabled).apply()
+        addLog("Country-Specific VPN setting enabled set to: $enabled")
+    }
+
+    fun getCountryVpnTargetCountry(): String {
+        return prefs.getString(KEY_COUNTRY_VPN_TARGET, "US") ?: "US"
+    }
+
+    fun setCountryVpnTargetCountry(countryCode: String) {
+        val uppercaseCode = countryCode.uppercase().trim()
+        prefs.edit().putString(KEY_COUNTRY_VPN_TARGET, uppercaseCode).apply()
+        addLog("Country-Specific VPN target country set to: $uppercaseCode")
+    }
+
+    fun getActiveVpnCountryCode(): String {
+        return prefs.getString(KEY_ACTIVE_VPN_COUNTRY, "") ?: ""
+    }
+
+    fun setActiveVpnCountryCode(countryCode: String?) {
+        val uppercaseCode = countryCode?.uppercase()?.trim() ?: ""
+        prefs.edit().putString(KEY_ACTIVE_VPN_COUNTRY, uppercaseCode).apply()
+        addLog("Active VPN country code updated to: $uppercaseCode")
+    }
+
+    fun isCountryVpnMatch(detectedCountryCode: String? = getActiveVpnCountryCode()): Boolean {
+        if (!isCountryVpnSettingEnabled()) return true
+        val target = getCountryVpnTargetCountry()
+        if (target.equals("ANY", ignoreCase = true)) return true
+        val detected = (detectedCountryCode ?: getActiveVpnCountryCode()).trim()
+        if (detected.isEmpty()) return false
+        return detected.equals(target, ignoreCase = true)
     }
 
     fun hasSystemAlertWindowPermission(): Boolean {

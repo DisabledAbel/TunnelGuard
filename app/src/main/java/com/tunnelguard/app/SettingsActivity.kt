@@ -38,6 +38,10 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvPrefVpnChoiceValue: TextView
     private lateinit var layoutPrefAutoConnect: LinearLayout
     private lateinit var cbPrefAutoConnect: CheckBox
+    private lateinit var layoutPrefCountryVpn: LinearLayout
+    private lateinit var cbPrefCountryVpn: CheckBox
+    private lateinit var layoutPrefTargetCountry: LinearLayout
+    private lateinit var tvPrefTargetCountryValue: TextView
 
     private lateinit var btnLaunchDiagnostics: Button
     private lateinit var btnExportLogs: Button
@@ -101,6 +105,10 @@ class SettingsActivity : AppCompatActivity() {
         tvPrefVpnChoiceValue = findViewById(R.id.tv_pref_vpn_choice_value)
         layoutPrefAutoConnect = findViewById(R.id.layout_pref_auto_connect)
         cbPrefAutoConnect = findViewById(R.id.cb_pref_auto_connect)
+        layoutPrefCountryVpn = findViewById(R.id.layout_pref_country_vpn)
+        cbPrefCountryVpn = findViewById(R.id.cb_pref_country_vpn)
+        layoutPrefTargetCountry = findViewById(R.id.layout_pref_target_country)
+        tvPrefTargetCountryValue = findViewById(R.id.tv_pref_target_country_value)
 
         btnLaunchDiagnostics = findViewById(R.id.btn_launch_diagnostics)
         btnExportLogs = findViewById(R.id.btn_settings_export_logs)
@@ -128,15 +136,18 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
         cbPrefMonitor.isChecked = config.isAppMonitorEnabled()
         cbPrefAutoConnect.isChecked = config.isAutoConnectVpnEnabled()
+        cbPrefCountryVpn.isChecked = config.isCountryVpnSettingEnabled()
 
         updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
         updateRowAccessibilityDescription(layoutPrefBoot, "Start on Boot", config.isStartOnBootEnabled())
         updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
         updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
         updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", config.isAutoConnectVpnEnabled())
+        updateRowAccessibilityDescription(layoutPrefCountryVpn, "Country-Specific VPN", config.isCountryVpnSettingEnabled())
 
         updateVersionDisplay()
         updateVpnAppOfChoiceDisplay()
+        updateTargetCountryDisplay()
         updateSimulatedControlsVisibility()
 
         // --- SECTION 1: PROTECTION ---
@@ -225,6 +236,18 @@ class SettingsActivity : AppCompatActivity() {
             config.setAutoConnectVpnEnabled(newChecked)
             cbPrefAutoConnect.isChecked = newChecked
             updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", newChecked)
+        }
+
+        layoutPrefCountryVpn.setOnClickListener {
+            val newChecked = !config.isCountryVpnSettingEnabled()
+            config.setCountryVpnSettingEnabled(newChecked)
+            cbPrefCountryVpn.isChecked = newChecked
+            updateRowAccessibilityDescription(layoutPrefCountryVpn, "Country-Specific VPN", newChecked)
+            triggerVpnServiceUpdate()
+        }
+
+        layoutPrefTargetCountry.setOnClickListener {
+            showTargetCountryDialog()
         }
 
         // --- SECTION 2: DIAGNOSTICS ---
@@ -409,6 +432,53 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             tvPrefVpnChoiceValue.text = "None (System Settings)"
         }
+    }
+
+    private fun updateTargetCountryDisplay() {
+        val target = config.getCountryVpnTargetCountry()
+        val displayName = when (target) {
+            "US" -> "United States (US)"
+            "GB" -> "United Kingdom (GB)"
+            "DE" -> "Germany (DE)"
+            "CA" -> "Canada (CA)"
+            "JP" -> "Japan (JP)"
+            "AU" -> "Australia (AU)"
+            "FR" -> "France (FR)"
+            "NL" -> "Netherlands (NL)"
+            "ANY" -> "Any Country (ANY)"
+            else -> "$target ($target)"
+        }
+        tvPrefTargetCountryValue.text = displayName
+    }
+
+    private fun showTargetCountryDialog() {
+        val countries = arrayOf(
+            "United States (US)",
+            "United Kingdom (GB)",
+            "Germany (DE)",
+            "Canada (CA)",
+            "Japan (JP)",
+            "Australia (AU)",
+            "France (FR)",
+            "Netherlands (NL)",
+            "Any Country (ANY)"
+        )
+        val codes = arrayOf("US", "GB", "DE", "CA", "JP", "AU", "FR", "NL", "ANY")
+
+        val currentCode = config.getCountryVpnTargetCountry()
+        var selectedIndex = codes.indexOf(currentCode)
+        if (selectedIndex < 0) selectedIndex = 0
+
+        AlertDialog.Builder(this)
+            .setTitle("Select Target Country")
+            .setSingleChoiceItems(countries, selectedIndex) { dialog, which ->
+                config.setCountryVpnTargetCountry(codes[which])
+                updateTargetCountryDisplay()
+                triggerVpnServiceUpdate()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun updateSimulatedControlsVisibility() {
@@ -608,6 +678,7 @@ class SettingsActivity : AppCompatActivity() {
             cbPrefBoot.isChecked = config.isStartOnBootEnabled()
             cbPrefSimulation.isChecked = config.isSimulatedVpnEnabled()
             cbPrefAutoConnect.isChecked = config.isAutoConnectVpnEnabled()
+            cbPrefCountryVpn.isChecked = config.isCountryVpnSettingEnabled()
 
             // 4. Update row accessibility descriptions
             updateRowAccessibilityDescription(layoutPrefProtection, "Enable Protection", config.isProtectionEnabled())
@@ -615,8 +686,10 @@ class SettingsActivity : AppCompatActivity() {
             updateRowAccessibilityDescription(layoutPrefSimulation, "Simulation Mode", config.isSimulatedVpnEnabled())
             updateRowAccessibilityDescription(layoutPrefMonitor, "Monitor Protected Apps", config.isAppMonitorEnabled())
             updateRowAccessibilityDescription(layoutPrefAutoConnect, "Auto-Connect VPN", config.isAutoConnectVpnEnabled())
+            updateRowAccessibilityDescription(layoutPrefCountryVpn, "Country-Specific VPN", config.isCountryVpnSettingEnabled())
 
             updateVpnAppOfChoiceDisplay()
+            updateTargetCountryDisplay()
             updateSimulatedControlsVisibility()
 
             if (vpnAuthWarningRequired) {
