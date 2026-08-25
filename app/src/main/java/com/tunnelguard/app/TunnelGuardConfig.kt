@@ -54,7 +54,7 @@ class TunnelGuardConfig(private val context: Context) {
      *         [VpnDetectionResult.VPN_NOT_DETECTED] if all networks were inspected and no external VPN was found,
      *         or [VpnDetectionResult.VPN_UNKNOWN] if network inspection was incomplete or encountered an exception.
      */
-    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?): VpnDetectionResult {
+    fun detectRealVpnCapabilities(connectivityManager: ConnectivityManager?, networkCountryCode: String? = null): VpnDetectionResult {
         if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
             var encounteredUnknown = false
@@ -117,8 +117,9 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
-                        if (isCountryVpnSettingEnabled() && !isCountryVpnMatch()) {
-                            addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: ${getActiveVpnCountryCode()})", "WARN")
+                        val evalCountry = networkCountryCode ?: getActiveVpnCountryCode()
+                        if (isCountryVpnSettingEnabled() && !isCountryVpnMatch(evalCountry)) {
+                            addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: $evalCountry)", "WARN")
                             return VpnDetectionResult.VPN_NOT_DETECTED
                         }
                         return VpnDetectionResult.VPN_DETECTED
@@ -396,6 +397,7 @@ class TunnelGuardConfig(private val context: Context) {
             }
         } else {
             prefs.edit().putLong("vpn_connection_start_time", 0L).apply()
+            setActiveVpnCountryCode(null)
         }
     }
 
