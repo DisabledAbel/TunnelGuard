@@ -58,11 +58,11 @@ jobs:
 
       - name: Run Android Emulator Tests
         uses: ReactiveCircus/android-emulator-runner@v2
+        timeout-minutes: 20
         with:
           api-level: 30
           target: google_apis
           arch: x86_64
-          force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           disable-animations: true
           script: ./gradlew connectedCheck --stacktrace

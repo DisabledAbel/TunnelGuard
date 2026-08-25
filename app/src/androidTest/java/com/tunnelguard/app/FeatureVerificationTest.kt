@@ -9,6 +9,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -49,7 +50,7 @@ class FeatureVerificationTest {
 
         val scenario = ActivityScenario.launch(OnboardingActivity::class.java)
 
-        // Verify onboarding title and Get Started button are visible
+        // Verify onboarding title and Get Started button are visible using view IDs
         onView(withId(R.id.tv_onboarding_title)).check(matches(isDisplayed()))
         onView(withId(R.id.btn_get_started)).check(matches(isDisplayed()))
 
@@ -69,13 +70,15 @@ class FeatureVerificationTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
 
-        // Verify main title and core dashboard elements are displayed
+        // Verify main title and core top dashboard elements are displayed using view IDs
         onView(withId(R.id.title_tunnel_guard)).check(matches(isDisplayed()))
         onView(withId(R.id.tv_protection_status)).check(matches(isDisplayed()))
         onView(withId(R.id.btn_toggle_protection)).check(matches(isDisplayed()))
         onView(withId(R.id.btn_toggle_emergency)).check(matches(isDisplayed()))
-        onView(withId(R.id.btn_settings)).check(matches(isDisplayed()))
-        onView(withId(R.id.btn_logs_dashboard)).check(matches(isDisplayed()))
+
+        // Scroll to buttons lower down in the ScrollView before checking visibility
+        onView(withId(R.id.btn_logs_dashboard)).perform(scrollTo()).check(matches(isDisplayed()))
+        onView(withId(R.id.btn_settings)).perform(scrollTo()).check(matches(isDisplayed()))
 
         scenario.close()
     }
@@ -84,21 +87,18 @@ class FeatureVerificationTest {
     fun testSettingsActivityPreferencesToggle() {
         val scenario = ActivityScenario.launch(SettingsActivity::class.java)
 
-        // Verify Settings activity opens and shows title
-        onView(withText("TunnelGuard Settings")).check(matches(isDisplayed()))
+        // Verify Settings activity header is displayed using view ID
+        onView(withId(R.id.tv_settings_header)).check(matches(isDisplayed()))
 
-        // Verify preference setters & getters on config
-        config.setAutoConnectVpnEnabled(true)
-        assertTrue("Auto connect VPN should be enabled", config.isAutoConnectVpnEnabled())
+        val initialAutoConnect = config.isAutoConnectVpnEnabled()
 
-        config.setAutoConnectVpnEnabled(false)
-        assertFalse("Auto connect VPN should be disabled after setting to false", config.isAutoConnectVpnEnabled())
+        // Exercise real UI switch row in SettingsActivity
+        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
+        assertEquals("Auto connect VPN preference should toggle after UI row click", !initialAutoConnect, config.isAutoConnectVpnEnabled())
 
-        config.setCountryVpnSettingEnabled(true)
-        assertTrue("Country VPN setting should be enabled", config.isCountryVpnSettingEnabled())
-
-        config.setForcedUpdatesEnabled(true)
-        assertTrue("Forced updates should be enabled", config.isForcedUpdatesEnabled())
+        // Toggle back via UI interaction
+        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
+        assertEquals("Auto connect VPN preference should return to initial state after second click", initialAutoConnect, config.isAutoConnectVpnEnabled())
 
         scenario.close()
     }
@@ -107,15 +107,14 @@ class FeatureVerificationTest {
     fun testDiagnosticsActivityReportAndActions() {
         val scenario = ActivityScenario.launch(DiagnosticsActivity::class.java)
 
-        // Verify Diagnostics header and cards are displayed
+        // Verify Diagnostics header and cards are displayed using view IDs
         onView(withId(R.id.tv_diagnostics_header)).check(matches(isDisplayed()))
         onView(withId(R.id.diag_vpn_state)).check(matches(isDisplayed()))
         onView(withId(R.id.diag_protection_state)).check(matches(isDisplayed()))
         onView(withId(R.id.diag_android_version)).check(matches(isDisplayed()))
-        onView(withId(R.id.btn_refresh_diag)).check(matches(isDisplayed()))
 
-        // Perform refresh click after scrolling into view
-        onView(withId(R.id.btn_refresh_diag)).perform(scrollTo(), click())
+        // Scroll to refresh button in ScrollView before checking visibility and clicking
+        onView(withId(R.id.btn_refresh_diag)).perform(scrollTo()).check(matches(isDisplayed())).perform(click())
 
         scenario.close()
     }
@@ -124,7 +123,7 @@ class FeatureVerificationTest {
     fun testLogsDashboardActivityDisplay() {
         val scenario = ActivityScenario.launch(LogsDashboardActivity::class.java)
 
-        // Verify Logs Dashboard header and action buttons exist
+        // Verify Logs Dashboard header and action buttons exist using view IDs
         onView(withId(R.id.tv_logs_header)).check(matches(isDisplayed()))
         onView(withId(R.id.btn_clear_app_logs)).check(matches(isDisplayed()))
 
@@ -138,19 +137,35 @@ class FeatureVerificationTest {
         config.setEmergencyLockEnabled(false)
         config.setAppProtected("com.example.testapp", true)
 
-        val json = config.exportConfigToJson()
-        assertNotNull("Exported config JSON should not be null", json)
-        assertTrue("JSON should contain test package name", json!!.contains("com.example.testapp"))
+        val jsonStr = config.exportConfigToJson()
+        assertNotNull("Exported config JSON should not be null", jsonStr)
+
+        // Parse exported JSON structure and inspect streaming profile's app packages
+        val exportedJson = JSONObject(jsonStr!!)
+        val profilesArr = exportedJson.getJSONArray("protection_profiles")
+        var foundProtectedAppInProfile = false
+        for (i in 0 until profilesArr.length()) {
+            val profileObj = profilesArr.getJSONObject(i)
+            if (profileObj.getString("id") == config.getSelectedProfileId()) {
+                val appsArr = profileObj.getJSONArray("apps")
+                for (j in 0 until appsArr.length()) {
+                    if (appsArr.getString(j) == "com.example.testapp") {
+                        foundProtectedAppInProfile = true
+                    }
+                }
+            }
+        }
+        assertTrue("Exported JSON profile apps array should contain 'com.example.testapp'", foundProtectedAppInProfile)
 
         // Reset config and restore
         config.setProtectedApps(emptySet())
         assertFalse("Protected apps should be empty after clear", config.isAppProtected("com.example.testapp"))
 
-        val importSuccess = config.importConfigFromJson(json)
+        val importSuccess = config.importConfigFromJson(jsonStr)
         assertTrue("Config import should succeed", importSuccess)
         assertTrue("Protected apps should include restored package", config.isAppProtected("com.example.testapp"))
 
-        // Test Security State Machine calculation on device when protection is disabled
+        // Explicitly set protection disabled to verify INACTIVE security state computation precondition
         config.setProtectionEnabled(false)
         val state = SecurityStateMachine.getSecurityState(
             context = context,
@@ -160,6 +175,6 @@ class FeatureVerificationTest {
             isTunnelEstablished = false,
             connectivityManager = null
         )
-        assertEquals("Inactive security state should equal INACTIVE", SecurityState.INACTIVE, state)
+        assertEquals("Inactive security state should equal INACTIVE when protection is disabled", SecurityState.INACTIVE, state)
     }
 }
