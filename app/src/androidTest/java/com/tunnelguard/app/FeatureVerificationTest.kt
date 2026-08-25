@@ -84,10 +84,10 @@ class FeatureVerificationTest {
     fun testSettingsActivityPreferencesToggle() {
         val scenario = ActivityScenario.launch(SettingsActivity::class.java)
 
-        // Verify Settings activity opens and shows developer name
+        // Verify Settings activity opens and shows title
         onView(withText("TunnelGuard Settings")).check(matches(isDisplayed()))
 
-        // Verify initial preference values in config
+        // Verify preference setters & getters on config
         config.setAutoConnectVpnEnabled(true)
         assertTrue("Auto connect VPN should be enabled", config.isAutoConnectVpnEnabled())
 
@@ -97,8 +97,8 @@ class FeatureVerificationTest {
         config.setCountryVpnSettingEnabled(true)
         assertTrue("Country VPN setting should be enabled", config.isCountryVpnSettingEnabled())
 
-        config.setDisableSubtitlesDefault(true)
-        assertTrue("Disable subtitles should be enabled", config.isDisableSubtitlesDefault())
+        config.setForcedUpdatesEnabled(true)
+        assertTrue("Forced updates should be enabled", config.isForcedUpdatesEnabled())
 
         scenario.close()
     }
@@ -136,14 +136,14 @@ class FeatureVerificationTest {
         // Test TunnelGuardConfig serialization and backup/restore on device
         config.setProtectionEnabled(true)
         config.setEmergencyLockEnabled(false)
-        config.addProtectedApp("com.example.testapp")
+        config.setAppProtected("com.example.testapp", true)
 
         val json = config.exportConfigToJson()
         assertNotNull("Exported config JSON should not be null", json)
-        assertTrue("JSON should contain test package name", json.contains("com.example.testapp"))
+        assertTrue("JSON should contain test package name", json!!.contains("com.example.testapp"))
 
         // Reset config and restore
-        config.clearProtectedApps()
+        config.setProtectedApps(emptySet())
         assertFalse("Protected apps should be empty after clear", config.isAppProtected("com.example.testapp"))
 
         val importSuccess = config.importConfigFromJson(json)
@@ -152,11 +152,12 @@ class FeatureVerificationTest {
 
         // Test Security State Machine calculation on device
         val state = SecurityStateMachine.getSecurityState(
+            context = context,
+            config = config,
             isServiceRunning = false,
+            isServiceStarting = false,
             isTunnelEstablished = false,
-            vpnDetectionResult = VpnDetectionResult.VPN_NOT_DETECTED,
-            isProtectionEnabled = false,
-            isEmergencyLockEnabled = false
+            connectivityManager = null
         )
         assertEquals("Inactive security state should equal INACTIVE", SecurityState.INACTIVE, state)
     }
