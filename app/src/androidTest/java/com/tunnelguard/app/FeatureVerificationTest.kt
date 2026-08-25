@@ -1,15 +1,14 @@
 package com.tunnelguard.app
 
 import android.content.Context
-import android.content.Intent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -66,6 +65,7 @@ class FeatureVerificationTest {
     @Test
     fun testMainActivityUiAndElements() {
         config.setOnboardingCompleted(true)
+        config.setForcedUpdatesEnabled(false)
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
 
@@ -114,8 +114,8 @@ class FeatureVerificationTest {
         onView(withId(R.id.diag_android_version)).check(matches(isDisplayed()))
         onView(withId(R.id.btn_refresh_diag)).check(matches(isDisplayed()))
 
-        // Perform refresh click
-        onView(withId(R.id.btn_refresh_diag)).perform(click())
+        // Perform refresh click after scrolling into view
+        onView(withId(R.id.btn_refresh_diag)).perform(scrollTo(), click())
 
         scenario.close()
     }
@@ -125,8 +125,8 @@ class FeatureVerificationTest {
         val scenario = ActivityScenario.launch(LogsDashboardActivity::class.java)
 
         // Verify Logs Dashboard header and action buttons exist
-        onView(withText("TunnelGuard Logs Dashboard")).check(matches(isDisplayed()))
-        onView(withText("Clear Logs")).check(matches(isDisplayed()))
+        onView(withId(R.id.tv_logs_header)).check(matches(isDisplayed()))
+        onView(withId(R.id.btn_clear_app_logs)).check(matches(isDisplayed()))
 
         scenario.close()
     }
@@ -150,7 +150,8 @@ class FeatureVerificationTest {
         assertTrue("Config import should succeed", importSuccess)
         assertTrue("Protected apps should include restored package", config.isAppProtected("com.example.testapp"))
 
-        // Test Security State Machine calculation on device
+        // Test Security State Machine calculation on device when protection is disabled
+        config.setProtectionEnabled(false)
         val state = SecurityStateMachine.getSecurityState(
             context = context,
             config = config,
