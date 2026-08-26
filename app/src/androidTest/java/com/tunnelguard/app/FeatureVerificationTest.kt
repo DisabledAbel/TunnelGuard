@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -105,12 +106,12 @@ class FeatureVerificationTest {
 
         val initialAutoConnect = config.isAutoConnectVpnEnabled()
 
-        // Exercise real UI switch row in SettingsActivity
-        onView(withId(R.id.layout_pref_auto_connect)).perform(click())
+        // Exercise real UI switch row in SettingsActivity with scrollTo() for ScrollView compatibility
+        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
         assertEquals("Auto connect VPN preference should toggle after UI row click", !initialAutoConnect, config.isAutoConnectVpnEnabled())
 
         // Toggle back via UI interaction
-        onView(withId(R.id.layout_pref_auto_connect)).perform(click())
+        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
         assertEquals("Auto connect VPN preference should return to initial state after second click", initialAutoConnect, config.isAutoConnectVpnEnabled())
 
         scenario.close()
@@ -125,7 +126,9 @@ class FeatureVerificationTest {
         onView(withId(R.id.diag_vpn_state)).check(matches(isViewVisible()))
         onView(withId(R.id.diag_protection_state)).check(matches(isViewVisible()))
         onView(withId(R.id.diag_android_version)).check(matches(isViewVisible()))
-        onView(withId(R.id.btn_refresh_diag)).check(matches(isViewVisible()))
+
+        // Scroll to refresh button and click
+        onView(withId(R.id.btn_refresh_diag)).perform(scrollTo(), click())
 
         scenario.close()
     }

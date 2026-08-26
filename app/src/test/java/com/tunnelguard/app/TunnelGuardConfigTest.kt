@@ -21,9 +21,6 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.*
 
-/**
- * Unit tests for TunnelGuardConfig configuration management and VPN detection logic.
- */
 class TunnelGuardConfigTest {
 
     private lateinit var mockContext: Context

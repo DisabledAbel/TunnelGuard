@@ -23,12 +23,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 
-/**
- * Settings screen activity for TunnelGuard configuration.
- *
- * Provides UI for managing protection settings, VPN preferences, country-specific VPN settings,
- * app selection, diagnostics access, configuration import/export, and update checks.
- */
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var config: TunnelGuardConfig
