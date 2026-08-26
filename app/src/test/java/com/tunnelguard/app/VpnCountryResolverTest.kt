@@ -11,6 +11,9 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.whenever
 
+/**
+ * Unit tests for VpnCountryResolver GeoIP lookup and caching behavior.
+ */
 class VpnCountryResolverTest {
 
     private lateinit var mockContext: Context

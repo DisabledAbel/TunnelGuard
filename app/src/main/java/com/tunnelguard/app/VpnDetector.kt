@@ -2,6 +2,9 @@ package com.tunnelguard.app
 
 import android.net.ConnectivityManager
 
+/**
+ * Interface for detecting VPN connection state and capabilities.
+ */
 interface VpnDetector {
     /**
  * Detects the current VPN state.
@@ -12,6 +15,12 @@ interface VpnDetector {
 fun detectVpnState(connectivityManager: ConnectivityManager?): VpnDetectionResult
 }
 
+/**
+ * Default implementation of VPN detection that uses dynamic country resolution.
+ *
+ * @param config The TunnelGuard configuration instance.
+ * @param countryResolver The resolver used to determine the country code of detected VPN connections.
+ */
 class DefaultVpnDetector(
     private val config: TunnelGuardConfig,
     val countryResolver: VpnCountryResolver = config.defaultCountryResolver
