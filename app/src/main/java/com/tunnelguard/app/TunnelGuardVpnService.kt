@@ -25,9 +25,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 
-/**
- * Enumeration of possible VPN service states.
- */
 enum class ServiceState {
     NO_VPN,
     TUNNELGUARD_STARTING,
@@ -38,13 +35,6 @@ enum class ServiceState {
     ERROR
 }
 
-/**
- * VPN service implementation for TunnelGuard protection.
- *
- * Establishes a local VPN tunnel to monitor and block protected applications when
- * an external VPN connection is not detected. Monitors network changes, manages
- * VPN lifecycle, and coordinates with country-specific VPN detection.
- */
 class TunnelGuardVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
