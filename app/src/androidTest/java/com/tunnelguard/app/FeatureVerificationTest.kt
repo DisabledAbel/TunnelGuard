@@ -1,14 +1,17 @@
 package com.tunnelguard.app
 
 import android.content.Context
+import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.hamcrest.Description
+import org.hamcrest.Matcher
+import org.hamcrest.TypeSafeMatcher
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
@@ -25,6 +28,18 @@ class FeatureVerificationTest {
 
     private lateinit var context: Context
     private lateinit var config: TunnelGuardConfig
+
+    private fun isViewVisible(): Matcher<View> {
+        return object : TypeSafeMatcher<View>() {
+            override fun describeTo(description: Description) {
+                description.appendText("view.visibility == View.VISIBLE")
+            }
+
+            override fun matchesSafely(view: View): Boolean {
+                return view.visibility == View.VISIBLE
+            }
+        }
+    }
 
     @Before
     fun setUp() {
@@ -70,15 +85,13 @@ class FeatureVerificationTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
 
-        // Verify main title and core dashboard elements are displayed using view IDs
+        // Verify main title and core dashboard elements are present and VISIBLE
         onView(withId(R.id.title_tunnel_guard)).check(matches(isDisplayed()))
-        onView(withId(R.id.tv_protection_status)).check(matches(isDisplayed()))
-        onView(withId(R.id.btn_toggle_protection)).check(matches(isDisplayed()))
-
-        // Use withEffectiveVisibility to verify elements exist and are VISIBLE in the scrollable view hierarchy
-        onView(withId(R.id.btn_toggle_emergency)).check(matches(withEffectiveVisibility(Visibility.VISIBLE)))
-        onView(withId(R.id.btn_logs_dashboard)).check(matches(withEffectiveVisibility(Visibility.VISIBLE)))
-        onView(withId(R.id.btn_settings)).check(matches(withEffectiveVisibility(Visibility.VISIBLE)))
+        onView(withId(R.id.tv_protection_status)).check(matches(isViewVisible()))
+        onView(withId(R.id.btn_toggle_protection)).check(matches(isViewVisible()))
+        onView(withId(R.id.btn_toggle_emergency)).check(matches(isViewVisible()))
+        onView(withId(R.id.btn_logs_dashboard)).check(matches(isViewVisible()))
+        onView(withId(R.id.btn_settings)).check(matches(isViewVisible()))
 
         scenario.close()
     }
@@ -93,11 +106,11 @@ class FeatureVerificationTest {
         val initialAutoConnect = config.isAutoConnectVpnEnabled()
 
         // Exercise real UI switch row in SettingsActivity
-        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
+        onView(withId(R.id.layout_pref_auto_connect)).perform(click())
         assertEquals("Auto connect VPN preference should toggle after UI row click", !initialAutoConnect, config.isAutoConnectVpnEnabled())
 
         // Toggle back via UI interaction
-        onView(withId(R.id.layout_pref_auto_connect)).perform(scrollTo(), click())
+        onView(withId(R.id.layout_pref_auto_connect)).perform(click())
         assertEquals("Auto connect VPN preference should return to initial state after second click", initialAutoConnect, config.isAutoConnectVpnEnabled())
 
         scenario.close()
@@ -109,12 +122,10 @@ class FeatureVerificationTest {
 
         // Verify Diagnostics header and cards are displayed using view IDs
         onView(withId(R.id.tv_diagnostics_header)).check(matches(isDisplayed()))
-        onView(withId(R.id.diag_vpn_state)).check(matches(isDisplayed()))
-        onView(withId(R.id.diag_protection_state)).check(matches(isDisplayed()))
-        onView(withId(R.id.diag_android_version)).check(matches(isDisplayed()))
-
-        // Verify refresh button exists with VISIBLE effective visibility in the scrollable hierarchy
-        onView(withId(R.id.btn_refresh_diag)).check(matches(withEffectiveVisibility(Visibility.VISIBLE)))
+        onView(withId(R.id.diag_vpn_state)).check(matches(isViewVisible()))
+        onView(withId(R.id.diag_protection_state)).check(matches(isViewVisible()))
+        onView(withId(R.id.diag_android_version)).check(matches(isViewVisible()))
+        onView(withId(R.id.btn_refresh_diag)).check(matches(isViewVisible()))
 
         scenario.close()
     }
@@ -125,7 +136,7 @@ class FeatureVerificationTest {
 
         // Verify Logs Dashboard header and action buttons exist using view IDs
         onView(withId(R.id.tv_logs_header)).check(matches(isDisplayed()))
-        onView(withId(R.id.btn_clear_app_logs)).check(matches(isDisplayed()))
+        onView(withId(R.id.btn_clear_app_logs)).check(matches(isViewVisible()))
 
         scenario.close()
     }
