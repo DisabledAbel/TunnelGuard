@@ -13,6 +13,14 @@ import android.os.Process
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * Central configuration manager for TunnelGuard VPN protection settings.
+ *
+ * Manages application preferences, protected apps, VPN detection state, country-specific VPN settings,
+ * and provides methods for configuration import/export and logging.
+ *
+ * @param context The Android application context.
+ */
 class TunnelGuardConfig(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
