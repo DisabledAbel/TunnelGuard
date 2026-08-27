@@ -80,10 +80,23 @@ been saved as `KEYSTORE_BASE64`.
 
 ## Release checklist
 
+The workflow has two explicit modes. Its default, **unsigned validation**, runs the
+release unit tests and builds an unsigned release candidate without requiring any
+signing credentials. It uploads that APK as a short-lived workflow artifact for
+inspection only; the artifact cannot update an installed production copy and must
+not be distributed as a release.
+
+Enable **Publish release** only when all five stable signing values have been
+configured. Publishing signs and verifies the APK and creates the GitHub Release.
+The workflow never silently substitutes a temporary key, so validation runs remain
+useful on repositories or branches that cannot access release secrets without
+putting existing installations at risk.
+
 Before retrying a version, check the repository's **Releases** page and **Tags**
 page. Do not dispatch `1.1.7` if either `v1.1.7` already exists as a release or a
 tag. Otherwise, open **Actions → TunnelGuard Release → Run workflow**, enter
-`1.1.7`, and run it from the intended branch.
+`1.1.7`, enable **Publish release**, and run it from the intended branch. Leave
+**Publish release** disabled when the goal is only to validate the release build.
 
 The run is successful only if the signing step reports that signing and
 verification completed, and the final release-creation step succeeds. In the
