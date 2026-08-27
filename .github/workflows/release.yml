@@ -80,6 +80,7 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        EXPECTED_SIGNER_SHA256: ${{ secrets.EXPECTED_SIGNER_SHA256 }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
       run: |
         # Android only accepts an in-place update when the new APK is signed by the
@@ -87,7 +88,7 @@ jobs:
         # doing so gives every release a different identity and Android reports the
         # resulting upgrade failure as an existing-package conflict.
         missing_secrets=()
-        for secret_name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+        for secret_name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_SIGNER_SHA256; do
           if [ -z "${!secret_name}" ]; then
             missing_secrets+=("$secret_name")
           fi
@@ -123,11 +124,28 @@ jobs:
           --out "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" \
           TunnelGuard-release-aligned.apk
 
-        # Verify Signature
-        $ANDROID_HOME/build-tools/34.0.0/apksigner verify \
+        # Verify the APK, then pin its signer before anything can be published.
+        verification_output=$($ANDROID_HOME/build-tools/34.0.0/apksigner verify \
           --verbose \
           --print-certs \
-          "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk"
+          "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk")
+        echo "$verification_output"
+
+        actual_signer_sha256=$(echo "$verification_output" |
+          sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+          head -n 1 |
+          tr -d '[:space:]:' |
+          tr '[:upper:]' '[:lower:]')
+        expected_signer_sha256=$(echo "$EXPECTED_SIGNER_SHA256" |
+          tr -d '[:space:]:' |
+          tr '[:upper:]' '[:lower:]')
+
+        if [ -z "$actual_signer_sha256" ] || [ "$actual_signer_sha256" != "$expected_signer_sha256" ]; then
+          echo "ERROR: Release APK signer SHA-256 does not match EXPECTED_SIGNER_SHA256."
+          echo "Actual:   ${actual_signer_sha256:-not found}"
+          exit 1
+        fi
+        echo "Release APK signer matches the protected certificate digest."
 
         # Generate Checksums
         sha256sum "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" > "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk.sha256"
