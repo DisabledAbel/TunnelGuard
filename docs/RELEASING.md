@@ -42,6 +42,14 @@ administrator can confirm the secret **names** on an iPad:
    names exist only there, the release job must be assigned to that exact existing
    environment with `environment: <existing-name>`; do not create or guess a name.
 
+Keep all five secrets together as one matching set in exactly one intended scope.
+If repository secrets are used, remove conflicting secrets with the same names from
+environments that could be assigned to this job. If an existing environment is
+used, update all five values together in that environment, assign its exact name to
+`build-release`, and remove the five duplicate repository secrets and conflicting
+copies from other environments. Never combine a keystore from one scope with an
+alias, password, or expected digest from another scope.
+
 If the names are absent from both locations, add them as repository secrets from
 **Settings → Secrets and variables → Actions → New repository secret**. Add each
 name separately, preserving the exact spelling. Use only the original permanent
@@ -60,11 +68,15 @@ keytool -list -v -keystore /secure/path/to/permanent-release.keystore \
 base64 < /secure/path/to/permanent-release.keystore > keystore.base64.txt
 ```
 
-Copy the certificate's SHA-256 fingerprint from `keytool` into
-`EXPECTED_SIGNER_SHA256`. Colons, spaces, and letter case are accepted because the
-workflow removes whitespace and colons and converts both the expected and actual
-digests to lowercase before comparing them. Securely delete
-`keystore.base64.txt` after its contents have been saved as `KEYSTORE_BASE64`.
+Copy the SHA-256 fingerprint specifically from `Certificate[1]`, the leaf signing
+certificate shown by `keytool -list -v`, into `EXPECTED_SIGNER_SHA256`. Do not use
+the fingerprint of an intermediate or root certificate. Confirm that this value is
+the same digest reported as `Signer #1 certificate SHA-256 digest` by
+`apksigner verify --verbose --print-certs` for an APK signed with this keystore and
+alias. Colons, spaces, and letter case are accepted because the workflow removes
+whitespace and colons and converts both the expected and actual digests to lowercase
+before comparing them. Securely delete `keystore.base64.txt` after its contents have
+been saved as `KEYSTORE_BASE64`.
 
 ## Release checklist
 
