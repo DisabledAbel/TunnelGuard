@@ -7,6 +7,11 @@ on:
         description: 'Name of the release (e.g., v1.0.0)'
         required: true
         default: '1.0.0'
+      publish_release:
+        description: 'Sign and publish the release (requires the stable signing secrets)'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -75,6 +80,7 @@ jobs:
       run: ./gradlew assembleRelease -PversionName="$CLEAN_VERSION_NAME" -PversionCode="$VERSION_CODE"
 
     - name: Set up Android SDK and Sign Release APK
+      if: ${{ inputs.publish_release }}
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -161,7 +167,17 @@ jobs:
         rm -f TunnelGuard-release-aligned.apk
         echo "Signing and verification completed successfully."
 
+    - name: Upload Unsigned Release Candidate
+      if: ${{ !inputs.publish_release }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: TunnelGuard-v${{ env.CLEAN_VERSION_NAME }}-unsigned
+        path: app/build/outputs/apk/release/*.apk
+        if-no-files-found: error
+        retention-days: 7
+
     - name: Generate Automatic Release Description
+      if: ${{ inputs.publish_release }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         RELEASE_DESCRIPTION: ${{ github.event.inputs.release_description }}
@@ -172,6 +188,7 @@ jobs:
         ./scripts/generate_release_notes.sh
 
     - name: Create GitHub Release
+      if: ${{ inputs.publish_release }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
