@@ -453,7 +453,10 @@ class UpdateManager(
 
     fun showUpdateErrorDialog(errorMessage: String) {
         val repo = UpdateRepository.getInstance(activity)
-        val targetUrl = repo.getCachedApkUrl()?.ifBlank { null } ?: repo.getCachedReleaseUrl()
+        val targetUrl = com.tunnelguard.app.update.UpdateLinkIntent.preferredUrl(
+            repo.getCachedApkUrl(),
+            repo.getCachedReleaseUrl()
+        )
 
         val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle("Update Check Failed")
