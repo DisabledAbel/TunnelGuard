@@ -23,6 +23,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Validate Stable Release Guard
+        run: |
+          bash -n scripts/check_stable_release.sh scripts/tests/check_stable_release_test.sh
+          bash scripts/tests/check_stable_release_test.sh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
