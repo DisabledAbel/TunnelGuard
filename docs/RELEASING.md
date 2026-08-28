@@ -80,17 +80,12 @@ been saved as `KEYSTORE_BASE64`.
 
 ## Release checklist
 
-The workflow has two explicit modes. Its default, **unsigned validation**, runs the
-release unit tests and builds an unsigned release candidate without requiring any
-signing credentials. It uploads that APK as a short-lived workflow artifact for
-inspection only; the artifact cannot update an installed production copy and must
-not be distributed as a release.
-
-Enable **Publish release** only when all five stable signing values have been
-configured. Publishing signs and verifies the APK and creates the GitHub Release.
-The workflow never silently substitutes a temporary key, so validation runs remain
-useful on repositories or branches that cannot access release secrets without
-putting existing installations at risk.
+The release workflow only builds and publishes the official, stable application.
+Every run executes the release unit tests, assembles the `release` build type,
+verifies that the APK has the production package ID and app label, signs it with the
+permanent release key, verifies the signer, and creates the GitHub Release. It does
+not offer an unsigned or alpha mode. Use the separate **Build Alpha APK** workflow
+for alpha builds.
 
 Stable releases can also be started by pushing a stable semantic-version tag such
 as `v1.1.7`. A matching tag automatically selects `1.1.7` as the Android version,
@@ -115,8 +110,8 @@ Play's `2,100,000,000` limit.
 Before retrying a version, check the repository's **Releases** page and **Tags**
 page. Do not dispatch `1.1.7` if either `v1.1.7` already exists as a release or a
 tag. Otherwise, open **Actions → TunnelGuard Release → Run workflow**, enter
-`1.1.7`, enable **Publish release**, and run it from the intended branch. Leave
-**Publish release** disabled when the goal is only to validate the release build.
+`1.1.7`, and run it from the intended branch. Because every run publishes an
+official release, do not dispatch the workflow merely to validate a build.
 
 The run is successful only if the signing step reports that signing and
 verification completed, and the final release-creation step succeeds. In the
