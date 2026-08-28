@@ -12,6 +12,9 @@ on:
         required: true
         type: boolean
         default: false
+  push:
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -38,10 +41,11 @@ jobs:
 
     - name: Validate Release Name Input and Calculate Version Metadata
       env:
-        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        RELEASE_NAME: ${{ inputs.release_name || github.ref_name }}
+        PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish_release }}
       run: |
-        if [[ ! "$RELEASE_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ && ! "$RELEASE_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-          echo "ERROR: Invalid version tag format: $RELEASE_NAME. Must be a valid semver tag (e.g., 1.0.0 or v1.0.0)."
+        if [[ ! "$RELEASE_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "ERROR: Invalid stable version: $RELEASE_NAME. Must be a stable semver (e.g., 1.0.0 or v1.0.0)."
           exit 1
         fi
 
@@ -66,6 +70,7 @@ jobs:
         # Persist versions into GitHub environment
         echo "CLEAN_VERSION_NAME=$CLEAN_VERSION_NAME" >> "$GITHUB_ENV"
         echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+        echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> "$GITHUB_ENV"
 
     - name: Run Release Unit Tests
       env:
@@ -80,7 +85,7 @@ jobs:
       run: ./gradlew assembleRelease -PversionName="$CLEAN_VERSION_NAME" -PversionCode="$VERSION_CODE"
 
     - name: Set up Android SDK and Sign Release APK
-      if: ${{ inputs.publish_release }}
+      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -168,7 +173,7 @@ jobs:
         echo "Signing and verification completed successfully."
 
     - name: Upload Unsigned Release Candidate
-      if: ${{ !inputs.publish_release }}
+      if: ${{ env.PUBLISH_RELEASE != 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: TunnelGuard-v${{ env.CLEAN_VERSION_NAME }}-unsigned
@@ -177,7 +182,7 @@ jobs:
         retention-days: 7
 
     - name: Generate Automatic Release Description
-      if: ${{ inputs.publish_release }}
+      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         RELEASE_DESCRIPTION: ${{ github.event.inputs.release_description }}
@@ -188,7 +193,7 @@ jobs:
         ./scripts/generate_release_notes.sh
 
     - name: Create GitHub Release
-      if: ${{ inputs.publish_release }}
+      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
@@ -196,6 +201,7 @@ jobs:
         # Use quoted shell variables and read release notes from the generated file
         gh release create "v${CLEAN_VERSION_NAME}" \
           --title "v${CLEAN_VERSION_NAME}" \
+          --latest \
           --notes-file generated_description.txt \
           "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" \
           "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk.sha256" \

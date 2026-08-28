@@ -92,6 +92,12 @@ The workflow never silently substitutes a temporary key, so validation runs rema
 useful on repositories or branches that cannot access release secrets without
 putting existing installations at risk.
 
+Stable releases can also be started by pushing a stable semantic-version tag such
+as `v1.1.7`. A matching tag automatically selects `1.1.7` as the Android version,
+uses the release build type, and publishes the signed GitHub Release. Pre-release
+suffixes such as `-alpha` are deliberately rejected by this workflow; alpha builds
+remain isolated in the separate **Build Alpha APK** workflow.
+
 Before retrying a version, check the repository's **Releases** page and **Tags**
 page. Do not dispatch `1.1.7` if either `v1.1.7` already exists as a release or a
 tag. Otherwise, open **Actions → TunnelGuard Release → Run workflow**, enter
