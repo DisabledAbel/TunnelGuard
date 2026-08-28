@@ -2,6 +2,7 @@ package com.tunnelguard.app.update
 
 import android.content.Intent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,5 +27,18 @@ class UpdateLinkIntentTest {
     @Test(expected = IllegalArgumentException::class)
     fun `rejects non-https update links`() {
         UpdateLinkIntent.create("file:///data/local/update.apk")
+    }
+
+    @Test
+    fun `validates update links before fallback selection`() {
+        val apkUrl = "https://github.com/releases/update.apk"
+        val releaseUrl = "https://github.com/releases/latest"
+
+        assertTrue(UpdateLinkIntent.isValid(apkUrl))
+        assertFalse(UpdateLinkIntent.isValid("http://github.com/releases/update.apk"))
+        assertFalse(UpdateLinkIntent.isValid("https:///releases/update.apk"))
+        assertFalse(UpdateLinkIntent.isValid("not a URL"))
+        assertEquals(apkUrl, UpdateLinkIntent.preferredUrl(apkUrl, releaseUrl))
+        assertEquals(releaseUrl, UpdateLinkIntent.preferredUrl("http://invalid/update.apk", releaseUrl))
     }
 }

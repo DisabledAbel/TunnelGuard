@@ -80,7 +80,7 @@ fun UpdateDialogScreen(
                     val context = LocalContext.current
                     // Prefer the APK itself so download managers can handle it. The release
                     // page remains a useful fallback when GitHub did not publish an APK asset.
-                    val manualUpdateUrl = state.apkUrl?.ifBlank { null } ?: state.releaseUrl
+                    val manualUpdateUrl = UpdateLinkIntent.preferredUrl(state.apkUrl, state.releaseUrl).orEmpty()
 
                     if (state.isSignatureMismatch) {
                         Button(
