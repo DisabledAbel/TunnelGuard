@@ -10,11 +10,11 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-alpha:
-    name: Test and publish alpha
+    name: Test and build alpha artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -68,20 +68,3 @@ jobs:
             TunnelGuard-${{ env.ALPHA_TAG }}.apk.sha256
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish Public Alpha Prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cat > alpha-notes.md <<EOF
-          Automated test build from commit \`${GITHUB_SHA}\`.
-
-          This APK uses the separate package ID \`com.tunnelguard.app.alpha\`, so it can be installed alongside the stable TunnelGuard app. Alpha builds use a test signing key and may require the previous alpha to be uninstalled before installing a newer build. Do not use an alpha build as your only production protection.
-          EOF
-          gh release create "$ALPHA_TAG" \
-            --target "$GITHUB_SHA" \
-            --title "TunnelGuard Alpha ${GITHUB_RUN_NUMBER}" \
-            --notes-file alpha-notes.md \
-            --prerelease \
-            "TunnelGuard-${ALPHA_TAG}.apk" \
-            "TunnelGuard-${ALPHA_TAG}.apk.sha256"
