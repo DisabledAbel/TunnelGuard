@@ -98,6 +98,20 @@ uses the release build type, and publishes the signed GitHub Release. Pre-releas
 suffixes such as `-alpha` are deliberately rejected by this workflow; alpha builds
 remain isolated in the separate **Build Alpha APK** workflow.
 
+Before enabling tag-triggered releases, create an active repository tag ruleset in
+**Settings → Rules → Rulesets** targeting tags that match `v*.*.*`. Enable both
+creation and update restrictions, and grant the bypass permission only to the
+people or release team authorized to publish stable versions. Also define the
+Actions repository variable `TRUSTED_RELEASE_ACTORS` as a comma-separated list of
+those GitHub usernames. The workflow fails closed for every publishing run when
+that variable is absent or the initiating actor is not listed, while the ruleset
+prevents unauthorized users from creating or moving a matching release tag.
+
+Stable versions support major values from 0 through 209, minor values from 0
+through 999, and patch values from 0 through 9999; `0.0.0` is not valid. These
+bounds provide a collision-free Android `versionCode` and keep it below Google
+Play's `2,100,000,000` limit.
+
 Before retrying a version, check the repository's **Releases** page and **Tags**
 page. Do not dispatch `1.1.7` if either `v1.1.7` already exists as a release or a
 tag. Otherwise, open **Actions → TunnelGuard Release → Run workflow**, enter
