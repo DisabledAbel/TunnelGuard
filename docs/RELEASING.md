@@ -96,11 +96,14 @@ remain isolated in the separate **Build Alpha APK** workflow.
 Before enabling tag-triggered releases, create an active repository tag ruleset in
 **Settings → Rules → Rulesets** targeting tags that match `v*.*.*`. Enable both
 creation and update restrictions, and grant the bypass permission only to the
-people or release team authorized to publish stable versions. Also define the
-Actions repository variable `TRUSTED_RELEASE_ACTORS` as a comma-separated list of
-those GitHub usernames. The workflow fails closed for every publishing run when
-that variable is absent or the initiating actor is not listed, while the ruleset
-prevents unauthorized users from creating or moving a matching release tag.
+people or release team authorized to publish stable versions. The repository
+owner, `DisabledAbel`, is authorized by default. To authorize a different user or
+multiple publishers, define the Actions repository variable
+`TRUSTED_RELEASE_ACTORS` as a comma-separated list of all authorized GitHub
+usernames (including `DisabledAbel` if the owner should remain authorized). When
+the variable is present it replaces the default allowlist. The workflow fails
+closed when the initiating actor is not listed, while the ruleset prevents
+unauthorized users from creating or moving a matching release tag.
 
 Stable versions support major values from 0 through 209, minor values from 0
 through 999, and patch values from 0 through 9999; `0.0.0` is not valid. These
