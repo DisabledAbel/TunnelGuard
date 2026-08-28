@@ -78,7 +78,9 @@ fun UpdateDialogScreen(
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val context = LocalContext.current
-                    val browserUrl = state.releaseUrl.ifBlank { state.apkUrl.orEmpty() }
+                    // Prefer the APK itself so download managers can handle it. The release
+                    // page remains a useful fallback when GitHub did not publish an APK asset.
+                    val manualUpdateUrl = state.apkUrl?.ifBlank { null } ?: state.releaseUrl
 
                     if (state.isSignatureMismatch) {
                         Button(
@@ -89,21 +91,20 @@ fun UpdateDialogScreen(
                         ) {
                             Text("Uninstall Current App")
                         }
-                    } else if (!state.errorMessage.isNullOrBlank() && browserUrl.isNotBlank()) {
+                    } else if (!state.errorMessage.isNullOrBlank() && manualUpdateUrl.isNotBlank()) {
                         Button(
                             onClick = {
                                 try {
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(browserUrl))
-                                    context.startActivity(intent)
+                                    context.startActivity(UpdateLinkIntent.create(manualUpdateUrl))
                                 } catch (e: Exception) {
                                     val config = com.tunnelguard.app.TunnelGuardConfig(context)
-                                    config.addLog("Failed to open browser for update: ${e.message}", "ERROR")
-                                    android.widget.Toast.makeText(context, "Failed to launch browser. Please open the link manually.", android.widget.Toast.LENGTH_LONG).show()
+                                    config.addLog("Failed to open update link: ${e.message}", "ERROR")
+                                    android.widget.Toast.makeText(context, "No downloader or browser could open the update link.", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             },
-                            modifier = Modifier.weight(1f).height(56.dp)
+                            modifier = Modifier.weight(1f).height(56.dp).focusRequester(focusRequester)
                         ) {
-                            Text("Open in Browser")
+                            Text("Open Download Link")
                         }
                     } else {
                         Button(onClick = onUpdateNow, enabled = !state.isDownloading, modifier = Modifier.weight(1f).height(56.dp).focusRequester(focusRequester)) { Text("Update Now") }
