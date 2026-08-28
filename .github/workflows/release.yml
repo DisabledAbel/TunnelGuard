@@ -43,8 +43,10 @@ jobs:
       env:
         RELEASE_NAME: ${{ inputs.release_name || github.ref_name }}
         PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish_release }}
+        RELEASE_ACTOR: ${{ github.actor }}
+        TRUSTED_RELEASE_ACTORS: ${{ vars.TRUSTED_RELEASE_ACTORS }}
       run: |
-        if [[ ! "$RELEASE_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [[ ! "$RELEASE_NAME" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
           echo "ERROR: Invalid stable version: $RELEASE_NAME. Must be a stable semver (e.g., 1.0.0 or v1.0.0)."
           exit 1
         fi
@@ -58,11 +60,42 @@ jobs:
         minor="${parts[1]}"
         patch="${parts[2]}"
 
-        # Remove any pre-release suffixes from patch component
-        patch_num=$(echo "$patch" | cut -d'-' -f1)
+        # Reserve four decimal digits for patch and three for minor. The bounds
+        # make this mapping one-to-one and keep it within Google Play's limit.
+        major_num=$((10#$major))
+        minor_num=$((10#$minor))
+        patch_num=$((10#$patch))
+        if (( major_num > 209 || minor_num > 999 || patch_num > 9999 )); then
+          echo "ERROR: Version components exceed supported bounds: major <= 209, minor <= 999, patch <= 9999."
+          exit 1
+        fi
 
-        # Build-safe version code calculation
-        VERSION_CODE=$((major * 10000 + minor * 100 + patch_num))
+        VERSION_CODE=$((major_num * 10000000 + minor_num * 10000 + patch_num))
+        if (( VERSION_CODE < 1 || VERSION_CODE > 2100000000 )); then
+          echo "ERROR: Android versionCode $VERSION_CODE must be between 1 and 2100000000."
+          exit 1
+        fi
+
+        if [[ "$PUBLISH_RELEASE" == "true" ]]; then
+          if [[ -z "$TRUSTED_RELEASE_ACTORS" ]]; then
+            echo "ERROR: TRUSTED_RELEASE_ACTORS must list the GitHub users allowed to publish stable releases."
+            exit 1
+          fi
+
+          trusted=false
+          IFS=',' read -r -a actors <<< "$TRUSTED_RELEASE_ACTORS"
+          for actor in "${actors[@]}"; do
+            actor="${actor//[[:space:]]/}"
+            if [[ "${actor,,}" == "${RELEASE_ACTOR,,}" ]]; then
+              trusted=true
+              break
+            fi
+          done
+          if [[ "$trusted" != "true" ]]; then
+            echo "ERROR: $RELEASE_ACTOR is not authorized to publish stable releases."
+            exit 1
+          fi
+        fi
 
         echo "Valid SemVer version name: $CLEAN_VERSION_NAME"
         echo "Calculated version code: $VERSION_CODE"
