@@ -13,6 +13,28 @@ response_file=$(mktemp)
 error_file=$(mktemp)
 trap 'rm -f "$response_file" "$error_file"' EXIT
 
+# A tag lookup returns 404 both when the release is missing and when the token
+# cannot access the repository. Confirm repository access first so only the
+# former can enable publishing.
+set +e
+gh api "repos/${repository}" --jq '.full_name' >"$response_file" 2>"$error_file"
+repository_status=$?
+set -e
+
+if (( repository_status != 0 )); then
+  echo "ERROR: Could not access repository ${repository}; failing closed before checking Release ${tag}." >&2
+  cat "$error_file" >&2
+  exit 1
+fi
+
+repository_name=$(cat "$response_file")
+if [[ -z "$repository_name" || "${repository_name,,}" != "${repository,,}" ]]; then
+  echo "ERROR: Could not parse or verify repository ${repository}; failing closed before checking Release ${tag}." >&2
+  exit 1
+fi
+
+: >"$response_file"
+: >"$error_file"
 set +e
 gh api "repos/${repository}/releases/tags/${tag}" \
   --jq '[.draft, .prerelease] | @tsv' >"$response_file" 2>"$error_file"
