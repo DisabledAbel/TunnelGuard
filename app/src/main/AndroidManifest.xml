@@ -109,7 +109,7 @@
         <!-- FileProvider for automatic update apk installation -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.tunnelguard.app.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
