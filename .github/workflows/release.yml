@@ -7,11 +7,6 @@ on:
         description: 'Name of the release (e.g., v1.0.0)'
         required: true
         default: '1.0.0'
-      publish_release:
-        description: 'Sign and publish the release (requires the stable signing secrets)'
-        required: true
-        type: boolean
-        default: false
   push:
     tags:
       - 'v*.*.*'
@@ -42,7 +37,6 @@ jobs:
     - name: Validate Release Name Input and Calculate Version Metadata
       env:
         RELEASE_NAME: ${{ inputs.release_name || github.ref_name }}
-        PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish_release }}
         RELEASE_ACTOR: ${{ github.actor }}
         TRUSTED_RELEASE_ACTORS: ${{ vars.TRUSTED_RELEASE_ACTORS }}
       run: |
@@ -76,25 +70,23 @@ jobs:
           exit 1
         fi
 
-        if [[ "$PUBLISH_RELEASE" == "true" ]]; then
-          if [[ -z "$TRUSTED_RELEASE_ACTORS" ]]; then
-            echo "ERROR: TRUSTED_RELEASE_ACTORS must list the GitHub users allowed to publish stable releases."
-            exit 1
-          fi
+        if [[ -z "$TRUSTED_RELEASE_ACTORS" ]]; then
+          echo "ERROR: TRUSTED_RELEASE_ACTORS must list the GitHub users allowed to publish stable releases."
+          exit 1
+        fi
 
-          trusted=false
-          IFS=',' read -r -a actors <<< "$TRUSTED_RELEASE_ACTORS"
-          for actor in "${actors[@]}"; do
-            actor="${actor//[[:space:]]/}"
-            if [[ "${actor,,}" == "${RELEASE_ACTOR,,}" ]]; then
-              trusted=true
-              break
-            fi
-          done
-          if [[ "$trusted" != "true" ]]; then
-            echo "ERROR: $RELEASE_ACTOR is not authorized to publish stable releases."
-            exit 1
+        trusted=false
+        IFS=',' read -r -a actors <<< "$TRUSTED_RELEASE_ACTORS"
+        for actor in "${actors[@]}"; do
+          actor="${actor//[[:space:]]/}"
+          if [[ "${actor,,}" == "${RELEASE_ACTOR,,}" ]]; then
+            trusted=true
+            break
           fi
+        done
+        if [[ "$trusted" != "true" ]]; then
+          echo "ERROR: $RELEASE_ACTOR is not authorized to publish stable releases."
+          exit 1
         fi
 
         echo "Valid SemVer version name: $CLEAN_VERSION_NAME"
@@ -103,7 +95,6 @@ jobs:
         # Persist versions into GitHub environment
         echo "CLEAN_VERSION_NAME=$CLEAN_VERSION_NAME" >> "$GITHUB_ENV"
         echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
-        echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> "$GITHUB_ENV"
 
     - name: Run Release Unit Tests
       env:
@@ -117,8 +108,23 @@ jobs:
         VERSION_CODE: ${{ env.VERSION_CODE }}
       run: ./gradlew assembleRelease -PversionName="$CLEAN_VERSION_NAME" -PversionCode="$VERSION_CODE"
 
+    - name: Verify Official Release Identity
+      run: |
+        RELEASE_APK=$(find app/build/outputs/apk/release -name '*.apk' -print -quit)
+        if [ -z "$RELEASE_APK" ]; then
+          echo "ERROR: Could not find the release APK."
+          exit 1
+        fi
+        BADGING=$("$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK")
+        echo "$BADGING" | head -n 2
+        echo "$BADGING" | grep -q "package: name='com.tunnelguard.app'"
+        echo "$BADGING" | grep -q "application-label:'TunnelGuard'"
+        if echo "$BADGING" | grep -qi 'alpha'; then
+          echo "ERROR: The stable release APK contains alpha identity metadata."
+          exit 1
+        fi
+
     - name: Set up Android SDK and Sign Release APK
-      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -205,17 +211,7 @@ jobs:
         rm -f TunnelGuard-release-aligned.apk
         echo "Signing and verification completed successfully."
 
-    - name: Upload Unsigned Release Candidate
-      if: ${{ env.PUBLISH_RELEASE != 'true' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: TunnelGuard-v${{ env.CLEAN_VERSION_NAME }}-unsigned
-        path: app/build/outputs/apk/release/*.apk
-        if-no-files-found: error
-        retention-days: 7
-
     - name: Generate Automatic Release Description
-      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         RELEASE_DESCRIPTION: ${{ github.event.inputs.release_description }}
@@ -226,7 +222,6 @@ jobs:
         ./scripts/generate_release_notes.sh
 
     - name: Create GitHub Release
-      if: ${{ env.PUBLISH_RELEASE == 'true' }}
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
