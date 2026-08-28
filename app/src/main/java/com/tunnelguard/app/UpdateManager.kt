@@ -453,7 +453,7 @@ class UpdateManager(
 
     fun showUpdateErrorDialog(errorMessage: String) {
         val repo = UpdateRepository.getInstance(activity)
-        val targetUrl = repo.getCachedReleaseUrl()?.ifBlank { null } ?: repo.getCachedApkUrl()
+        val targetUrl = repo.getCachedApkUrl()?.ifBlank { null } ?: repo.getCachedReleaseUrl()
 
         val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle("Update Check Failed")
@@ -470,13 +470,12 @@ class UpdateManager(
                 }
             }
         } else if (!targetUrl.isNullOrBlank()) {
-            builder.setNeutralButton("Open in Browser") { dialog, _ ->
+            builder.setNeutralButton("Open Download Link") { dialog, _ ->
                 dialog.dismiss()
                 try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
-                    activity.startActivity(intent)
+                    activity.startActivity(com.tunnelguard.app.update.UpdateLinkIntent.create(targetUrl))
                 } catch (e: Exception) {
-                    config.addLog("Failed to open browser for update: ${e.message}")
+                    config.addLog("Failed to open update link: ${e.message}")
                 }
             }
         }
