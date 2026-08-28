@@ -12,6 +12,19 @@ With TunnelGuard, users can select specific applications (such as TiviMate, medi
 * **Target SDK:** Android 14.0 (API Level 34)
 * **Compatibility:** Optimized for Android TV & Google TV devices (Nvidia Shield, Chromecast with Google TV, Xiaomi Mi Box, Sony/TCL Smart TVs, etc.).
 
+## Testing Alpha Builds
+
+Every update to `main` produces a tested APK on the repository's **Releases** page
+as a GitHub prerelease. The alpha uses the application ID
+`com.tunnelguard.app.alpha` and the launcher name **TunnelGuard Alpha**, allowing it
+to be installed alongside the stable `com.tunnelguard.app` application with
+independent settings.
+
+Alpha APKs are test builds rather than production releases. Download the APK and
+matching SHA-256 file from the newest **TunnelGuard Alpha** prerelease. Because CI
+uses a temporary test signing key, Android may require an older alpha installation
+to be removed before installing a newer one; the stable app is unaffected.
+
 ---
 
 ## Key Android Platform & VPN Limitations (Crucial Security Notice)

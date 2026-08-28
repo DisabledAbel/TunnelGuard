@@ -31,6 +31,15 @@ android {
     }
 
     buildTypes {
+        create("alpha") {
+            // Alpha builds have their own Android identity, so testers can keep the
+            // stable app installed and retain separate app data and VPN settings.
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".alpha"
+            versionNameSuffix = "-alpha"
+            resValue("string", "app_name", "TunnelGuard Alpha")
+            matchingFallbacks += listOf("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

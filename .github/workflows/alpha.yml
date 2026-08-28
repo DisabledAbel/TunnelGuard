@@ -1,0 +1,87 @@
+name: Build Alpha APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+concurrency:
+  group: alpha-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-alpha:
+    name: Test and publish alpha
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Install Android 35 SDK
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35"
+
+      - name: Calculate Alpha Version
+        run: |
+          echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "ALPHA_TAG=alpha-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Run Alpha Unit Tests
+        run: ./gradlew testAlphaUnitTest -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" --stacktrace
+
+      - name: Build Alpha APK
+        run: ./gradlew assembleAlpha -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" --stacktrace
+
+      - name: Verify Alpha Package Identity
+        run: |
+          APK=$(find app/build/outputs/apk/alpha -name '*.apk' -print -quit)
+          test -n "$APK"
+          BADGING=$("${ANDROID_HOME}/build-tools/34.0.0/aapt" dump badging "$APK")
+          echo "$BADGING" | head -n 2
+          echo "$BADGING" | grep -q "package: name='com.tunnelguard.app.alpha'"
+          echo "$BADGING" | grep -q "application-label:'TunnelGuard Alpha'"
+          cp "$APK" "TunnelGuard-${ALPHA_TAG}.apk"
+          sha256sum "TunnelGuard-${ALPHA_TAG}.apk" > "TunnelGuard-${ALPHA_TAG}.apk.sha256"
+
+      - name: Upload Alpha Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TunnelGuard-${{ env.ALPHA_TAG }}
+          path: |
+            TunnelGuard-${{ env.ALPHA_TAG }}.apk
+            TunnelGuard-${{ env.ALPHA_TAG }}.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Public Alpha Prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > alpha-notes.md <<EOF
+          Automated test build from commit \`${GITHUB_SHA}\`.
+
+          This APK uses the separate package ID \`com.tunnelguard.app.alpha\`, so it can be installed alongside the stable TunnelGuard app. Alpha builds use a test signing key and may require the previous alpha to be uninstalled before installing a newer build. Do not use an alpha build as your only production protection.
+          EOF
+          gh release create "$ALPHA_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "TunnelGuard Alpha ${GITHUB_RUN_NUMBER}" \
+            --notes-file alpha-notes.md \
+            --prerelease \
+            "TunnelGuard-${ALPHA_TAG}.apk" \
+            "TunnelGuard-${ALPHA_TAG}.apk.sha256"
