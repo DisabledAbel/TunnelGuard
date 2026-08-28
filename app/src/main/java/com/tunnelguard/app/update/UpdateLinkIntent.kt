@@ -11,7 +11,7 @@ object UpdateLinkIntent {
     }
 
     fun preferredUrl(apkUrl: String?, releaseUrl: String?): String? =
-        apkUrl?.takeIf(::isValid) ?: releaseUrl
+        apkUrl?.takeIf(::isValid) ?: releaseUrl?.takeIf(::isValid)
 
     fun create(url: String): Intent {
         require(isValid(url)) {

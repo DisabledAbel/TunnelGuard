@@ -3,6 +3,7 @@ package com.tunnelguard.app.update
 import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,5 +41,7 @@ class UpdateLinkIntentTest {
         assertFalse(UpdateLinkIntent.isValid("not a URL"))
         assertEquals(apkUrl, UpdateLinkIntent.preferredUrl(apkUrl, releaseUrl))
         assertEquals(releaseUrl, UpdateLinkIntent.preferredUrl("http://invalid/update.apk", releaseUrl))
+        assertEquals(apkUrl, UpdateLinkIntent.preferredUrl(apkUrl, "http://invalid/release"))
+        assertNull(UpdateLinkIntent.preferredUrl("http://invalid/update.apk", "http://invalid/release"))
     }
 }
