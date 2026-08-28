@@ -231,10 +231,43 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
       run: |
-        # Use quoted shell variables and read release notes from the generated file
+        # Only explicitly replace Latest when this version is newer than every
+        # published stable release. Older backfills must not move the Latest marker.
+        highest_major=-1
+        highest_minor=-1
+        highest_patch=-1
+        published_stable_tags=$(gh api --paginate repos/{owner}/{repo}/releases \
+          --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')
+        while IFS= read -r tag; do
+          if [[ "$tag" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            tag_major=$((10#${BASH_REMATCH[1]}))
+            tag_minor=$((10#${BASH_REMATCH[2]}))
+            tag_patch=$((10#${BASH_REMATCH[3]}))
+            if (( tag_major > highest_major ||
+                  (tag_major == highest_major && tag_minor > highest_minor) ||
+                  (tag_major == highest_major && tag_minor == highest_minor && tag_patch > highest_patch) )); then
+              highest_major=$tag_major
+              highest_minor=$tag_minor
+              highest_patch=$tag_patch
+            fi
+          fi
+        done <<< "$published_stable_tags"
+
+        IFS='.' read -r release_major release_minor release_patch <<< "$CLEAN_VERSION_NAME"
+        release_major=$((10#$release_major))
+        release_minor=$((10#$release_minor))
+        release_patch=$((10#$release_patch))
+        latest_args=()
+        if (( release_major > highest_major ||
+              (release_major == highest_major && release_minor > highest_minor) ||
+              (release_major == highest_major && release_minor == highest_minor && release_patch > highest_patch) )); then
+          latest_args+=(--latest)
+        fi
+
+        # Use quoted shell variables and read release notes from the generated file.
         gh release create "v${CLEAN_VERSION_NAME}" \
           --title "v${CLEAN_VERSION_NAME}" \
-          --latest \
+          "${latest_args[@]}" \
           --notes-file generated_description.txt \
           "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" \
           "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk.sha256" \
