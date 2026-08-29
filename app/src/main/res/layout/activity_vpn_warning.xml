@@ -9,7 +9,6 @@
         android:layout_width="500dp"
         android:layout_height="wrap_content"
         android:background="@drawable/tv_item_selector"
-        android:clickable="true"
         android:focusable="false"
         android:orientation="vertical"
         android:padding="32dp"

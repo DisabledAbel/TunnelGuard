@@ -31,6 +31,8 @@
         android:padding="12dp"
         android:focusable="true"
         android:singleLine="true"
+        android:inputType="text"
+        android:importantForAutofill="no"
         android:imeOptions="actionSearch"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
