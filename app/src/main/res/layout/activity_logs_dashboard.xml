@@ -200,7 +200,7 @@
             android:clickable="true"
             android:singleLine="true"
             android:inputType="text"
-            android:contentDescription="Search filter for log messages"
+            android:importantForAutofill="no"
             android:nextFocusLeft="@+id/btn_tab_app_logs"
             android:nextFocusDown="@+id/rv_logs_list" />
 
