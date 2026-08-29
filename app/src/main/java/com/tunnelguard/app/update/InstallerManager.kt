@@ -1,11 +1,10 @@
 package com.tunnelguard.app.update
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
+import com.tunnelguard.app.SettingsIntentLauncher
 import com.tunnelguard.app.TunnelGuardConfig
 import com.tunnelguard.app.UpdateManager
 import java.io.File
@@ -14,16 +13,10 @@ class InstallerManager(private val activity: Activity, private val config: Tunne
     fun canInstallPackages(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || activity.packageManager.canRequestPackageInstalls()
 
     fun openInstallPermissionSettings() {
-        val primary = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${activity.packageName}") }
-        try {
-            activity.startActivity(primary)
-        } catch (_: ActivityNotFoundException) {
-            try {
-                activity.startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (_: ActivityNotFoundException) {
-                // Both intents failed, nothing more we can do
-            }
-        }
+        SettingsIntentLauncher.launch(
+            SettingsIntentLauncher.installPermissionIntents(activity.packageName),
+            activity::startActivity
+        )
     }
 
     fun validate(apkFile: File, outError: StringBuilder): Boolean = UpdateManager(activity, config).validateApkFile(apkFile, outError)

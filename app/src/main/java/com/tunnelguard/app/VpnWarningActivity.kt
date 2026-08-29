@@ -245,15 +245,15 @@ class VpnWarningActivity : AppCompatActivity() {
             }
         }
 
-        // Fallback to standard Android VPN settings
-        try {
-            config.addLog("Redirecting to Android system VPN settings.")
-            val intent = Intent(android.provider.Settings.ACTION_VPN_SETTINGS).apply {
+        // Fallback to the best system settings destination supported by this Android version.
+        config.addLog("Redirecting to Android system VPN settings.")
+        val settingsIntents = SettingsIntentLauncher.vpnSettingsIntents().onEach { intent ->
+            intent.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            startActivity(intent)
-        } catch (e: Exception) {
-            config.addLog("Failed to open Android VPN Settings: ${e.message}")
+        }
+        if (!SettingsIntentLauncher.launch(settingsIntents, ::startActivity)) {
+            config.addLog("Failed to open Android VPN Settings or general Settings.")
             Toast.makeText(this, "Could not open VPN settings.", Toast.LENGTH_LONG).show()
         }
         finish()
