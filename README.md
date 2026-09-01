@@ -69,6 +69,10 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
    * Receiver evaluates `VpnService.prepare` status on startup.
    * Safe execution avoids boot crashes and loops.
    * Persists and displays boot failure diagnostics (e.g. if permissions were revoked).
+7. **Per-App VPN Country Requirements:**
+   * The Protected Apps screen lets users assign a VPN exit country to each app; assigning a country automatically protects that app.
+   * TunnelGuard checks the active VPN's GeoIP country when that app is in the foreground and treats a missing or mismatched country as disconnected, preserving fail-closed warnings.
+   * Country assignments are included in configuration backup and restore.
 
 ---
 
@@ -89,6 +93,7 @@ By adding only the package names of selected apps to the builder, Android routes
 ## Known Limitations & Security Considerations
 
 1. **System-level restriction:** Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same time as a standard on-device VPN app like Proton VPN. It is designed to act as the firewall wrapper itself, or be used in environments where the VPN is configured or simulated via state simulation tools.
+   Per-app country assignments are routing requirements, not simultaneous VPN tunnels: the installed upstream VPN must connect to the assigned country, and only one country can be active at a time.
 2. **System Apps Bypass:** Certain system-level apps or Google Play Services may bypass VPN interfaces if specifically exempted by Android OS configurations.
 3. **IPv6 Leaks on Unsupported Hardware:** On legacy devices or custom ROMs where the kernel doesn't support local VPN IPv6 routes, IPv6 traffic is unprotected. Ensure IPv6 is disabled in your router/modem or TV settings if your hardware falls back to IPv4-only.
 

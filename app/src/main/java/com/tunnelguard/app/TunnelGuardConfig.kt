@@ -32,6 +32,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_COUNTRY_VPN_ENABLED = "country_vpn_setting_enabled"
         private const val KEY_COUNTRY_VPN_TARGET = "country_vpn_target_country"
         private const val KEY_ACTIVE_VPN_COUNTRY = "active_vpn_country"
+        private const val KEY_APP_VPN_COUNTRIES = "app_vpn_countries"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -60,7 +61,8 @@ class TunnelGuardConfig(private val context: Context) {
     fun detectRealVpnCapabilities(
         connectivityManager: ConnectivityManager?,
         networkCountryCode: String? = null,
-        networkCountryResolver: ((android.net.Network) -> String?)? = null
+        networkCountryResolver: ((android.net.Network) -> String?)? = null,
+        requiredCountryCode: String? = null
     ): VpnDetectionResult {
         if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
         try {
@@ -129,11 +131,14 @@ class TunnelGuardConfig(private val context: Context) {
                             networkCountryResolver.invoke(network)
                         } else {
                             networkCountryCode
-                                ?: (if (isCountryVpnSettingEnabled()) defaultCountryResolver.resolveCountry(network) else null)
+                                ?: (if (isCountryVpnSettingEnabled() || requiredCountryCode != null) defaultCountryResolver.resolveCountry(network) else null)
                                 ?: getActiveVpnCountryCode()
                         }
-                        if (isCountryVpnSettingEnabled() && !isCountryVpnMatch(evalCountry)) {
-                            addLog("Active VPN detected but country mismatch (Target: ${getCountryVpnTargetCountry()}, Active: $evalCountry)", "WARN")
+                        val targetCountry = requiredCountryCode ?: getCountryVpnTargetCountry()
+                        val requiresMatch = requiredCountryCode != null || isCountryVpnSettingEnabled()
+                        val countryMatches = targetCountry.equals("ANY", true) || evalCountry?.equals(targetCountry, true) == true
+                        if (requiresMatch && !countryMatches) {
+                            addLog("Active VPN detected but country mismatch (Target: $targetCountry, Active: $evalCountry)", "WARN")
                             foundMismatchedVpn = true
                             continue
                         }
@@ -353,6 +358,46 @@ class TunnelGuardConfig(private val context: Context) {
 
     fun isAppProtected(packageName: String): Boolean {
         return getProtectedApps().contains(packageName)
+    }
+
+    /** Returns the ISO country code required by an app, or null when it uses the global setting. */
+    fun getAppVpnCountry(packageName: String): String? {
+        val value = getAppVpnCountries()[packageName]?.uppercase()?.trim()
+        return value?.takeIf { it.isNotEmpty() && it != "ANY" }
+    }
+
+    /** Assigns an app to a VPN exit country. Passing null or ANY restores the global setting. */
+    fun setAppVpnCountry(packageName: String, countryCode: String?) {
+        val countries = getAppVpnCountries().toMutableMap()
+        val normalized = countryCode?.uppercase()?.trim()
+        if (normalized.isNullOrEmpty() || normalized == "ANY") {
+            countries.remove(packageName)
+        } else {
+            require(normalized.matches(Regex("^[A-Z]{2,3}$"))) { "Invalid country code" }
+            countries[packageName] = normalized
+            setAppProtected(packageName, true)
+        }
+        val json = JSONObject()
+        countries.toSortedMap().forEach { (pkg, code) -> json.put(pkg, code) }
+        prefs.edit().putString(KEY_APP_VPN_COUNTRIES, json.toString()).apply()
+        addLog("App VPN country updated: $packageName -> ${normalized ?: "global"}")
+    }
+
+    fun getAppVpnCountries(): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        return try {
+            val json = JSONObject(prefs.getString(KEY_APP_VPN_COUNTRIES, "{}") ?: "{}")
+            json.keys().forEach { packageName -> result[packageName] = json.getString(packageName) }
+            result
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    /** Checks the active VPN exit against an app's override, falling back to the global policy. */
+    fun isAppVpnCountryMatch(packageName: String, detectedCountryCode: String? = getActiveVpnCountryCode()): Boolean {
+        val required = getAppVpnCountry(packageName) ?: return isCountryVpnMatch(detectedCountryCode)
+        return detectedCountryCode?.trim()?.equals(required, ignoreCase = true) == true
     }
 
     /**
@@ -661,6 +706,7 @@ class TunnelGuardConfig(private val context: Context) {
             obj.put("country_vpn_setting_enabled", isCountryVpnSettingEnabled())
             obj.put("country_vpn_target_country", getCountryVpnTargetCountry())
             obj.put("selected_profile_id", getSelectedProfileId())
+            obj.put("app_vpn_countries", JSONObject(getAppVpnCountries()))
 
             val profilesStr = prefs.getString("protection_profiles", null)
             if (profilesStr != null) {
@@ -716,6 +762,17 @@ class TunnelGuardConfig(private val context: Context) {
             setAutoConnectVpnEnabled(autoConnectVpnEnabled)
             setCountryVpnSettingEnabled(countryVpnEnabled)
             setCountryVpnTargetCountry(countryVpnTarget)
+
+            val appCountries = obj.optJSONObject("app_vpn_countries")
+            prefs.edit().remove(KEY_APP_VPN_COUNTRIES).apply()
+            appCountries?.keys()?.forEach { packageName ->
+                val code = appCountries.optString(packageName).uppercase().trim()
+                if (pkgRegex.matches(packageName) && code.matches(Regex("^[A-Z]{2,3}$"))) {
+                    setAppVpnCountry(packageName, code)
+                } else {
+                    addLog("Ignored invalid app VPN country assignment: $packageName -> $code", "WARN")
+                }
+            }
 
             if (validatedProfiles.isNotEmpty()) {
                 saveProfiles(validatedProfiles)
