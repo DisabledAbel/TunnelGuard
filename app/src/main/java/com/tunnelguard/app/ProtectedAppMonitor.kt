@@ -13,6 +13,14 @@ class ProtectedAppMonitor(
     private val vpnDetector: VpnDetector = DefaultVpnDetector(config)
 ) {
 
+    /**
+     * Evaluates the current monitoring state and determines whether a warning should be triggered.
+     *
+     * @param connectivityManager The connectivity manager used to detect the VPN state.
+     * @param lastForegroundApp The previously detected foreground package, used when the current package is unavailable.
+     * @param wasVpnOn The VPN state from the previous evaluation.
+     * @return The monitoring result, including the relevant package and VPN state.
+     */
     fun evaluateMonitoringState(
         context: Context,
         connectivityManager: ConnectivityManager?,
