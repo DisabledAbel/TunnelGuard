@@ -84,6 +84,11 @@ class AppsActivity : AppCompatActivity() {
         loadInstalledApps()
     }
 
+    /**
+     * Displays a dialog for selecting the VPN country used by an app.
+     *
+     * @param app The app whose VPN country is being selected.
+     */
     private fun showCountryDialog(app: AppItem) {
         val labels = arrayOf("Use global country", "United States (US)", "United Kingdom (GB)", "Canada (CA)", "Germany (DE)", "France (FR)", "Netherlands (NL)", "Spain (ES)", "Italy (IT)", "Australia (AU)", "Japan (JP)", "Singapore (SG)")
         val codes = arrayOf<String?>(null, "US", "GB", "CA", "DE", "FR", "NL", "ES", "IT", "AU", "JP", "SG")
@@ -104,6 +109,9 @@ class AppsActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Loads installed launcher apps and updates the displayed list with their protection settings and VPN countries.
+     */
     private fun loadInstalledApps() {
         // Offload Package Manager querying & icon loading to the IO dispatcher
         lifecycleScope.launch(Dispatchers.Main) {

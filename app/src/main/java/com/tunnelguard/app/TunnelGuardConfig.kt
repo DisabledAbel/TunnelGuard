@@ -53,7 +53,8 @@ class TunnelGuardConfig(private val context: Context) {
      *
      * @param connectivityManager The connectivity manager used to inspect available networks.
      * @param networkCountryCode The country code associated with the network, when available.
-     * @param networkCountryResolver Resolves the country code for a network when country-specific matching is enabled.
+     * @param networkCountryResolver Resolves the country code for a network when country matching is required.
+     * @param requiredCountryCode An optional country code that requires the active VPN to match, regardless of the global country-VPN setting.
      * @return [VpnDetectionResult.VPN_DETECTED] if a matching external VPN is found,
      *         [VpnDetectionResult.VPN_NOT_DETECTED] if no matching external VPN is found,
      *         or [VpnDetectionResult.VPN_UNKNOWN] if inspection is incomplete or fails.
@@ -358,6 +359,12 @@ class TunnelGuardConfig(private val context: Context) {
         setProtectedApps(apps)
     }
 
+    /**
+     * Determines whether the specified package is protected by the selected profile.
+     *
+     * @param packageName The package to check.
+     * @return `true` if the package is protected, `false` otherwise.
+     */
     fun isAppProtected(packageName: String): Boolean {
         return getProtectedApps().contains(packageName)
     }
@@ -368,7 +375,13 @@ class TunnelGuardConfig(private val context: Context) {
         return value?.takeIf { it.isNotEmpty() && it != "ANY" }
     }
 
-    /** Assigns an app to a VPN exit country. Passing null or ANY restores the global setting. */
+    /**
+     * Assigns an app-specific VPN exit country or restores the global country policy.
+     *
+     * @param packageName The package name of the app.
+     * @param countryCode The two- or three-letter country code, or `null`/`ANY` to use the global policy.
+     * @throws IllegalArgumentException If `countryCode` is not a valid two- or three-letter country code.
+     */
     fun setAppVpnCountry(packageName: String, countryCode: String?) {
         val countries = getAppVpnCountries().toMutableMap()
         val normalized = countryCode?.uppercase()?.trim()
@@ -385,6 +398,11 @@ class TunnelGuardConfig(private val context: Context) {
         addLog("App VPN country updated: $packageName -> ${normalized ?: "global"}")
     }
 
+    /**
+     * Retrieves the configured VPN country overrides for apps.
+     *
+     * @return A map of package names to uppercase country codes, or an empty map if the stored data cannot be parsed.
+     */
     fun getAppVpnCountries(): Map<String, String> {
         val result = mutableMapOf<String, String>()
         return try {
@@ -698,6 +716,11 @@ class TunnelGuardConfig(private val context: Context) {
         }
     }
 
+    /**
+     * Exports selected configuration settings, protection profiles, and app-specific VPN country mappings as JSON.
+     *
+     * @return The exported configuration JSON, or `null` if the export fails.
+     */
     fun exportConfigToJson(): String? {
         val obj = JSONObject()
         try {
@@ -721,6 +744,14 @@ class TunnelGuardConfig(private val context: Context) {
         }
     }
 
+    /**
+     * Imports application settings, protection profiles, and per-app VPN country assignments from JSON.
+     *
+     * Invalid package names, country assignments, and unsupported profile entries are ignored and logged.
+     *
+     * @param jsonStr The JSON configuration to import.
+     * @return `true` if the configuration is imported successfully, `false` if parsing or import fails.
+     */
     fun importConfigFromJson(jsonStr: String): Boolean {
         try {
             val obj = JSONObject(jsonStr)
@@ -987,6 +1018,9 @@ class TunnelGuardConfig(private val context: Context) {
         return target
     }
 
+    /**
+     * Clears the pending VPN redirect target and its timestamp.
+     */
     fun clearPendingVpnRedirectTarget() {
         prefs.edit()
             .remove("pending_vpn_redirect_target")
