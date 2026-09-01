@@ -129,6 +129,8 @@ class TunnelGuardConfig(private val context: Context) {
                     } else {
                         val evalCountry = if (networkCountryResolver != null) {
                             networkCountryResolver.invoke(network)
+                                ?: getActiveVpnCountryCode().takeIf { it.isNotBlank() }
+                                ?: (if (isCountryVpnSettingEnabled() || requiredCountryCode != null) defaultCountryResolver.resolveCountry(network) else null)
                         } else {
                             networkCountryCode
                                 ?: (if (isCountryVpnSettingEnabled() || requiredCountryCode != null) defaultCountryResolver.resolveCountry(network) else null)

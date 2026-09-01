@@ -511,6 +511,27 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testNullCountryResolverFallsBackToPersistedActiveCountry() {
+        config.setCountryVpnSettingEnabled(true)
+        config.setCountryVpnTargetCountry("GB")
+        config.setActiveVpnCountryCode("GB")
+
+        val connectivityManager = mock(ConnectivityManager::class.java)
+        val network = mock(Network::class.java)
+        val capabilities = mock(NetworkCapabilities::class.java)
+        whenever(connectivityManager.allNetworks).thenReturn(arrayOf(network))
+        whenever(connectivityManager.getNetworkCapabilities(network)).thenReturn(capabilities)
+        whenever(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)).thenReturn(true)
+
+        val result = config.detectRealVpnCapabilities(
+            connectivityManager,
+            networkCountryResolver = { null }
+        )
+
+        assertEquals(VpnDetectionResult.VPN_DETECTED, result)
+    }
+
+    @Test
     fun testCountryVpnPreferencesAndMatching() {
         // Defaults
         assertFalse(config.isCountryVpnSettingEnabled())
