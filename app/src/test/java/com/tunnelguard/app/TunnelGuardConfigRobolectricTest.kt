@@ -107,6 +107,31 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    fun appVpnCountryAssignmentPersistsProtectsAndMatches() {
+        config.setSelectedProfileId("custom")
+        config.setAppVpnCountry("com.example.streaming", "gb")
+
+        assertEquals("GB", config.getAppVpnCountry("com.example.streaming"))
+        assertTrue(config.isAppProtected("com.example.streaming"))
+        assertTrue(config.isAppVpnCountryMatch("com.example.streaming", "GB"))
+        assertFalse(config.isAppVpnCountryMatch("com.example.streaming", "US"))
+
+        config.setAppVpnCountry("com.example.streaming", null)
+        assertNull(config.getAppVpnCountry("com.example.streaming"))
+    }
+
+    @Test
+    fun appVpnCountryAssignmentsRoundTripThroughBackup() {
+        config.setSelectedProfileId("custom")
+        config.setAppVpnCountry("com.example.video", "JP")
+        val exported = requireNotNull(config.exportConfigToJson())
+        config.setAppVpnCountry("com.example.video", null)
+
+        assertTrue(config.importConfigFromJson(exported))
+        assertEquals("JP", config.getAppVpnCountry("com.example.video"))
+    }
+
+    @Test
     @Config(sdk = [Build.VERSION_CODES.R])
     fun testDetectRealVpnCapabilitiesOnAndroidR() {
         val mockConnectivityManager = mock(ConnectivityManager::class.java)

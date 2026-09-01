@@ -18,6 +18,18 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <TextView
+        android:id="@+id/tv_apps_country_help"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Select an app's VPN country button to require that exit country. Android supports one active VPN country at a time."
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_apps_header" />
+
     <!-- Search/Filter Input -->
     <EditText
         android:id="@+id/et_search_apps"
@@ -36,7 +48,7 @@
         android:imeOptions="actionSearch"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tv_apps_header" />
+        app:layout_constraintTop_toBottomOf="@+id/tv_apps_country_help" />
 
     <!-- Application List -->
     <androidx.recyclerview.widget.RecyclerView
