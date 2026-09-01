@@ -49,9 +49,12 @@ class GitHubUpdateCheckerImpl(
             if (tagName.isBlank()) return@withContext UpdateCheckResult.Failure("Release is missing tag_name")
             if (!isOfficialReleasePage(htmlUrl)) return@withContext UpdateCheckResult.Failure("Release URL is not the official TunnelGuard GitHub Releases page")
 
-            val apkUrl = body.assets
-                ?.firstOrNull { it.name?.endsWith(".apk", ignoreCase = true) == true && isTrustedGitHubDownloadUrl(it.browser_download_url) }
-                ?.browser_download_url
+            // A release can contain old, debug, or architecture-specific APKs. Picking
+            // the first *.apk can therefore hand Android a different application
+            // package/signing identity and make an in-place update fail. Stable builds
+            // publish one canonical APK name; only that asset is eligible for the
+            // automatic installer.
+            val apkUrl = selectOfficialApkAsset(tagName, body.assets)
 
             UpdateCheckResult.UpdateAvailable(
                 latestVersion = tagName.removePrefix("v").removePrefix("V"),
@@ -74,6 +77,16 @@ class GitHubUpdateCheckerImpl(
         uri.scheme == "https" && uri.host.equals("github.com", ignoreCase = true) &&
             uri.path.startsWith("/DisabledAbel/TunnelGuard/releases/")
     } catch (_: Exception) { false }
+
+    internal fun selectOfficialApkAsset(tagName: String, assets: List<GitHubAsset>?): String? {
+        val normalizedVersion = tagName.trim().removePrefix("v").removePrefix("V")
+        val expectedName = "TunnelGuard-v$normalizedVersion-release.apk"
+        return assets
+            ?.singleOrNull {
+                it.name == expectedName && isTrustedGitHubDownloadUrl(it.browser_download_url)
+            }
+            ?.browser_download_url
+    }
 
     private fun isTrustedGitHubDownloadUrl(url: String?): Boolean {
         if (url == null) return false
