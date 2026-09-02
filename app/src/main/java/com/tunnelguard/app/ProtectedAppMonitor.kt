@@ -4,13 +4,23 @@ import android.content.Context
 import android.net.ConnectivityManager
 
 sealed class MonitoringCheckResult {
-    data class TriggerWarning(val targetPackage: String, val isVpnOn: Boolean) : MonitoringCheckResult()
-    data class NoAction(val currentApp: String?, val isVpnOn: Boolean?) : MonitoringCheckResult()
+    abstract val foregroundPolicyChanged: Boolean
+    data class TriggerWarning(
+        val targetPackage: String,
+        val isVpnOn: Boolean,
+        override val foregroundPolicyChanged: Boolean
+    ) : MonitoringCheckResult()
+    data class NoAction(
+        val currentApp: String?,
+        val isVpnOn: Boolean?,
+        override val foregroundPolicyChanged: Boolean
+    ) : MonitoringCheckResult()
 }
 
 class ProtectedAppMonitor(
     private val config: TunnelGuardConfig,
-    private val vpnDetector: VpnDetector = DefaultVpnDetector(config)
+    private val vpnDetector: VpnDetector = DefaultVpnDetector(config),
+    private val transitionDetector: ForegroundPolicyTransitionDetector = ForegroundPolicyTransitionDetector()
 ) {
 
     /**
@@ -28,12 +38,15 @@ class ProtectedAppMonitor(
         wasVpnOn: Boolean?
     ): MonitoringCheckResult {
         val detectedApp = config.getForegroundPackageName(context)
+        val foregroundPolicy = config.getForegroundVpnPolicy(detectedApp)
+        val policyChanged = transitionDetector.observe(
+            ForegroundPolicyObservation(detectedApp, foregroundPolicy)
+        )
         val currentApp = detectedApp ?: lastForegroundApp
         if (currentApp == null) {
-            return MonitoringCheckResult.NoAction(null, wasVpnOn)
+            return MonitoringCheckResult.NoAction(null, wasVpnOn, policyChanged)
         }
 
-        val foregroundPolicy = config.getForegroundVpnPolicy(currentApp)
         var isVpnOn = if (config.isSimulatedVpnEnabled()) {
             val state = config.getVPNState()
             state == VPNState.CONNECTED || state == VPNState.PROTECTED
@@ -55,10 +68,10 @@ class ProtectedAppMonitor(
             )
 
             if (shouldTrigger) {
-                return MonitoringCheckResult.TriggerWarning(currentApp, isVpnOn)
+                return MonitoringCheckResult.TriggerWarning(currentApp, isVpnOn, policyChanged)
             }
         }
 
-        return MonitoringCheckResult.NoAction(currentApp, isVpnOn)
+        return MonitoringCheckResult.NoAction(currentApp, isVpnOn, policyChanged)
     }
 }

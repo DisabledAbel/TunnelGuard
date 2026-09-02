@@ -47,6 +47,10 @@ class TunnelGuardVpnService : VpnService() {
     private lateinit var appMonitor: ProtectedAppMonitor
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val routingEvaluator = SerializedRoutingEvaluator(
+        dispatch = { task -> serviceScope.launch { task() } },
+        evaluate = ::checkAndRunVpnRouting
+    )
     private var monitorJob: Job? = null
 
     // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
@@ -59,7 +63,7 @@ class TunnelGuardVpnService : VpnService() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             config.addLog("Network Callback: onAvailable. Re-evaluating routing.")
-            serviceScope.launch { checkAndRunVpnRouting() }
+            routingEvaluator.request()
         }
 
         /**
@@ -71,7 +75,7 @@ class TunnelGuardVpnService : VpnService() {
             super.onLost(network)
             config.addLog("Network Callback: onLost. Re-evaluating routing.")
             (vpnDetector as? DefaultVpnDetector)?.countryResolver?.clearCacheForNetwork(network)
-            serviceScope.launch { checkAndRunVpnRouting() }
+            routingEvaluator.request()
         }
 
         /**
@@ -88,7 +92,7 @@ class TunnelGuardVpnService : VpnService() {
             if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) transports.add("ETHERNET")
             val transportStr = if (transports.isEmpty()) "OTHER" else transports.joinToString(", ")
             config.addLog("Network Capabilities Changed. Transports: $transportStr. Re-evaluating routing.")
-            serviceScope.launch { checkAndRunVpnRouting() }
+            routingEvaluator.request()
         }
     }
 
@@ -101,7 +105,7 @@ class TunnelGuardVpnService : VpnService() {
          */
         override fun onReceive(context: Context, intent: Intent) {
             config.addLog("Screen/Wake event: ${intent.action}. Re-evaluating protection.")
-            serviceScope.launch { checkAndRunVpnRouting() }
+            routingEvaluator.request()
         }
     }
 
@@ -232,6 +236,11 @@ class TunnelGuardVpnService : VpnService() {
                         lastForegroundApp = lastForegroundApp,
                         wasVpnOn = wasVpnOn
                     )
+
+                    if (evalResult.foregroundPolicyChanged) {
+                        config.addLog("Foreground app or effective VPN policy changed. Re-evaluating routing.")
+                        routingEvaluator.request()
+                    }
 
                     when (evalResult) {
                         is MonitoringCheckResult.TriggerWarning -> {
@@ -412,7 +421,7 @@ class TunnelGuardVpnService : VpnService() {
             }
         }
 
-        serviceScope.launch { checkAndRunVpnRouting() }
+        routingEvaluator.request()
 
         return START_STICKY
     }
@@ -455,7 +464,7 @@ class TunnelGuardVpnService : VpnService() {
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")
         transitionTo(ServiceState.VPN_CONFLICT)
         closeVpnInterface()
-        serviceScope.launch { checkAndRunVpnRouting() }
+        routingEvaluator.request()
         super.onRevoke()
     }
 
