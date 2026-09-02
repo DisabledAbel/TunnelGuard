@@ -33,12 +33,12 @@ class ProtectedAppMonitor(
             return MonitoringCheckResult.NoAction(null, wasVpnOn)
         }
 
-        val requiredCountry = config.getEffectiveVpnCountry(currentApp)
+        val foregroundPolicy = config.getForegroundVpnPolicy(currentApp)
         var isVpnOn = if (config.isSimulatedVpnEnabled()) {
             val state = config.getVPNState()
             state == VPNState.CONNECTED || state == VPNState.PROTECTED
         } else if (vpnDetector is DefaultVpnDetector) {
-            vpnDetector.evaluateUpstreamVpn(connectivityManager, requiredCountry).isValid
+            vpnDetector.evaluateUpstreamVpn(connectivityManager, foregroundPolicy).isValid
         } else {
             vpnDetector.detectVpnState(connectivityManager) == VpnDetectionResult.VPN_DETECTED
         }

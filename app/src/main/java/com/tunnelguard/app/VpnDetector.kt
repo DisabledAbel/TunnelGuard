@@ -19,12 +19,15 @@ class DefaultVpnDetector(
     /** Evaluates VPN presence and country as one fail-closed policy decision. */
     fun evaluateUpstreamVpn(
         connectivityManager: ConnectivityManager?,
-        requiredCountry: String
+        policy: ForegroundVpnPolicy
     ): UpstreamVpnEvaluation {
+        if (policy is ForegroundVpnPolicy.Unknown && policy.hasProtectedCountryOverrides) {
+            return UpstreamVpnEvaluation.ForegroundUnknown
+        }
         return config.evaluateUpstreamVpn(
             connectivityManager,
             networkCountryResolver = { net -> countryResolver.resolveCountry(net) },
-            requiredCountryCode = requiredCountry.takeUnless { it.equals("ANY", ignoreCase = true) }
+            requiredCountryCode = policy.requiredCountry.takeUnless { it.equals("ANY", ignoreCase = true) }
         )
     }
 

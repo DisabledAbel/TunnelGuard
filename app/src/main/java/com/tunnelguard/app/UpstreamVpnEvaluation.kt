@@ -5,6 +5,7 @@ sealed class UpstreamVpnEvaluation {
     data class Valid(val detectedCountry: String? = null) : UpstreamVpnEvaluation()
     data object Missing : UpstreamVpnEvaluation()
     data class CountryMismatch(val required: String, val detected: String?) : UpstreamVpnEvaluation()
+    data object ForegroundUnknown : UpstreamVpnEvaluation()
     data object Unknown : UpstreamVpnEvaluation()
 
     val isValid: Boolean
@@ -26,4 +27,16 @@ sealed class UpstreamVpnEvaluation {
             else CountryMismatch(required, detected)
         }
     }
+}
+
+/** Country policy selected from a foreground-app observation. */
+sealed class ForegroundVpnPolicy {
+    abstract val requiredCountry: String
+
+    data class ProtectedApp(val packageName: String, override val requiredCountry: String) : ForegroundVpnPolicy()
+    data class UnprotectedApp(val packageName: String, override val requiredCountry: String) : ForegroundVpnPolicy()
+    data class Unknown(
+        override val requiredCountry: String,
+        val hasProtectedCountryOverrides: Boolean
+    ) : ForegroundVpnPolicy()
 }

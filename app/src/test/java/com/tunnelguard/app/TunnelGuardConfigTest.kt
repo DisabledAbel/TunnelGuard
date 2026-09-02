@@ -537,6 +537,42 @@ class TunnelGuardConfigTest {
     }
 
     @Test
+    fun testUnknownForegroundFailsClosedWhenProtectedCountryOverrideExists() {
+        config.setSelectedProfileId("custom")
+        config.setAppVpnCountry("com.protected.us", "US")
+
+        val policy = config.getForegroundVpnPolicy(null)
+        assertTrue(policy is ForegroundVpnPolicy.Unknown)
+        assertTrue((policy as ForegroundVpnPolicy.Unknown).hasProtectedCountryOverrides)
+        assertEquals(
+            UpstreamVpnEvaluation.ForegroundUnknown,
+            DefaultVpnDetector(config).evaluateUpstreamVpn(null, policy)
+        )
+    }
+
+    @Test
+    fun testKnownUnprotectedForegroundIsNotTreatedAsUnknown() {
+        config.setSelectedProfileId("custom")
+        config.setAppVpnCountry("com.protected.us", "US")
+
+        val policy = config.getForegroundVpnPolicy("com.unprotected")
+        assertTrue(policy is ForegroundVpnPolicy.UnprotectedApp)
+        assertEquals("ANY", policy.requiredCountry)
+    }
+
+    @Test
+    fun testKnownProtectedForegroundUsesItsSpecificCountry() {
+        config.setSelectedProfileId("custom")
+        config.setAppVpnCountry("com.protected.us", "US")
+
+        val policy = config.getForegroundVpnPolicy("com.protected.us")
+        assertTrue(policy is ForegroundVpnPolicy.ProtectedApp)
+        assertEquals("US", policy.requiredCountry)
+        assertTrue(UpstreamVpnEvaluation.fromObservation(true, policy.requiredCountry, "US").isValid)
+        assertFalse(UpstreamVpnEvaluation.fromObservation(true, policy.requiredCountry, "CA").isValid)
+    }
+
+    @Test
     fun testCountryVpnPreferencesAndMatching() {
         // Defaults
         assertFalse(config.isCountryVpnSettingEnabled())

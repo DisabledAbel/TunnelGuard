@@ -171,6 +171,11 @@ class TunnelGuardVpnService : VpnService() {
         ): Boolean {
             return !isVpnOn && !isSuppressed && (currentApp != lastForegroundApp || wasVpnOn == true)
         }
+
+        /** Country conflicts yield to Emergency Lock, which must retain the local block route. */
+        fun shouldEnterVpnConflict(evaluation: UpstreamVpnEvaluation?, emergencyLock: Boolean): Boolean {
+            return !emergencyLock && evaluation is UpstreamVpnEvaluation.CountryMismatch
+        }
     }
 
     /**
@@ -509,10 +514,9 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             val foregroundApp = config.getForegroundPackageName(this)
-                ?.takeIf { config.isAppProtected(it) && it != packageName }
-            val requiredCountry = config.getEffectiveVpnCountry(foregroundApp)
+            val foregroundPolicy = config.getForegroundVpnPolicy(foregroundApp)
             val evaluation = if (vpnDetector is DefaultVpnDetector) {
-                (vpnDetector as DefaultVpnDetector).evaluateUpstreamVpn(connectivityManager, requiredCountry)
+                (vpnDetector as DefaultVpnDetector).evaluateUpstreamVpn(connectivityManager, foregroundPolicy)
             } else {
                 when (vpnDetector.detectVpnState(connectivityManager)) {
                     VpnDetectionResult.VPN_DETECTED -> UpstreamVpnEvaluation.Valid()
@@ -525,7 +529,8 @@ class TunnelGuardVpnService : VpnService() {
             val prevState = config.getVPNState()
             currentVpnState = when (evaluation) {
                 is UpstreamVpnEvaluation.Valid -> VPNState.PROTECTED
-                is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.Missing, UpstreamVpnEvaluation.Unknown -> {
+                is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.ForegroundUnknown,
+                UpstreamVpnEvaluation.Missing, UpstreamVpnEvaluation.Unknown -> {
                     if (vpnInterface != null) VPNState.BLOCKED else VPNState.DISCONNECTED
                 }
             }
@@ -582,7 +587,9 @@ class TunnelGuardVpnService : VpnService() {
 
         // --- PREVENT UNCONDITIONAL VPN TAKEOVER ---
         // Never compete for Android's single VPN slot when an unsuitable external VPN is active.
-        if (upstreamEvaluation is UpstreamVpnEvaluation.CountryMismatch) {
+        if (isEmergencyLock) {
+            config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
+        } else if (shouldEnterVpnConflict(upstreamEvaluation, isEmergencyLock)) {
             // Android only permits one VPN owner. Do not attempt to establish TunnelGuard's local
             // interface while the unsuitable external VPN owns that slot; state remains invalid
             // and the monitor drives the existing warning/redirect workflow.
@@ -590,8 +597,6 @@ class TunnelGuardVpnService : VpnService() {
             transitionTo(ServiceState.VPN_CONFLICT)
             sendBroadcast(broadcastIntent)
             return
-        } else if (isEmergencyLock) {
-            config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
         } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
@@ -722,6 +727,8 @@ class TunnelGuardVpnService : VpnService() {
             } else {
                 "Protected app ${packageName ?: "global policy"} requires VPN country ${evaluation.required}. Active VPN country ${evaluation.detected} does not satisfy it. Failing closed."
             }
+            UpstreamVpnEvaluation.ForegroundUnknown ->
+                "Unable to determine the foreground app while protected apps have country overrides. Failing closed."
             else -> null
         }
         if (message != lastCountryFailureLog) {
