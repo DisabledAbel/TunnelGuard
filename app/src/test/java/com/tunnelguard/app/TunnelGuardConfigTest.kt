@@ -511,7 +511,7 @@ class TunnelGuardConfigTest {
     }
 
     @Test
-    fun testNullCountryResolverFallsBackToPersistedActiveCountry() {
+    fun testNullCountryResolverDoesNotTrustPersistedCountry() {
         config.setCountryVpnSettingEnabled(true)
         config.setCountryVpnTargetCountry("GB")
         config.setActiveVpnCountryCode("GB")
@@ -528,7 +528,12 @@ class TunnelGuardConfigTest {
             networkCountryResolver = { null }
         )
 
-        assertEquals(VpnDetectionResult.VPN_DETECTED, result)
+        assertEquals(VpnDetectionResult.VPN_NOT_DETECTED, result)
+        val evaluation = config.evaluateUpstreamVpn(
+            connectivityManager,
+            networkCountryResolver = { null }
+        )
+        assertTrue(evaluation is UpstreamVpnEvaluation.CountryMismatch)
     }
 
     @Test

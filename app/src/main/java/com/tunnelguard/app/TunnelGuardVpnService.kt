@@ -40,6 +40,7 @@ class TunnelGuardVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var lastEstablishedApps: Set<String>? = null
     private var lastEmergencyLock: Boolean? = null
+    private var lastCountryFailureLog: String? = null
     private lateinit var config: TunnelGuardConfig
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var vpnDetector: VpnDetector
@@ -500,23 +501,41 @@ class TunnelGuardVpnService : VpnService() {
         synchronized(stateLock) {
             val simulated = config.isSimulatedVpnEnabled()
         val currentVpnState: VPNState
+        var upstreamEvaluation: UpstreamVpnEvaluation? = null
 
         if (simulated) {
             // In simulation mode, read state from preferences
             currentVpnState = config.getVPNState()
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
-            // Check real network capabilities for TRANSPORT_VPN (to detect upstream VPN tunnels)
-            val detectionResult = vpnDetector.detectVpnState(connectivityManager)
+            val foregroundApp = config.getForegroundPackageName(this)
+                ?.takeIf { config.isAppProtected(it) && it != packageName }
+            val requiredCountry = config.getEffectiveVpnCountry(foregroundApp)
+            val evaluation = if (vpnDetector is DefaultVpnDetector) {
+                (vpnDetector as DefaultVpnDetector).evaluateUpstreamVpn(connectivityManager, requiredCountry)
+            } else {
+                when (vpnDetector.detectVpnState(connectivityManager)) {
+                    VpnDetectionResult.VPN_DETECTED -> UpstreamVpnEvaluation.Valid()
+                    VpnDetectionResult.VPN_NOT_DETECTED -> UpstreamVpnEvaluation.Missing
+                    VpnDetectionResult.VPN_UNKNOWN -> UpstreamVpnEvaluation.Unknown
+                }
+            }
+            logCountryFailureOnce(foregroundApp, evaluation)
+            upstreamEvaluation = evaluation
             val prevState = config.getVPNState()
-            currentVpnState = when (detectionResult) {
-                VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
-                VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
+            currentVpnState = when (evaluation) {
+                is UpstreamVpnEvaluation.Valid -> VPNState.PROTECTED
+                is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.Missing, UpstreamVpnEvaluation.Unknown -> {
                     if (vpnInterface != null) VPNState.BLOCKED else VPNState.DISCONNECTED
                 }
             }
             if ((prevState == VPNState.CONNECTED || prevState == VPNState.PROTECTED) && currentVpnState == VPNState.DISCONNECTED) {
-                config.setLastDisconnectReason("Loss of network connectivity")
+                val reason = if (evaluation is UpstreamVpnEvaluation.CountryMismatch) {
+                    "VPN country requirement not satisfied"
+                } else {
+                    "Loss of network connectivity"
+                }
+                config.setLastDisconnectReason(reason)
             }
             config.setVPNState(currentVpnState)
             config.addLog("Checking VPN in Real Mode. Status: $currentVpnState")
@@ -562,9 +581,16 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         // --- PREVENT UNCONDITIONAL VPN TAKEOVER ---
-        // If the upstream VPN is active/connected, we MUST NOT establish our local VpnService
-        // unless Emergency Lock is enabled!
-        if (isEmergencyLock) {
+        // Never compete for Android's single VPN slot when an unsuitable external VPN is active.
+        if (upstreamEvaluation is UpstreamVpnEvaluation.CountryMismatch) {
+            // Android only permits one VPN owner. Do not attempt to establish TunnelGuard's local
+            // interface while the unsuitable external VPN owns that slot; state remains invalid
+            // and the monitor drives the existing warning/redirect workflow.
+            closeVpnInterface()
+            transitionTo(ServiceState.VPN_CONFLICT)
+            sendBroadcast(broadcastIntent)
+            return
+        } else if (isEmergencyLock) {
             config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
         } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
@@ -686,6 +712,21 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(successBroadcastIntent)
         }
         transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
+        }
+    }
+
+    private fun logCountryFailureOnce(packageName: String?, evaluation: UpstreamVpnEvaluation) {
+        val message = when (evaluation) {
+            is UpstreamVpnEvaluation.CountryMismatch -> if (evaluation.detected == null) {
+                "Unable to verify VPN exit country for ${packageName ?: "global policy"}. Required ${evaluation.required}. Failing closed."
+            } else {
+                "Protected app ${packageName ?: "global policy"} requires VPN country ${evaluation.required}. Active VPN country ${evaluation.detected} does not satisfy it. Failing closed."
+            }
+            else -> null
+        }
+        if (message != lastCountryFailureLog) {
+            message?.let(config::addLogWarning)
+            lastCountryFailureLog = message
         }
     }
 
