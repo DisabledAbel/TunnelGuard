@@ -38,10 +38,10 @@ class VpnCountryResolver(
     }
 
     /**
-     * Resolves and caches the country code associated with the given network.
+     * Resolves the country code associated with the given network and caches the result.
      *
-     * @param network The network whose country code should be resolved, or `null` for the default network.
-     * @return A country code, a stale cached code while lookup is pending, or `null` if no code is available.
+     * @param network The network to resolve, or `null` to use the default network.
+     * @return The resolved country code, or `null` if no country code is available.
      */
     fun resolveCountry(network: Network?): String? {
         val netKey = network?.toString() ?: "default"
@@ -68,9 +68,10 @@ class VpnCountryResolver(
     /**
      * Resolves and caches the country code for a network using the configured GeoIP providers.
      *
-     * @param network The network used for the lookup, when available.
+     * @param network The network used for the lookup.
      * @param netKey The cache key associated with the network.
-     * @param now The timestamp to associate with the resolved country code.
+     * @param now The timestamp recorded with the cached country code.
+     * @param owner The ownership token for the lookup.
      * @return The resolved uppercase country code, or `null` if all providers fail.
      */
     private fun performLookup(network: Network?, netKey: String, now: Long, owner: String): String? {
@@ -143,8 +144,8 @@ class VpnCountryResolver(
     /**
      * Extracts and normalizes a country code from a GeoIP JSON response.
      *
-     * @param jsonStr The JSON response containing a country or country_code field.
-     * @return The uppercase country code when it contains two or three characters, or null otherwise.
+     * @param jsonStr The JSON response containing a country code field.
+     * @return The trimmed, uppercase country code when a valid two- or three-character value is found; otherwise, `null`.
      */
     private fun parseCountryCodeFromJson(jsonStr: String): String? {
         return try {
