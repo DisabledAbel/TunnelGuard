@@ -66,8 +66,17 @@ object SecurityStateMachine {
         }
 
         // Real Mode check
-        val vpnDetection = vpnDetector.detectVpnState(connectivityManager)
-        if (vpnDetection == VpnDetectionResult.VPN_DETECTED) {
+        val foregroundApp = config.getForegroundPackageName(context)
+            ?.takeIf { config.isAppProtected(it) && it != context.packageName }
+        val upstreamValid = if (vpnDetector is DefaultVpnDetector) {
+            vpnDetector.evaluateUpstreamVpn(
+                connectivityManager,
+                config.getEffectiveVpnCountry(foregroundApp)
+            ).isValid
+        } else {
+            vpnDetector.detectVpnState(connectivityManager) == VpnDetectionResult.VPN_DETECTED
+        }
+        if (upstreamValid) {
             return SecurityState.PROTECTED
         }
 

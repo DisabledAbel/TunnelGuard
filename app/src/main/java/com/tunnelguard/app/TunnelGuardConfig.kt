@@ -65,10 +65,28 @@ class TunnelGuardConfig(private val context: Context) {
         networkCountryResolver: ((android.net.Network) -> String?)? = null,
         requiredCountryCode: String? = null
     ): VpnDetectionResult {
-        if (connectivityManager == null) return VpnDetectionResult.VPN_UNKNOWN
+        return when (evaluateUpstreamVpn(connectivityManager, networkCountryCode, networkCountryResolver, requiredCountryCode)) {
+            is UpstreamVpnEvaluation.Valid -> VpnDetectionResult.VPN_DETECTED
+            is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.Missing -> VpnDetectionResult.VPN_NOT_DETECTED
+            UpstreamVpnEvaluation.Unknown -> VpnDetectionResult.VPN_UNKNOWN
+        }
+    }
+
+    /**
+     * Evaluates an external VPN against one effective country requirement. A country that cannot
+     * be positively resolved never satisfies a specific requirement.
+     */
+    fun evaluateUpstreamVpn(
+        connectivityManager: ConnectivityManager?,
+        networkCountryCode: String? = null,
+        networkCountryResolver: ((android.net.Network) -> String?)? = null,
+        requiredCountryCode: String? = null
+    ): UpstreamVpnEvaluation {
+        if (connectivityManager == null) return UpstreamVpnEvaluation.Unknown
         try {
             var encounteredUnknown = false
             var foundMismatchedVpn = false
+            var mismatchedCountry: String? = null
             val networksList = mutableListOf<android.net.Network>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
@@ -94,7 +112,7 @@ class TunnelGuardConfig(private val context: Context) {
                 }
             }
             if (networksList.isEmpty()) {
-                return if (encounteredUnknown) VpnDetectionResult.VPN_UNKNOWN else VpnDetectionResult.VPN_NOT_DETECTED
+                return if (encounteredUnknown) UpstreamVpnEvaluation.Unknown else UpstreamVpnEvaluation.Missing
             }
 
             for (network in networksList) {
@@ -128,39 +146,37 @@ class TunnelGuardConfig(private val context: Context) {
                     if (isOurInterface) {
                         continue // Skip our own local interface
                     } else {
-                        val evalCountry = if (networkCountryResolver != null) {
+                        val evalCountry = networkCountryCode ?: if (networkCountryResolver != null) {
                             networkCountryResolver.invoke(network)
-                                ?: getActiveVpnCountryCode().takeIf { it.isNotBlank() }
-                                ?: (if (isCountryVpnSettingEnabled() || requiredCountryCode != null) defaultCountryResolver.resolveCountry(network) else null)
-                        } else {
-                            networkCountryCode
-                                ?: (if (isCountryVpnSettingEnabled() || requiredCountryCode != null) defaultCountryResolver.resolveCountry(network) else null)
-                                ?: getActiveVpnCountryCode()
-                        }
+                        } else if (isCountryVpnSettingEnabled() || requiredCountryCode != null) {
+                            defaultCountryResolver.resolveCountry(network)
+                        } else null
                         val targetCountry = requiredCountryCode ?: getCountryVpnTargetCountry()
                         val requiresMatch = requiredCountryCode != null || isCountryVpnSettingEnabled()
                         val countryMatches = targetCountry.equals("ANY", true) || evalCountry?.equals(targetCountry, true) == true
                         if (requiresMatch && !countryMatches) {
-                            addLog("Active VPN detected but country mismatch (Target: $targetCountry, Active: $evalCountry)", "WARN")
                             foundMismatchedVpn = true
+                            mismatchedCountry = evalCountry
+                            // A later VPN network may still satisfy the requirement.
                             continue
                         }
-                        return VpnDetectionResult.VPN_DETECTED
+                        return UpstreamVpnEvaluation.Valid(evalCountry)
                     }
                 }
             }
 
             if (foundMismatchedVpn) {
-                return VpnDetectionResult.VPN_NOT_DETECTED
+                val target = requiredCountryCode ?: getCountryVpnTargetCountry()
+                return UpstreamVpnEvaluation.CountryMismatch(target.uppercase(), mismatchedCountry)
             }
 
             if (encounteredUnknown) {
-                return VpnDetectionResult.VPN_UNKNOWN
+                return UpstreamVpnEvaluation.Unknown
             }
-            return VpnDetectionResult.VPN_NOT_DETECTED
+            return UpstreamVpnEvaluation.Missing
         } catch (e: Exception) {
             addLog("Error detecting active VPN capabilities: ${e.message}")
-            return VpnDetectionResult.VPN_UNKNOWN
+            return UpstreamVpnEvaluation.Unknown
         }
     }
 
@@ -418,6 +434,13 @@ class TunnelGuardConfig(private val context: Context) {
     fun isAppVpnCountryMatch(packageName: String, detectedCountryCode: String? = getActiveVpnCountryCode()): Boolean {
         val required = getAppVpnCountry(packageName) ?: return isCountryVpnMatch(detectedCountryCode)
         return detectedCountryCode?.trim()?.equals(required, ignoreCase = true) == true
+    }
+
+    /** Returns the app override, the enabled global policy, or ANY when no country is required. */
+    fun getEffectiveVpnCountry(packageName: String?): String {
+        val appRequirement = packageName?.let(::getAppVpnCountry)
+        return appRequirement
+            ?: if (isCountryVpnSettingEnabled()) getCountryVpnTargetCountry().uppercase().trim() else "ANY"
     }
 
     /**

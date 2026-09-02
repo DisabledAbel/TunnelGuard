@@ -33,26 +33,18 @@ class ProtectedAppMonitor(
             return MonitoringCheckResult.NoAction(null, wasVpnOn)
         }
 
-        val appCountry = config.getAppVpnCountry(currentApp)
+        val requiredCountry = config.getEffectiveVpnCountry(currentApp)
         var isVpnOn = if (config.isSimulatedVpnEnabled()) {
             val state = config.getVPNState()
             state == VPNState.CONNECTED || state == VPNState.PROTECTED
-        } else if (appCountry != null && vpnDetector is DefaultVpnDetector) {
-            config.detectRealVpnCapabilities(
-                connectivityManager,
-                networkCountryResolver = { network -> vpnDetector.countryResolver.resolveCountry(network) },
-                requiredCountryCode = appCountry
-            ) == VpnDetectionResult.VPN_DETECTED
+        } else if (vpnDetector is DefaultVpnDetector) {
+            vpnDetector.evaluateUpstreamVpn(connectivityManager, requiredCountry).isValid
         } else {
             vpnDetector.detectVpnState(connectivityManager) == VpnDetectionResult.VPN_DETECTED
         }
 
         val isProtected = config.isAppProtected(currentApp) && currentApp != context.packageName
         if (isProtected) {
-            if (isVpnOn && !config.isAppVpnCountryMatch(currentApp)) {
-                config.addLogWarning("VPN country does not match $appCountry required by $currentApp")
-                isVpnOn = false
-            }
             val isSuppressed = TunnelGuardVpnService.isPackageSuppressed(currentApp)
             val shouldTrigger = TunnelGuardVpnService.shouldTriggerWarning(
                 currentApp = currentApp,
