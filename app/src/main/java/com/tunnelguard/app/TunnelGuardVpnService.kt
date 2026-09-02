@@ -16,6 +16,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +53,9 @@ class TunnelGuardVpnService : VpnService() {
         evaluate = ::checkAndRunVpnRouting
     )
     private var monitorJob: Job? = null
+    private var autoConnectTimeoutJob: Job? = null
+    private val autoConnectCoordinator = AutoConnectCoordinator(SystemClock::elapsedRealtime)
+    private var manualRecoveryTarget: String? = null
 
     // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
     private var isCallbackRegistered = false
@@ -230,6 +234,36 @@ class TunnelGuardVpnService : VpnService() {
                         break
                     }
 
+                    when (val attemptResult = evaluateAutoConnectAttempt()) {
+                        is AutoConnectCoordinator.Evaluation.Succeeded -> {
+                            autoConnectTimeoutJob?.cancel()
+                            autoConnectTimeoutJob = null
+                            config.addLog("Auto-Connect succeeded for ${attemptResult.attempt.targetPackage}.")
+                            routingEvaluator.request()
+                        }
+                        is AutoConnectCoordinator.Evaluation.TimedOut -> {
+                            autoConnectTimeoutJob?.cancel()
+                            autoConnectTimeoutJob = null
+                            config.addLog("Auto-Connect timed out for ${attemptResult.attempt.targetPackage}; VPN requirement is still unsatisfied. Re-arming recovery.", "WARN")
+                            manualRecoveryTarget = attemptResult.attempt.targetPackage
+                            launchWarningActivity(attemptResult.attempt.targetPackage)
+                            // Record this event as handled; a later app transition can warn again,
+                            // but will not silently auto-launch after this failed attempt.
+                            lastForegroundApp = attemptResult.attempt.targetPackage
+                            wasVpnOn = false
+                        }
+                        is AutoConnectCoordinator.Evaluation.Cancelled -> {
+                            autoConnectTimeoutJob?.cancel()
+                            autoConnectTimeoutJob = null
+                            config.addLog("Auto-Connect attempt cancelled because its target or VPN configuration is no longer relevant.")
+                            if (!config.isAppProtected(attemptResult.attempt.targetPackage) &&
+                                config.getPendingVpnRedirectTarget() == attemptResult.attempt.targetPackage) {
+                                config.clearPendingVpnRedirectTarget()
+                            }
+                        }
+                        else -> Unit
+                    }
+
                     val evalResult = appMonitor.evaluateMonitoringState(
                         context = this@TunnelGuardVpnService,
                         connectivityManager = connectivityManager,
@@ -247,12 +281,26 @@ class TunnelGuardVpnService : VpnService() {
                             val currentApp = evalResult.targetPackage
                             val vpnChoice = config.getVpnAppOfChoice()
 
-                            if (config.isAutoConnectVpnEnabled() && vpnChoice != null) {
+                            if (config.isAutoConnectVpnEnabled() && vpnChoice != null && manualRecoveryTarget != currentApp) {
+                                val activeAttempt = autoConnectCoordinator.activeAttempt
+                                if (activeAttempt?.targetPackage == currentApp && activeAttempt.vpnPackage == vpnChoice) {
+                                    // One launch per attempt; the timeout path presents manual recovery UI.
+                                    lastForegroundApp = evalResult.targetPackage
+                                    wasVpnOn = evalResult.isVpnOn
+                                    delay(1000)
+                                    continue
+                                } else if (activeAttempt != null) {
+                                    config.addLog("Auto-Connect target changed from ${activeAttempt.targetPackage} to $currentApp; replacing the old attempt.")
+                                    cancelAutoConnectAttempt()
+                                }
                                 config.addLog("Protected app opened ($currentApp) without VPN. Auto-connect VPN active; launching $vpnChoice directly in background.")
                                 config.setPendingVpnRedirectTarget(currentApp)
                                 try {
                                     val launchIntent = packageManager.getLaunchIntentForPackage(vpnChoice)
                                     if (launchIntent != null) {
+                                        autoConnectCoordinator.start(currentApp, vpnChoice)
+                                        scheduleAutoConnectTimeout()
+                                        config.addLog("Auto-Connect attempt started for $currentApp using $vpnChoice.")
                                         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         startActivity(launchIntent)
                                     } else {
@@ -260,6 +308,7 @@ class TunnelGuardVpnService : VpnService() {
                                         launchWarningActivity(currentApp)
                                     }
                                 } catch (e: Exception) {
+                                    cancelAutoConnectAttempt()
                                     config.addLog("Failed to auto-launch VPN app $vpnChoice: ${e.message}, falling back to VpnWarningActivity", "ERROR")
                                     launchWarningActivity(currentApp)
                                 }
@@ -271,6 +320,9 @@ class TunnelGuardVpnService : VpnService() {
                             wasVpnOn = evalResult.isVpnOn
                         }
                         is MonitoringCheckResult.NoAction -> {
+                            if (evalResult.currentApp != null && evalResult.currentApp != manualRecoveryTarget) {
+                                manualRecoveryTarget = null
+                            }
                             if (evalResult.currentApp != null) {
                                 lastForegroundApp = evalResult.currentApp
                             }
@@ -367,6 +419,43 @@ class TunnelGuardVpnService : VpnService() {
     private fun stopMonitoring() {
         monitorJob?.cancel()
         monitorJob = null
+        cancelAutoConnectAttempt()
+        manualRecoveryTarget = null
+    }
+
+    private fun scheduleAutoConnectTimeout() {
+        autoConnectTimeoutJob?.cancel()
+        autoConnectTimeoutJob = serviceScope.launch {
+            delay(AUTO_CONNECT_TIMEOUT_MS)
+            // The monitor performs a fresh target-policy evaluation before warning; routing remains serialized.
+            routingEvaluator.request()
+        }
+    }
+
+    private fun cancelAutoConnectAttempt() {
+        autoConnectCoordinator.cancel()
+        autoConnectTimeoutJob?.cancel()
+        autoConnectTimeoutJob = null
+    }
+
+    private fun evaluateAutoConnectAttempt(): AutoConnectCoordinator.Evaluation {
+        val attempt = autoConnectCoordinator.activeAttempt ?: return AutoConnectCoordinator.Evaluation.None
+        val relevant = config.isAppMonitorEnabled() &&
+            config.isAutoConnectVpnEnabled() &&
+            config.isAppProtected(attempt.targetPackage) &&
+            config.getVpnAppOfChoice() == attempt.vpnPackage &&
+            config.getPendingVpnRedirectTarget() == attempt.targetPackage
+        val satisfied = if (!relevant) false else if (config.isSimulatedVpnEnabled()) {
+            config.getVPNState() in setOf(VPNState.CONNECTED, VPNState.PROTECTED)
+        } else {
+            val policy = config.getForegroundVpnPolicy(attempt.targetPackage)
+            if (vpnDetector is DefaultVpnDetector) {
+                (vpnDetector as DefaultVpnDetector).evaluateUpstreamVpn(connectivityManager, policy).isValid
+            } else {
+                vpnDetector.detectVpnState(connectivityManager) == VpnDetectionResult.VPN_DETECTED
+            }
+        }
+        return autoConnectCoordinator.evaluate(relevant, satisfied)
     }
 
     /**
@@ -522,7 +611,8 @@ class TunnelGuardVpnService : VpnService() {
             currentVpnState = config.getVPNState()
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
-            val foregroundApp = config.getForegroundPackageName(this)
+            val foregroundApp = config.getPendingVpnRedirectTarget()
+                ?: config.getForegroundPackageName(this)
             val foregroundPolicy = config.getForegroundVpnPolicy(foregroundApp)
             val evaluation = if (vpnDetector is DefaultVpnDetector) {
                 (vpnDetector as DefaultVpnDetector).evaluateUpstreamVpn(connectivityManager, foregroundPolicy)
