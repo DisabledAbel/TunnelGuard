@@ -8,20 +8,24 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Resolves country code for an active VPN connection using dynamic GeoIP lookup over the specified network.
  */
 class VpnCountryResolver(
     private val config: TunnelGuardConfig,
-    private val fetcher: ((network: Network?, url: String) -> String?)? = null
+    private val fetcher: ((network: Network?, url: String) -> String?)? = null,
+    private val clock: () -> Long = System::currentTimeMillis
 ) {
     data class CachedCountry(
         val countryCode: String,
-        val timestamp: Long
+        val timestamp: Long,
+        val owner: String
     )
 
     private val cache = ConcurrentHashMap<String, CachedCountry>()
+    private val lookupSequence = AtomicLong()
 
     companion object {
         private const val CACHE_TTL_MS = 300_000L // 5 minutes
@@ -42,19 +46,23 @@ class VpnCountryResolver(
     fun resolveCountry(network: Network?): String? {
         val netKey = network?.toString() ?: "default"
         val cached = cache[netKey]
-        val now = System.currentTimeMillis()
+        val now = clock()
         if (cached != null && (now - cached.timestamp) < CACHE_TTL_MS) {
             return cached.countryCode
+        }
+        val owner = "$netKey:${lookupSequence.incrementAndGet()}"
+        if (cached != null && cache.remove(netKey, cached)) {
+            config.transferActiveVpnCountryOwnership(cached.owner, owner)
         }
 
         if (isMainThread()) {
             CoroutineScope(Dispatchers.IO).launch {
-                performLookup(network, netKey, now)
+                performLookup(network, netKey, now, owner)
             }
-            return cached?.countryCode
+            return null
         }
 
-        return performLookup(network, netKey, now)
+        return performLookup(network, netKey, now, owner)
     }
 
     /**
@@ -65,12 +73,11 @@ class VpnCountryResolver(
      * @param now The timestamp to associate with the resolved country code.
      * @return The resolved uppercase country code, or `null` if all providers fail.
      */
-    private fun performLookup(network: Network?, netKey: String, now: Long): String? {
+    private fun performLookup(network: Network?, netKey: String, now: Long, owner: String): String? {
         for (endpoint in GEOIP_ENDPOINTS) {
-            // Some VPN implementations expose a VPN Network object but reject sockets explicitly
-            // bound to it. In that case the process default route still traverses the active VPN,
-            // so retry without binding rather than leaving the country permanently unresolved.
-            val candidateNetworks = if (network == null) listOf(null) else listOf(network, null)
+            // Never let a VPN-specific lookup fall through to an unbound socket: split-tunnel
+            // configurations could otherwise report the physical network's country.
+            val candidateNetworks = listOf(network)
             for (candidateNetwork in candidateNetworks) {
                 try {
                     val responseText = if (fetcher != null) {
@@ -83,9 +90,9 @@ class VpnCountryResolver(
                         val countryCode = parseCountryCodeFromJson(responseText)
                         if (!countryCode.isNullOrBlank()) {
                             val uppercaseCode = countryCode.uppercase().trim()
-                            cache[netKey] = CachedCountry(uppercaseCode, now)
-                            config.setActiveVpnCountryCode(uppercaseCode)
-                            val route = if (candidateNetwork == null && network != null) "default VPN route" else "VPN network"
+                            cache[netKey] = CachedCountry(uppercaseCode, now, owner)
+                            config.setActiveVpnCountryCode(uppercaseCode, owner)
+                            val route = if (candidateNetwork == null) "default route" else "VPN network"
                             config.addLogInfo("Country resolved via $endpoint ($route): $uppercaseCode")
                             return uppercaseCode
                         }
@@ -96,9 +103,7 @@ class VpnCountryResolver(
             }
         }
 
-        if (cache[netKey] == null) {
-            config.setActiveVpnCountryCode(null)
-        }
+        config.clearActiveVpnCountryCodeIfOwnedBy(owner)
         config.addLogWarning("All GeoIP providers failed to resolve country code for network: $netKey")
         return null
     }

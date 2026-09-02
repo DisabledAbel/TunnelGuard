@@ -10,6 +10,10 @@ import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.whenever
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 
 class VpnCountryResolverTest {
 
@@ -17,7 +21,7 @@ class VpnCountryResolverTest {
     private lateinit var mockPrefs: SharedPreferences
     private lateinit var mockEditor: SharedPreferences.Editor
     private lateinit var config: TunnelGuardConfig
-    private val prefsStore = mutableMapOf<String, Any>()
+    private val prefsStore = ConcurrentHashMap<String, Any>()
 
     @Before
     fun setUp() {
@@ -76,21 +80,18 @@ class VpnCountryResolverTest {
     }
 
     @Test
-    fun testFallsBackToDefaultRouteWhenVpnNetworkRejectsBoundRequest() {
+    fun testVpnNetworkLookupNeverFallsBackToUnboundRoute() {
         val mockNet = mock(Network::class.java)
         val attemptedNetworks = mutableListOf<Network?>()
         val resolver = VpnCountryResolver(config, fetcher = { network, url ->
             if (url == "https://api.country.is") {
                 attemptedNetworks.add(network)
-                if (network == null) """{"country":"NL"}""" else null
-            } else {
-                null
             }
+            null
         })
 
-        assertEquals("NL", resolver.resolveCountry(mockNet))
-        assertEquals(listOf(mockNet, null), attemptedNetworks)
-        assertEquals("NL", config.getActiveVpnCountryCode())
+        assertNull(resolver.resolveCountry(mockNet))
+        assertEquals(listOf(mockNet), attemptedNetworks)
     }
 
     @Test
@@ -126,12 +127,57 @@ class VpnCountryResolverTest {
     @Test
     fun testAllEndpointsFailingReturnsNull() {
         val mockNet = mock(Network::class.java)
-        config.setActiveVpnCountryCode("US")
         val resolver = VpnCountryResolver(config, fetcher = { _, _ -> null })
 
         val result = resolver.resolveCountry(mockNet)
         assertNull(result)
         assertEquals("", config.getActiveVpnCountryCode())
+    }
+
+    @Test
+    fun testExpiredCacheFailureClearsItsPersistedCountry() {
+        val mockNet = mock(Network::class.java)
+        var now = 1_000L
+        var response: String? = """{"country":"US"}"""
+        val resolver = VpnCountryResolver(config, fetcher = { _, _ -> response }, clock = { now })
+
+        assertEquals("US", resolver.resolveCountry(mockNet))
+        now += 300_001L
+        response = null
+
+        assertNull(resolver.resolveCountry(mockNet))
+        assertEquals("", config.getActiveVpnCountryCode())
+    }
+
+    @Test
+    fun testFailedLookupCannotClearAnotherNetworksCountry() {
+        val failingNet = mock(Network::class.java)
+        val successfulNet = mock(Network::class.java)
+        whenever(failingNet.toString()).thenReturn("failing-network")
+        whenever(successfulNet.toString()).thenReturn("successful-network")
+        val failureStarted = CountDownLatch(1)
+        val releaseFailure = CountDownLatch(1)
+        val resolver = VpnCountryResolver(config, fetcher = { network, url ->
+            when {
+                network === failingNet && url == "https://api.country.is" -> {
+                    failureStarted.countDown()
+                    releaseFailure.await(2, TimeUnit.SECONDS)
+                    null
+                }
+                network === successfulNet && url == "https://api.country.is" -> """{"country":"CA"}"""
+                else -> null
+            }
+        })
+        val executor = Executors.newSingleThreadExecutor()
+        val failedLookup = executor.submit<String?> { resolver.resolveCountry(failingNet) }
+        assertTrue(failureStarted.await(2, TimeUnit.SECONDS))
+
+        assertEquals("CA", resolver.resolveCountry(successfulNet))
+        releaseFailure.countDown()
+        assertNull(failedLookup.get(2, TimeUnit.SECONDS))
+        executor.shutdownNow()
+
+        assertEquals("CA", config.getActiveVpnCountryCode())
     }
 
     @Test

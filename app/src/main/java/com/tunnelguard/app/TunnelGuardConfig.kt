@@ -32,6 +32,7 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_COUNTRY_VPN_ENABLED = "country_vpn_setting_enabled"
         private const val KEY_COUNTRY_VPN_TARGET = "country_vpn_target_country"
         private const val KEY_ACTIVE_VPN_COUNTRY = "active_vpn_country"
+        private const val KEY_ACTIVE_VPN_COUNTRY_OWNER = "active_vpn_country_owner"
         private const val KEY_APP_VPN_COUNTRIES = "app_vpn_countries"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
@@ -950,10 +951,34 @@ class TunnelGuardConfig(private val context: Context) {
         return prefs.getString(KEY_ACTIVE_VPN_COUNTRY, "") ?: ""
     }
 
-    fun setActiveVpnCountryCode(countryCode: String?) {
+    @Synchronized
+    fun setActiveVpnCountryCode(countryCode: String?, owner: String? = null) {
         val uppercaseCode = countryCode?.uppercase()?.trim() ?: ""
-        prefs.edit().putString(KEY_ACTIVE_VPN_COUNTRY, uppercaseCode).apply()
+        prefs.edit()
+            .putString(KEY_ACTIVE_VPN_COUNTRY, uppercaseCode)
+            .putString(KEY_ACTIVE_VPN_COUNTRY_OWNER, owner)
+            .apply()
         addLog("Active VPN country code updated to: $uppercaseCode")
+    }
+
+    /** Transfers a resolver-owned value to a replacement lookup without touching another network's value. */
+    @Synchronized
+    fun transferActiveVpnCountryOwnership(previousOwner: String, newOwner: String) {
+        if (prefs.getString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null) == previousOwner) {
+            prefs.edit().putString(KEY_ACTIVE_VPN_COUNTRY_OWNER, newOwner).apply()
+        }
+    }
+
+    /** Clears the active country only when it was written or claimed by this lookup. */
+    @Synchronized
+    fun clearActiveVpnCountryCodeIfOwnedBy(owner: String): Boolean {
+        if (prefs.getString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null) != owner) return false
+        prefs.edit()
+            .putString(KEY_ACTIVE_VPN_COUNTRY, "")
+            .putString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null)
+            .apply()
+        addLog("Active VPN country code cleared after its lookup failed")
+        return true
     }
 
     fun isCountryVpnMatch(detectedCountryCode: String? = getActiveVpnCountryCode()): Boolean {
