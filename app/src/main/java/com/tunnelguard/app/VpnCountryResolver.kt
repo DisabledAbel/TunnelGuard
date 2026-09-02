@@ -28,7 +28,8 @@ class VpnCountryResolver(
         private val GEOIP_ENDPOINTS = listOf(
             "https://api.country.is",
             "https://ipapi.co/json",
-            "https://ipinfo.io/json"
+            "https://ipinfo.io/json",
+            "https://api.iplocation.net/?cmd=get-ip-country"
         )
     }
 
@@ -66,28 +67,38 @@ class VpnCountryResolver(
      */
     private fun performLookup(network: Network?, netKey: String, now: Long): String? {
         for (endpoint in GEOIP_ENDPOINTS) {
-            try {
-                val responseText = if (fetcher != null) {
-                    fetcher.invoke(network, endpoint)
-                } else {
-                    executeHttpRequest(network, endpoint)
-                }
-
-                if (!responseText.isNullOrBlank()) {
-                    val countryCode = parseCountryCodeFromJson(responseText)
-                    if (!countryCode.isNullOrBlank()) {
-                        val uppercaseCode = countryCode.uppercase().trim()
-                        cache[netKey] = CachedCountry(uppercaseCode, now)
-                        config.setActiveVpnCountryCode(uppercaseCode)
-                        config.addLogInfo("Country resolved via $endpoint: $uppercaseCode")
-                        return uppercaseCode
+            // Some VPN implementations expose a VPN Network object but reject sockets explicitly
+            // bound to it. In that case the process default route still traverses the active VPN,
+            // so retry without binding rather than leaving the country permanently unresolved.
+            val candidateNetworks = if (network == null) listOf(null) else listOf(network, null)
+            for (candidateNetwork in candidateNetworks) {
+                try {
+                    val responseText = if (fetcher != null) {
+                        fetcher.invoke(candidateNetwork, endpoint)
+                    } else {
+                        executeHttpRequest(candidateNetwork, endpoint)
                     }
+
+                    if (!responseText.isNullOrBlank()) {
+                        val countryCode = parseCountryCodeFromJson(responseText)
+                        if (!countryCode.isNullOrBlank()) {
+                            val uppercaseCode = countryCode.uppercase().trim()
+                            cache[netKey] = CachedCountry(uppercaseCode, now)
+                            config.setActiveVpnCountryCode(uppercaseCode)
+                            val route = if (candidateNetwork == null && network != null) "default VPN route" else "VPN network"
+                            config.addLogInfo("Country resolved via $endpoint ($route): $uppercaseCode")
+                            return uppercaseCode
+                        }
+                    }
+                } catch (e: Exception) {
+                    config.addLogWarning("Failed country lookup via $endpoint: ${e.message}")
                 }
-            } catch (e: Exception) {
-                config.addLogWarning("Failed country lookup via $endpoint: ${e.message}")
             }
         }
 
+        if (cache[netKey] == null) {
+            config.setActiveVpnCountryCode(null)
+        }
         config.addLogWarning("All GeoIP providers failed to resolve country code for network: $netKey")
         return null
     }
@@ -133,15 +144,10 @@ class VpnCountryResolver(
     private fun parseCountryCodeFromJson(jsonStr: String): String? {
         return try {
             val json = JSONObject(jsonStr)
-            var code: String? = if (json.has("country") && !json.isNull("country")) {
-                json.getString("country")
-            } else null
-
-            if (code.isNullOrBlank()) {
-                code = if (json.has("country_code") && !json.isNull("country_code")) {
-                    json.getString("country_code")
-                } else null
-            }
+            val code = listOf("country", "country_code", "countryCode", "country_code2")
+                .firstNotNullOfOrNull { key ->
+                    if (json.has(key) && !json.isNull(key)) json.optString(key).takeIf(String::isNotBlank) else null
+                }
 
             if (!code.isNullOrBlank() && code.trim().length in 2..3) {
                 code.uppercase().trim()
