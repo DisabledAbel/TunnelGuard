@@ -76,6 +76,37 @@ class VpnCountryResolverTest {
     }
 
     @Test
+    fun testFallsBackToDefaultRouteWhenVpnNetworkRejectsBoundRequest() {
+        val mockNet = mock(Network::class.java)
+        val attemptedNetworks = mutableListOf<Network?>()
+        val resolver = VpnCountryResolver(config, fetcher = { network, url ->
+            if (url == "https://api.country.is") {
+                attemptedNetworks.add(network)
+                if (network == null) """{"country":"NL"}""" else null
+            } else {
+                null
+            }
+        })
+
+        assertEquals("NL", resolver.resolveCountry(mockNet))
+        assertEquals(listOf(mockNet, null), attemptedNetworks)
+        assertEquals("NL", config.getActiveVpnCountryCode())
+    }
+
+    @Test
+    fun testSupportsCountryCodeReturnedByAdditionalProvider() {
+        val mockNet = mock(Network::class.java)
+        val resolver = VpnCountryResolver(config, fetcher = { _, url ->
+            if (url == "https://api.iplocation.net/?cmd=get-ip-country") {
+                """{"country_name":"Australia","country_code2":"AU"}"""
+            } else null
+        })
+
+        assertEquals("AU", resolver.resolveCountry(mockNet))
+        assertEquals("AU", config.getActiveVpnCountryCode())
+    }
+
+    @Test
     fun testFallbackToThirdEndpoint() {
         val mockNet = mock(Network::class.java)
         val resolver = VpnCountryResolver(config, fetcher = { _, url ->
@@ -95,10 +126,12 @@ class VpnCountryResolverTest {
     @Test
     fun testAllEndpointsFailingReturnsNull() {
         val mockNet = mock(Network::class.java)
+        config.setActiveVpnCountryCode("US")
         val resolver = VpnCountryResolver(config, fetcher = { _, _ -> null })
 
         val result = resolver.resolveCountry(mockNet)
         assertNull(result)
+        assertEquals("", config.getActiveVpnCountryCode())
     }
 
     @Test
