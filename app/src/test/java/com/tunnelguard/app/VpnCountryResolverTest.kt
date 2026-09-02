@@ -125,8 +125,9 @@ class VpnCountryResolverTest {
     }
 
     @Test
-    fun testAllEndpointsFailingReturnsNull() {
+    fun testAllEndpointsFailingClearsOwnerlessPersistedCountry() {
         val mockNet = mock(Network::class.java)
+        config.setActiveVpnCountryCode("US")
         val resolver = VpnCountryResolver(config, fetcher = { _, _ -> null })
 
         val result = resolver.resolveCountry(mockNet)

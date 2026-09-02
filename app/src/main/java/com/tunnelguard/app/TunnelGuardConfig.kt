@@ -972,7 +972,11 @@ class TunnelGuardConfig(private val context: Context) {
     /** Clears the active country only when it was written or claimed by this lookup. */
     @Synchronized
     fun clearActiveVpnCountryCodeIfOwnedBy(owner: String): Boolean {
-        if (prefs.getString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null) != owner) return false
+        val currentOwner = prefs.getString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null)
+        // Countries saved before ownership tracking was introduced have no owner. Treat the
+        // first completed resolution as their owner so a total lookup failure cannot leave a
+        // legacy value available to isCountryVpnMatch().
+        if (currentOwner != null && currentOwner != owner) return false
         prefs.edit()
             .putString(KEY_ACTIVE_VPN_COUNTRY, "")
             .putString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null)
