@@ -30,4 +30,12 @@ class TunnelGuardVpnServiceTest {
         assertTrue(protectionStates.contains("BLOCKING"))
         assertTrue(protectionStates.contains("INACTIVE"))
     }
+
+    @Test
+    fun emergencyLockDoesNotYieldToCountryMismatch() {
+        val mismatch = UpstreamVpnEvaluation.CountryMismatch("US", "CA")
+
+        assertFalse(TunnelGuardVpnService.shouldEnterVpnConflict(mismatch, emergencyLock = true))
+        assertTrue(TunnelGuardVpnService.shouldEnterVpnConflict(mismatch, emergencyLock = false))
+    }
 }

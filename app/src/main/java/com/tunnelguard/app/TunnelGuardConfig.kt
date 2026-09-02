@@ -68,7 +68,7 @@ class TunnelGuardConfig(private val context: Context) {
         return when (evaluateUpstreamVpn(connectivityManager, networkCountryCode, networkCountryResolver, requiredCountryCode)) {
             is UpstreamVpnEvaluation.Valid -> VpnDetectionResult.VPN_DETECTED
             is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.Missing -> VpnDetectionResult.VPN_NOT_DETECTED
-            UpstreamVpnEvaluation.Unknown -> VpnDetectionResult.VPN_UNKNOWN
+            UpstreamVpnEvaluation.ForegroundUnknown, UpstreamVpnEvaluation.Unknown -> VpnDetectionResult.VPN_UNKNOWN
         }
     }
 
@@ -441,6 +441,28 @@ class TunnelGuardConfig(private val context: Context) {
         val appRequirement = packageName?.let(::getAppVpnCountry)
         return appRequirement
             ?: if (isCountryVpnSettingEnabled()) getCountryVpnTargetCountry().uppercase().trim() else "ANY"
+    }
+
+    /**
+     * Resolves foreground identity and country policy without conflating an unavailable lookup
+     * with a known app that has no override.
+     */
+    fun getForegroundVpnPolicy(packageName: String?): ForegroundVpnPolicy {
+        val global = if (isCountryVpnSettingEnabled()) {
+            getCountryVpnTargetCountry().uppercase().trim()
+        } else {
+            "ANY"
+        }
+        if (packageName == null) {
+            val protected = getProtectedApps()
+            val hasOverrides = getAppVpnCountries().keys.any(protected::contains)
+            return ForegroundVpnPolicy.Unknown(global, hasOverrides)
+        }
+        return if (isAppProtected(packageName)) {
+            ForegroundVpnPolicy.ProtectedApp(packageName, getAppVpnCountry(packageName) ?: global)
+        } else {
+            ForegroundVpnPolicy.UnprotectedApp(packageName, global)
+        }
     }
 
     /**
