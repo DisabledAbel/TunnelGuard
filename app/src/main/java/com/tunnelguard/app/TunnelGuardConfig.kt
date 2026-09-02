@@ -947,10 +947,21 @@ class TunnelGuardConfig(private val context: Context) {
         addLog("Country-Specific VPN target country set to: $uppercaseCode")
     }
 
+    /**
+     * Gets the country code of the active VPN.
+     *
+     * @return The active VPN country code, or an empty string if none is set.
+     */
     fun getActiveVpnCountryCode(): String {
         return prefs.getString(KEY_ACTIVE_VPN_COUNTRY, "") ?: ""
     }
 
+    /**
+     * Stores the active VPN country code and its optional owner.
+     *
+     * @param countryCode The VPN country code, normalized to uppercase; `null` clears the code.
+     * @param owner The identifier of the lookup that owns the stored country code.
+     */
     @Synchronized
     fun setActiveVpnCountryCode(countryCode: String?, owner: String? = null) {
         val uppercaseCode = countryCode?.uppercase()?.trim() ?: ""
@@ -969,7 +980,12 @@ class TunnelGuardConfig(private val context: Context) {
         }
     }
 
-    /** Clears the active country only when it was written or claimed by this lookup. */
+    /**
+     * Clears the active VPN country code when it belongs to the specified lookup.
+     *
+     * @param owner The lookup that owns the active VPN country code.
+     * @return `true` if the country code was cleared, `false` if another lookup owns it.
+     */
     @Synchronized
     fun clearActiveVpnCountryCodeIfOwnedBy(owner: String): Boolean {
         val currentOwner = prefs.getString(KEY_ACTIVE_VPN_COUNTRY_OWNER, null)
@@ -985,6 +1001,12 @@ class TunnelGuardConfig(private val context: Context) {
         return true
     }
 
+    /**
+     * Determines whether the detected VPN country satisfies the configured country policy.
+     *
+     * @param detectedCountryCode The detected country code to compare, or the active VPN country when omitted.
+     * @return `true` if country VPN protection is disabled, the target is `ANY`, or the detected country matches the target; `false` otherwise.
+     */
     fun isCountryVpnMatch(detectedCountryCode: String? = getActiveVpnCountryCode()): Boolean {
         if (!isCountryVpnSettingEnabled()) return true
         val target = getCountryVpnTargetCountry()
