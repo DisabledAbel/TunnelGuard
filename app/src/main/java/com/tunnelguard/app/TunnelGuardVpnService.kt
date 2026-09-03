@@ -220,6 +220,11 @@ class TunnelGuardVpnService : VpnService() {
         transitionTo(ServiceState.TUNNELGUARD_STARTING)
     }
 
+    /**
+     * Starts monitoring protected-app foreground activity when monitoring is enabled and required permissions are granted.
+     *
+     * The monitor evaluates VPN protection, handles auto-connect attempts, requests routing reevaluation when policy changes, and presents warnings when protected apps lack VPN protection.
+     */
     private fun startMonitoring() {
         val enabled = config.isAppMonitorEnabled() &&
                       config.hasUsageStatsPermission(this) &&
@@ -566,7 +571,7 @@ class TunnelGuardVpnService : VpnService() {
     }
 
     /**
-     * Handles system revocation of the VPN service when another VPN becomes active.
+     * Handles system revocation of the VPN connection and updates the service to a conflict state.
      */
     override fun onRevoke() {
         config.addLog("VpnService revoked by the system (another VPN started).")
@@ -581,6 +586,9 @@ class TunnelGuardVpnService : VpnService() {
         super.onRevoke()
     }
 
+    /**
+     * Starts the service in the foreground with its initial notification.
+     */
     private fun startForegroundServiceNotification() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -640,7 +648,14 @@ class TunnelGuardVpnService : VpnService() {
         }
     }
 
-    private fun buildForegroundNotification(state: ForegroundNotificationState, pendingIntent: PendingIntent): Notification =
+    /**
+             * Builds the ongoing foreground notification from the specified display state.
+             *
+             * @param state The title and message to display.
+             * @param pendingIntent The action to perform when the notification is tapped.
+             * @return The configured foreground notification.
+             */
+            private fun buildForegroundNotification(state: ForegroundNotificationState, pendingIntent: PendingIntent): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(state.title)
             .setContentText(state.message)
@@ -650,6 +665,12 @@ class TunnelGuardVpnService : VpnService() {
             .setContentIntent(pendingIntent)
             .build()
 
+    /**
+     * Resolves an application's user-facing label.
+     *
+     * @param packageName The package name of the application.
+     * @return The application's label, or the package name when the label cannot be resolved.
+     */
     private fun applicationLabel(packageName: String): String = try {
         packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
     } catch (_: Exception) {
