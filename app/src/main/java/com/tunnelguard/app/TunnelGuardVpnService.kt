@@ -56,10 +56,15 @@ class TunnelGuardVpnService : VpnService() {
     private var autoConnectTimeoutJob: Job? = null
     private val autoConnectCoordinator = AutoConnectCoordinator(SystemClock::elapsedRealtime)
     private var manualRecoveryTarget: String? = null
+    private val notificationLock = Any()
     private val notificationChangeTracker = ForegroundNotificationChangeTracker()
+    @Volatile
     private var lastUpstreamEvaluation: UpstreamVpnEvaluation? = null
+    @Volatile
     private var notificationForegroundPackage: String? = null
+    @Volatile
     private var notificationProblem: String? = null
+    @Volatile
     private var notificationStarted = false
 
     // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
@@ -286,7 +291,9 @@ class TunnelGuardVpnService : VpnService() {
                     when (evalResult) {
                         is MonitoringCheckResult.TriggerWarning -> {
                             val currentApp = evalResult.targetPackage
-                            notificationForegroundPackage = currentApp
+                            synchronized(notificationLock) {
+                                notificationForegroundPackage = currentApp
+                            }
                             val vpnChoice = config.getVpnAppOfChoice()
 
                             if (config.isAutoConnectVpnEnabled() && vpnChoice != null && manualRecoveryTarget != currentApp) {
@@ -329,7 +336,9 @@ class TunnelGuardVpnService : VpnService() {
                             wasVpnOn = evalResult.isVpnOn
                         }
                         is MonitoringCheckResult.NoAction -> {
-                            notificationForegroundPackage = evalResult.currentApp?.takeIf(config::isAppProtected)
+                            synchronized(notificationLock) {
+                                notificationForegroundPackage = evalResult.currentApp?.takeIf(config::isAppProtected)
+                            }
                             if (evalResult.currentApp != null && evalResult.currentApp != manualRecoveryTarget) {
                                 manualRecoveryTarget = null
                             }
@@ -564,8 +573,10 @@ class TunnelGuardVpnService : VpnService() {
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")
         transitionTo(ServiceState.VPN_CONFLICT)
         closeVpnInterface()
-        notificationProblem = "Another VPN took control of the VPN connection"
-        refreshForegroundNotification()
+        synchronized(notificationLock) {
+            notificationProblem = "Another VPN took control of the VPN connection"
+            refreshForegroundNotification()
+        }
         routingEvaluator.request()
         super.onRevoke()
     }
@@ -597,33 +608,36 @@ class TunnelGuardVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val state = ForegroundNotificationStateSelector.select(ForegroundNotificationFacts(starting = true))
-        val notification = buildForegroundNotification(state, pendingIntent)
-
-        startForeground(NOTIFICATION_ID, notification)
-        notificationStarted = true
-        notificationChangeTracker.shouldNotify(state)
+        synchronized(notificationLock) {
+            val state = ForegroundNotificationStateSelector.select(ForegroundNotificationFacts(starting = true))
+            val notification = buildForegroundNotification(state, pendingIntent)
+            startForeground(NOTIFICATION_ID, notification)
+            notificationStarted = true
+            notificationChangeTracker.shouldNotify(state)
+        }
     }
 
     private fun refreshForegroundNotification() {
-        if (!notificationStarted) return
-        val foregroundPackage = notificationForegroundPackage
-            ?: config.getPendingVpnRedirectTarget()
-            ?: config.getForegroundPackageName(this)?.takeIf(config::isAppProtected)
-        val facts = ForegroundNotificationFacts(
-            protectedAppCount = config.getProtectedApps().size,
-            foregroundAppLabel = foregroundPackage?.let(::applicationLabel),
-            upstreamEvaluation = lastUpstreamEvaluation,
-            blocking = vpnInterface != null || config.getVPNState() == VPNState.BLOCKED,
-            emergencyLock = config.isEmergencyLockEnabled(),
-            autoConnecting = autoConnectCoordinator.activeAttempt != null,
-            problem = notificationProblem
-        )
-        val state = ForegroundNotificationStateSelector.select(facts)
-        if (!notificationChangeTracker.shouldNotify(state)) return
-        val pendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildForegroundNotification(state, pendingIntent))
+        synchronized(notificationLock) {
+            if (!notificationStarted) return
+            val foregroundPackage = notificationForegroundPackage
+                ?: config.getPendingVpnRedirectTarget()
+                ?: config.getForegroundPackageName(this)?.takeIf(config::isAppProtected)
+            val facts = ForegroundNotificationFacts(
+                protectedAppCount = config.getProtectedApps().size,
+                foregroundAppLabel = foregroundPackage?.let(::applicationLabel),
+                upstreamEvaluation = lastUpstreamEvaluation,
+                blocking = vpnInterface != null || config.getVPNState() == VPNState.BLOCKED,
+                emergencyLock = config.isEmergencyLockEnabled(),
+                autoConnecting = autoConnectCoordinator.activeAttempt != null,
+                problem = notificationProblem
+            )
+            val state = ForegroundNotificationStateSelector.select(facts)
+            if (!notificationChangeTracker.shouldNotify(state)) return
+            val pendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildForegroundNotification(state, pendingIntent))
+        }
     }
 
     private fun buildForegroundNotification(state: ForegroundNotificationState, pendingIntent: PendingIntent): Notification =
@@ -657,10 +671,12 @@ class TunnelGuardVpnService : VpnService() {
         if (simulated) {
             // In simulation mode, read state from preferences
             currentVpnState = config.getVPNState()
-            lastUpstreamEvaluation = if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
-                UpstreamVpnEvaluation.Valid()
-            } else {
-                UpstreamVpnEvaluation.Missing
+            synchronized(notificationLock) {
+                lastUpstreamEvaluation = if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
+                    UpstreamVpnEvaluation.Valid()
+                } else {
+                    UpstreamVpnEvaluation.Missing
+                }
             }
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
@@ -678,8 +694,10 @@ class TunnelGuardVpnService : VpnService() {
             }
             logCountryFailureOnce(foregroundApp, evaluation)
             upstreamEvaluation = evaluation
-            lastUpstreamEvaluation = evaluation
-            notificationForegroundPackage = foregroundApp?.takeIf(config::isAppProtected)
+            synchronized(notificationLock) {
+                lastUpstreamEvaluation = evaluation
+                notificationForegroundPackage = foregroundApp?.takeIf(config::isAppProtected)
+            }
             val prevState = config.getVPNState()
             currentVpnState = when (evaluation) {
                 is UpstreamVpnEvaluation.Valid -> VPNState.PROTECTED
@@ -757,8 +775,10 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
             transitionTo(ServiceState.UPSTREAM_VPN)
-            notificationProblem = null
-            refreshForegroundNotification()
+            synchronized(notificationLock) {
+                notificationProblem = null
+                refreshForegroundNotification()
+            }
             sendBroadcast(broadcastIntent)
             return
         }
@@ -849,8 +869,10 @@ class TunnelGuardVpnService : VpnService() {
                 sendBroadcast(failureBroadcastIntent)
                 closeVpnInterface()
                 transitionTo(ServiceState.ERROR)
-                notificationProblem = "Unable to start fail-closed protection"
-                refreshForegroundNotification()
+                synchronized(notificationLock) {
+                    notificationProblem = "Unable to start fail-closed protection"
+                    refreshForegroundNotification()
+                }
                 return
             }
         }
@@ -865,8 +887,10 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(failureBroadcastIntent)
             closeVpnInterface()
             transitionTo(ServiceState.ERROR)
-            notificationProblem = "Unable to start fail-closed protection"
-            refreshForegroundNotification()
+            synchronized(notificationLock) {
+                notificationProblem = "Unable to start fail-closed protection"
+                refreshForegroundNotification()
+            }
             return
         }
 
@@ -880,8 +904,10 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(successBroadcastIntent)
         }
         transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
-        notificationProblem = null
-        refreshForegroundNotification()
+        synchronized(notificationLock) {
+            notificationProblem = null
+            refreshForegroundNotification()
+        }
         }
     }
 

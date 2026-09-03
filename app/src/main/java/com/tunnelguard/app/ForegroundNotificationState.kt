@@ -3,7 +3,7 @@ package com.tunnelguard.app
 import java.util.Locale
 
 enum class ForegroundNotificationType {
-    STARTING, PROTECTED, BLOCKING, CONNECTING, COUNTRY_MISMATCH, EMERGENCY_LOCK, PROBLEM
+    STARTING, EMPTY, PROTECTED, BLOCKING, CONNECTING, COUNTRY_MISMATCH, EMERGENCY_LOCK, PROBLEM
 }
 
 data class ForegroundNotificationState(
@@ -34,6 +34,9 @@ object ForegroundNotificationStateSelector {
         }
         if (facts.starting) {
             return state(ForegroundNotificationType.STARTING, "Starting", "Checking VPN and protection state…", facts, count)
+        }
+        if (count == 0) {
+            return state(ForegroundNotificationType.EMPTY, "No Protected Apps", "Choose apps to protect", facts, count)
         }
         if (facts.emergencyLock) {
             return state(ForegroundNotificationType.EMERGENCY_LOCK, "Emergency Lock", "Blocking $count protected ${apps(count)}", facts, count)
@@ -71,10 +74,12 @@ object ForegroundNotificationStateSelector {
 
 /** Returns true only when a notification needs to be posted. */
 class ForegroundNotificationChangeTracker {
-    private var lastState: ForegroundNotificationState? = null
+    private var lastRenderedContent: Pair<String, String>? = null
+
     fun shouldNotify(state: ForegroundNotificationState): Boolean {
-        if (state == lastState) return false
-        lastState = state
+        val renderedContent = state.title to state.message
+        if (renderedContent == lastRenderedContent) return false
+        lastRenderedContent = renderedContent
         return true
     }
 }

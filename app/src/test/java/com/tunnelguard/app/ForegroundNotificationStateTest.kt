@@ -13,6 +13,13 @@ class ForegroundNotificationStateTest {
         assertEquals("5 protected apps", state.message)
     }
 
+    @Test fun zeroProtectedAppsHasAnEmptyStateRegardlessOfVpnStatus() {
+        val state = select(upstreamEvaluation = UpstreamVpnEvaluation.Valid(), protectedAppCount = 0)
+        assertEquals(ForegroundNotificationType.EMPTY, state.type)
+        assertEquals("TunnelGuard • No Protected Apps", state.title)
+        assertEquals("Choose apps to protect", state.message)
+    }
+
     @Test fun blockingUsesHumanReadableForegroundLabel() {
         val state = select(foregroundAppLabel = "TiviMate", blocking = true)
         assertEquals(ForegroundNotificationType.BLOCKING, state.type)
@@ -58,6 +65,16 @@ class ForegroundNotificationStateTest {
         val state = select(upstreamEvaluation = UpstreamVpnEvaluation.Valid())
         assertTrue(tracker.shouldNotify(state))
         assertFalse(tracker.shouldNotify(state.copy()))
+    }
+
+    @Test fun nonRenderedLabelChangeIsNotReposted() {
+        val tracker = ForegroundNotificationChangeTracker()
+        val first = select(upstreamEvaluation = UpstreamVpnEvaluation.Valid(), foregroundAppLabel = "TiviMate")
+        val sameContent = select(upstreamEvaluation = UpstreamVpnEvaluation.Valid(), foregroundAppLabel = "Kodi")
+        assertEquals(first.title, sameContent.title)
+        assertEquals(first.message, sameContent.message)
+        assertTrue(tracker.shouldNotify(first))
+        assertFalse(tracker.shouldNotify(sameContent))
     }
 
     @Test fun protectedBlockedProtectedTransitionsArePosted() {
