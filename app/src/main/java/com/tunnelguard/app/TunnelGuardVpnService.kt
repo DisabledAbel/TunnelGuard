@@ -56,6 +56,11 @@ class TunnelGuardVpnService : VpnService() {
     private var autoConnectTimeoutJob: Job? = null
     private val autoConnectCoordinator = AutoConnectCoordinator(SystemClock::elapsedRealtime)
     private var manualRecoveryTarget: String? = null
+    private val notificationChangeTracker = ForegroundNotificationChangeTracker()
+    private var lastUpstreamEvaluation: UpstreamVpnEvaluation? = null
+    private var notificationForegroundPackage: String? = null
+    private var notificationProblem: String? = null
+    private var notificationStarted = false
 
     // Callback registration tracking to avoid multiple registrations across repeated ACTION_UPDATE commands
     private var isCallbackRegistered = false
@@ -240,6 +245,7 @@ class TunnelGuardVpnService : VpnService() {
                             autoConnectTimeoutJob = null
                             config.addLog("Auto-Connect succeeded for ${attemptResult.attempt.targetPackage}.")
                             routingEvaluator.request()
+                            refreshForegroundNotification()
                         }
                         is AutoConnectCoordinator.Evaluation.TimedOut -> {
                             autoConnectTimeoutJob?.cancel()
@@ -247,6 +253,7 @@ class TunnelGuardVpnService : VpnService() {
                             config.addLog("Auto-Connect timed out for ${attemptResult.attempt.targetPackage}; VPN requirement is still unsatisfied. Re-arming recovery.", "WARN")
                             manualRecoveryTarget = attemptResult.attempt.targetPackage
                             launchWarningActivity(attemptResult.attempt.targetPackage)
+                            refreshForegroundNotification()
                             // Record this event as handled; a later app transition can warn again,
                             // but will not silently auto-launch after this failed attempt.
                             lastForegroundApp = attemptResult.attempt.targetPackage
@@ -279,6 +286,7 @@ class TunnelGuardVpnService : VpnService() {
                     when (evalResult) {
                         is MonitoringCheckResult.TriggerWarning -> {
                             val currentApp = evalResult.targetPackage
+                            notificationForegroundPackage = currentApp
                             val vpnChoice = config.getVpnAppOfChoice()
 
                             if (config.isAutoConnectVpnEnabled() && vpnChoice != null && manualRecoveryTarget != currentApp) {
@@ -299,6 +307,7 @@ class TunnelGuardVpnService : VpnService() {
                                     val launchIntent = packageManager.getLaunchIntentForPackage(vpnChoice)
                                     if (launchIntent != null) {
                                         autoConnectCoordinator.start(currentApp, vpnChoice)
+                                        refreshForegroundNotification()
                                         scheduleAutoConnectTimeout()
                                         config.addLog("Auto-Connect attempt started for $currentApp using $vpnChoice.")
                                         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -320,6 +329,7 @@ class TunnelGuardVpnService : VpnService() {
                             wasVpnOn = evalResult.isVpnOn
                         }
                         is MonitoringCheckResult.NoAction -> {
+                            notificationForegroundPackage = evalResult.currentApp?.takeIf(config::isAppProtected)
                             if (evalResult.currentApp != null && evalResult.currentApp != manualRecoveryTarget) {
                                 manualRecoveryTarget = null
                             }
@@ -329,6 +339,7 @@ class TunnelGuardVpnService : VpnService() {
                             if (evalResult.isVpnOn != null) {
                                 wasVpnOn = evalResult.isVpnOn
                             }
+                            refreshForegroundNotification()
                         }
                     }
                 } catch (e: Exception) {
@@ -553,6 +564,8 @@ class TunnelGuardVpnService : VpnService() {
         config.setLastDisconnectReason("System revoked VPN (another VPN started)")
         transitionTo(ServiceState.VPN_CONFLICT)
         closeVpnInterface()
+        notificationProblem = "Another VPN took control of the VPN connection"
+        refreshForegroundNotification()
         routingEvaluator.request()
         super.onRevoke()
     }
@@ -584,14 +597,49 @@ class TunnelGuardVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TunnelGuard Active")
-            .setContentText("Monitoring per-app network fail-closed protection.")
+        val state = ForegroundNotificationStateSelector.select(ForegroundNotificationFacts(starting = true))
+        val notification = buildForegroundNotification(state, pendingIntent)
+
+        startForeground(NOTIFICATION_ID, notification)
+        notificationStarted = true
+        notificationChangeTracker.shouldNotify(state)
+    }
+
+    private fun refreshForegroundNotification() {
+        if (!notificationStarted) return
+        val foregroundPackage = notificationForegroundPackage
+            ?: config.getPendingVpnRedirectTarget()
+            ?: config.getForegroundPackageName(this)?.takeIf(config::isAppProtected)
+        val facts = ForegroundNotificationFacts(
+            protectedAppCount = config.getProtectedApps().size,
+            foregroundAppLabel = foregroundPackage?.let(::applicationLabel),
+            upstreamEvaluation = lastUpstreamEvaluation,
+            blocking = vpnInterface != null || config.getVPNState() == VPNState.BLOCKED,
+            emergencyLock = config.isEmergencyLockEnabled(),
+            autoConnecting = autoConnectCoordinator.activeAttempt != null,
+            problem = notificationProblem
+        )
+        val state = ForegroundNotificationStateSelector.select(facts)
+        if (!notificationChangeTracker.shouldNotify(state)) return
+        val pendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, buildForegroundNotification(state, pendingIntent))
+    }
+
+    private fun buildForegroundNotification(state: ForegroundNotificationState, pendingIntent: PendingIntent): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(state.title)
+            .setContentText(state.message)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+    private fun applicationLabel(packageName: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+    } catch (_: Exception) {
+        packageName
     }
 
     /**
@@ -609,6 +657,11 @@ class TunnelGuardVpnService : VpnService() {
         if (simulated) {
             // In simulation mode, read state from preferences
             currentVpnState = config.getVPNState()
+            lastUpstreamEvaluation = if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
+                UpstreamVpnEvaluation.Valid()
+            } else {
+                UpstreamVpnEvaluation.Missing
+            }
             config.addLog("Checking VPN in Simulation Mode. Status: $currentVpnState")
         } else {
             val foregroundApp = config.getPendingVpnRedirectTarget()
@@ -625,6 +678,8 @@ class TunnelGuardVpnService : VpnService() {
             }
             logCountryFailureOnce(foregroundApp, evaluation)
             upstreamEvaluation = evaluation
+            lastUpstreamEvaluation = evaluation
+            notificationForegroundPackage = foregroundApp?.takeIf(config::isAppProtected)
             val prevState = config.getVPNState()
             currentVpnState = when (evaluation) {
                 is UpstreamVpnEvaluation.Valid -> VPNState.PROTECTED
@@ -680,6 +735,7 @@ class TunnelGuardVpnService : VpnService() {
             config.setLastDisconnectReason("No apps selected for protection")
             closeVpnInterface()
             transitionTo(ServiceState.NO_VPN)
+            refreshForegroundNotification()
             sendBroadcast(broadcastIntent)
             return
         }
@@ -694,12 +750,15 @@ class TunnelGuardVpnService : VpnService() {
             // and the monitor drives the existing warning/redirect workflow.
             closeVpnInterface()
             transitionTo(ServiceState.VPN_CONFLICT)
+            refreshForegroundNotification()
             sendBroadcast(broadcastIntent)
             return
         } else if (currentVpnState == VPNState.CONNECTED || currentVpnState == VPNState.PROTECTED) {
             config.addLog("Upstream VPN is CONNECTED/ACTIVE. Bypassing local tunnel block interface.")
             closeVpnInterface()
             transitionTo(ServiceState.UPSTREAM_VPN)
+            notificationProblem = null
+            refreshForegroundNotification()
             sendBroadcast(broadcastIntent)
             return
         }
@@ -708,6 +767,7 @@ class TunnelGuardVpnService : VpnService() {
         if (vpnInterface != null && protectedApps == lastEstablishedApps && isEmergencyLock == lastEmergencyLock) {
             config.addLog("Routing check: local interface is already active and configuration has not changed. No-op.")
             transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
+            refreshForegroundNotification()
             return
         }
 
@@ -789,6 +849,8 @@ class TunnelGuardVpnService : VpnService() {
                 sendBroadcast(failureBroadcastIntent)
                 closeVpnInterface()
                 transitionTo(ServiceState.ERROR)
+                notificationProblem = "Unable to start fail-closed protection"
+                refreshForegroundNotification()
                 return
             }
         }
@@ -803,6 +865,8 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(failureBroadcastIntent)
             closeVpnInterface()
             transitionTo(ServiceState.ERROR)
+            notificationProblem = "Unable to start fail-closed protection"
+            refreshForegroundNotification()
             return
         }
 
@@ -816,6 +880,8 @@ class TunnelGuardVpnService : VpnService() {
             sendBroadcast(successBroadcastIntent)
         }
         transitionTo(ServiceState.TUNNELGUARD_ACTIVE)
+        notificationProblem = null
+        refreshForegroundNotification()
         }
     }
 
