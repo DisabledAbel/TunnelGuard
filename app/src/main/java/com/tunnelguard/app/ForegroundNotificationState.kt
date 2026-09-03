@@ -27,6 +27,12 @@ data class ForegroundNotificationFacts(
 
 /** Pure rendering policy for the foreground-service notification. */
 object ForegroundNotificationStateSelector {
+    /**
+     * Selects the notification state that best represents the current protection conditions.
+     *
+     * @param facts The inputs used to determine the notification state.
+     * @return The selected foreground notification state.
+     */
     fun select(facts: ForegroundNotificationFacts): ForegroundNotificationState {
         val count = facts.protectedAppCount
         facts.problem?.takeIf { it.isNotBlank() }?.let {
@@ -61,11 +67,33 @@ object ForegroundNotificationStateSelector {
         return state(ForegroundNotificationType.BLOCKING, "Blocking", message, facts, count)
     }
 
-    private fun state(type: ForegroundNotificationType, suffix: String, message: String, facts: ForegroundNotificationFacts, count: Int) =
+    /**
+         * Creates a notification state with the standard title prefix and foreground app context.
+         *
+         * @param type The notification type.
+         * @param suffix The title suffix.
+         * @param message The notification message.
+         * @param facts The facts providing the foreground app label.
+         * @param count The number of protected apps.
+         * @return The rendered foreground notification state.
+         */
+        private fun state(type: ForegroundNotificationType, suffix: String, message: String, facts: ForegroundNotificationFacts, count: Int) =
         ForegroundNotificationState(type, "TunnelGuard • $suffix", message, facts.foregroundAppLabel, count)
 
-    private fun apps(count: Int) = if (count == 1) "app" else "apps"
+    /**
+ * Chooses the singular or plural label for a protected-app count.
+ *
+ * @param count The number of protected apps.
+ * @return "app" when the count is one; otherwise, "apps".
+ */
+private fun apps(count: Int) = if (count == 1) "app" else "apps"
 
+    /**
+     * Converts a country code to its localized country name.
+     *
+     * @param code The country code to convert.
+     * @return The localized country name, or the normalized country code when no name is available.
+     */
     private fun countryName(code: String): String {
         val normalized = code.trim().uppercase(Locale.US)
         return Locale("", normalized).getDisplayCountry(Locale.US).takeIf { it.isNotBlank() } ?: normalized
@@ -76,6 +104,12 @@ object ForegroundNotificationStateSelector {
 class ForegroundNotificationChangeTracker {
     private var lastRenderedContent: Pair<String, String>? = null
 
+    /**
+     * Determines whether the notification content has changed since the previous check.
+     *
+     * @param state The notification state whose title and message are compared.
+     * @return `true` if the title or message changed, `false` otherwise.
+     */
     fun shouldNotify(state: ForegroundNotificationState): Boolean {
         val renderedContent = state.title to state.message
         if (renderedContent == lastRenderedContent) return false
