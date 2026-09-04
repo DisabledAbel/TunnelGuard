@@ -19,4 +19,12 @@
     <string name="pref_logging_title">Enable detailed debug logging</string>
     <string name="pref_about_title">About TunnelGuard</string>
     <string name="pref_about_summary">TunnelGuard v1.0.0. A D-pad optimized, fail-closed VPN protector for Android TV.</string>
+    <string name="per_app_countries_title">Per-app VPN countries</string>
+    <string name="per_app_countries_help">Choose an optional exit-country requirement for each protected app. “No country requirement” keeps normal VPN protection active.</string>
+    <string name="per_app_countries_empty">No apps are protected yet. Choose apps to protect before assigning country requirements.</string>
+    <string name="manage_apps">Manage apps</string>
+    <string name="back_to_settings">Back to Settings</string>
+    <string name="per_app_country_dialog_title">VPN country for %1$s</string>
+    <string name="per_app_country_current">Requirement: %1$s</string>
+    <string name="per_app_country_accessibility">Change VPN country requirement for %1$s. Current requirement: %2$s</string>
 </resources>

@@ -52,6 +52,11 @@
             android:theme="@style/Theme.TunnelGuard" />
 
         <activity
+            android:name=".PerAppCountriesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard" />
+
+        <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard" />
