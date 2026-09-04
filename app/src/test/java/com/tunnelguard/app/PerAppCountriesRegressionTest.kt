@@ -1,9 +1,10 @@
 package com.tunnelguard.app
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import android.os.Build
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -11,16 +12,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.Q])
 class PerAppCountriesRegressionTest {
     private lateinit var config: TunnelGuardConfig
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("tunnel_guard_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         config = TunnelGuardConfig(context)
         config.setSelectedProfileId("custom")
@@ -70,16 +74,21 @@ class PerAppCountriesRegressionTest {
 
     @Test
     fun countryChangeUsesExistingVpnPolicyUpdateAction() {
-        val activity = Robolectric.buildActivity(PerAppCountriesActivity::class.java).setup().get()
-        TunnelGuardVpnService.isServiceRunning = true
+        // Only onCreate is needed for this policy-dispatch test; avoid starting the async app list load.
+        val activityController = Robolectric.buildActivity(PerAppCountriesActivity::class.java).create()
+        val activity = activityController.get()
+        val serviceController = Robolectric.buildService(TunnelGuardVpnService::class.java).create()
         try {
             activity.applyCountryRequirement("com.example.video", "CA")
             val serviceIntent = shadowOf(activity).nextStartedService
 
             assertEquals("CA", config.getAppVpnCountry("com.example.video"))
-            assertEquals(TunnelGuardVpnService.ACTION_UPDATE, serviceIntent.action)
+            assertNotNull("Country changes should notify the running VPN service", serviceIntent)
+            assertEquals(TunnelGuardVpnService.ACTION_UPDATE, serviceIntent?.action)
+            assertEquals(TunnelGuardVpnService::class.java.name, serviceIntent?.component?.className)
         } finally {
-            TunnelGuardVpnService.isServiceRunning = false
+            serviceController.destroy()
+            activityController.destroy()
         }
     }
 }
