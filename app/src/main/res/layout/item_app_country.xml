@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:background="@drawable/tv_item_selector" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:minHeight="72dp" android:orientation="horizontal" android:padding="12dp">
+    <ImageView android:id="@+id/iv_country_app_icon" android:layout_width="48dp" android:layout_height="48dp" android:contentDescription="@null" android:importantForAccessibility="no" android:src="@drawable/ic_launcher" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/tv_country_app_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tv_country_app_package" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/text_secondary" android:textSize="13sp" />
+    </LinearLayout>
+    <TextView android:id="@+id/tv_country_requirement" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:gravity="center" android:maxWidth="240dp" android:padding="10dp" android:textColor="@color/text_primary" android:textSize="14sp" />
+</LinearLayout>

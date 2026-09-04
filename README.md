@@ -57,7 +57,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
    * Safe execution avoids boot crashes and loops.
    * Persists and displays boot failure diagnostics (e.g. if permissions were revoked).
 7. **Per-App VPN Country Requirements:**
-   * The Protected Apps screen lets users assign a VPN exit country to each app; assigning a country automatically protects that app.
+   * Settings → Per-app VPN countries lists protected apps and lets users select, change, or clear each app’s VPN exit-country requirement. Manage apps remains focused on selecting protected apps.
    * TunnelGuard checks the active VPN's GeoIP country when that app is in the foreground and treats a missing or mismatched country as disconnected, preserving fail-closed warnings.
    * Country assignments are included in configuration backup and restore.
 

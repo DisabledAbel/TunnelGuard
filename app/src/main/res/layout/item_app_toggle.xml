@@ -42,19 +42,6 @@
             android:textSize="14sp"
             android:text="com.example.app" />
 
-        <TextView
-            android:id="@+id/tv_app_country"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/tv_button_selector"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp"
-            android:text="VPN country: Global"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
 
     </LinearLayout>
 
