@@ -110,6 +110,16 @@ jobs:
       if: env.STABLE_RELEASE_EXISTS != 'true'
       run: chmod +x gradlew
 
+    - name: Require Permanent Signing Credentials
+      if: env.STABLE_RELEASE_EXISTS != 'true'
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        EXPECTED_SIGNER_SHA256: ${{ secrets.EXPECTED_SIGNER_SHA256 }}
+      run: scripts/check_signing_credentials.sh
+
     - name: Run Release Unit Tests
       if: env.STABLE_RELEASE_EXISTS != 'true'
       env:
@@ -155,19 +165,10 @@ jobs:
         # same certificate as the installed APK. Never generate a temporary key here:
         # doing so gives every release a different identity and Android reports the
         # resulting upgrade failure as an existing-package conflict.
-        missing_secrets=()
-        for secret_name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_SIGNER_SHA256; do
-          if [ -z "${!secret_name}" ]; then
-            missing_secrets+=("$secret_name")
-          fi
-        done
-        if [ "${#missing_secrets[@]}" -ne 0 ]; then
-          echo "ERROR: Stable release signing credentials are required. Missing: ${missing_secrets[*]}"
-          echo "Refusing to create an APK that cannot update existing TunnelGuard installations."
-          exit 1
-        fi
+        scripts/check_signing_credentials.sh
 
         echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+        trap 'rm -f release.keystore TunnelGuard-release-aligned.apk' EXIT
         keytool -list \
           -keystore release.keystore \
           -alias "$KEY_ALIAS" \
@@ -228,6 +229,17 @@ jobs:
         rm -f release.keystore
         rm -f TunnelGuard-release-aligned.apk
         echo "Signing and verification completed successfully."
+
+    - name: Verify Compatibility with Previous Stable Release
+      if: env.STABLE_RELEASE_EXISTS != 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
+        VERSION_CODE: ${{ env.VERSION_CODE }}
+        AAPT_COMMAND: ${{ env.ANDROID_HOME }}/build-tools/34.0.0/aapt
+        APKSIGNER_COMMAND: ${{ env.ANDROID_HOME }}/build-tools/34.0.0/apksigner
+      run: scripts/verify_stable_update_compatibility.sh \
+        "$GITHUB_REPOSITORY" "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" "$VERSION_CODE"
 
     - name: Generate Automatic Release Description
       if: env.STABLE_RELEASE_EXISTS != 'true'
