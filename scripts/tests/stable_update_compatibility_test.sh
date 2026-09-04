@@ -44,7 +44,9 @@ else
   code=${PREVIOUS_CODE:-1020004}
   package=${PREVIOUS_PACKAGE:-com.tunnelguard.app}
 fi
-printf "package: name='%s' versionCode='%s' versionName='test'\n" "$package" "$code"
+# Keep similarly named attributes after the values under test. Real Android 15
+# build tools emit these and previously caused `name` to be parsed as `15`.
+printf "package: name='%s' versionCode='%s' versionName='test' compileSdkVersion='35' compileSdkVersionCodename='15'\n" "$package" "$code"
 EOF
 
 cat > "$test_dir/apksigner" <<'EOF'

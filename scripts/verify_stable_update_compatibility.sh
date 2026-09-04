@@ -54,7 +54,10 @@ gh api "$previous_url" -H 'Accept: application/octet-stream' > "$previous_apk" |
 read_badging_value() {
   local apk=$1 field=$2 badging value
   badging=$($aapt_command dump badging "$apk") || return 1
-  value=$(sed -n "s/^package: .*${field}='\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)
+  # Match a complete, whitespace-delimited attribute name. Newer aapt versions
+  # append fields such as compileSdkVersionCodename; an unanchored `name=`
+  # match would otherwise mistake that field's value for the package name.
+  value=$(sed -n "s/^package:.*[[:space:]]${field}='\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)
   [[ -n "$value" ]] || return 1
   printf '%s\n' "$value"
 }
