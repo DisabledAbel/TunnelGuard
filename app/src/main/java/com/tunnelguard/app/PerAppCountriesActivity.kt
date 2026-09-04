@@ -63,6 +63,8 @@ class PerAppCountriesActivity : AppCompatActivity() {
             adapter.update(items)
             emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             list.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+            findViewById<Button>(R.id.btn_per_app_countries_back).nextFocusUpId =
+                if (items.isEmpty()) R.id.btn_per_app_manage_apps else R.id.rv_per_app_countries
             if (items.isEmpty()) findViewById<Button>(R.id.btn_per_app_manage_apps).requestFocus()
         }
     }
@@ -78,8 +80,10 @@ class PerAppCountriesActivity : AppCompatActivity() {
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 val country = codes[which]
                 applyCountryRequirement(item.packageName, country)
-                item.country = country
-                adapter.notifyItemChanged(adapter.indexOf(item))
+                adapter.findByPackageName(item.packageName)?.let { (index, currentItem) ->
+                    currentItem.country = country
+                    adapter.notifyItemChanged(index)
+                }
                 Toast.makeText(this, "${item.name}: ${labels[which]}", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
@@ -126,7 +130,9 @@ class PerAppCountriesActivity : AppCompatActivity() {
         }
         override fun getItemCount() = items.size
         fun update(newItems: List<CountryItem>) { items = newItems; notifyDataSetChanged() }
-        fun indexOf(item: CountryItem) = items.indexOf(item)
+        fun findByPackageName(packageName: String) = items.withIndex().firstOrNull {
+            it.value.packageName == packageName
+        }
     }
 
     companion object {
