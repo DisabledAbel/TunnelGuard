@@ -11,7 +11,7 @@
         android:id="@+id/tv_apps_header"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Protected Apps Management"
+        android:text="Manage protected apps"
         android:textColor="@color/text_primary"
         android:textSize="32sp"
         android:textStyle="bold"
@@ -19,11 +19,11 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/tv_apps_country_help"
+        android:id="@+id/tv_apps_help"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="Select an app's VPN country button to require that exit country. Android supports one active VPN country at a time."
+        android:text="Choose which apps TunnelGuard protects. Country requirements are configured in Settings."
         android:textColor="@color/text_secondary"
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -48,7 +48,7 @@
         android:imeOptions="actionSearch"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tv_apps_country_help" />
+        app:layout_constraintTop_toBottomOf="@+id/tv_apps_help" />
 
     <!-- Application List -->
     <androidx.recyclerview.widget.RecyclerView
