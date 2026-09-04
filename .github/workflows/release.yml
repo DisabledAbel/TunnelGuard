@@ -236,10 +236,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         CLEAN_VERSION_NAME: ${{ env.CLEAN_VERSION_NAME }}
         VERSION_CODE: ${{ env.VERSION_CODE }}
-        AAPT_COMMAND: ${{ env.ANDROID_HOME }}/build-tools/34.0.0/aapt
-        APKSIGNER_COMMAND: ${{ env.ANDROID_HOME }}/build-tools/34.0.0/apksigner
-      run: scripts/verify_stable_update_compatibility.sh \
-        "$GITHUB_REPOSITORY" "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" "$VERSION_CODE"
+      run: |
+        AAPT_COMMAND="$ANDROID_HOME/build-tools/34.0.0/aapt" \
+        APKSIGNER_COMMAND="$ANDROID_HOME/build-tools/34.0.0/apksigner" \
+          scripts/verify_stable_update_compatibility.sh \
+          "$GITHUB_REPOSITORY" "TunnelGuard-v${CLEAN_VERSION_NAME}-release.apk" "$VERSION_CODE"
 
     - name: Generate Automatic Release Description
       if: env.STABLE_RELEASE_EXISTS != 'true'
