@@ -41,6 +41,9 @@ android {
             matchingFallbacks += listOf("debug")
         }
         release {
+            // Stable APKs must never inherit a suffix: this package name is part
+            // of TunnelGuard's permanent Android update identity.
+            applicationIdSuffix = null
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -6,6 +6,10 @@ Android permits an APK to update an installed application only when both APKs us
 the same application ID and signing certificate. The release workflow therefore
 requires these GitHub Actions secrets:
 
+The stable package ID `com.tunnelguard.app` and the permanent signing certificate
+are TunnelGuard's permanent Android identity. Alpha builds use their separate
+`com.tunnelguard.app.alpha` identity and cannot be published as stable builds.
+
 - `KEYSTORE_BASE64`: the permanent release keystore, encoded with `base64`;
 - `KEYSTORE_PASSWORD`: the keystore password;
 - `KEY_ALIAS`: the permanent release-key alias; and
@@ -13,7 +17,8 @@ requires these GitHub Actions secrets:
 - `EXPECTED_SIGNER_SHA256`: the protected SHA-256 certificate digest printed by
   `apksigner verify --print-certs` for the permanent release key.
 
-Back up the keystore securely. Do not replace it or generate a key during a release.
+Back up the keystore securely. Losing or replacing it permanently breaks update
+compatibility. Do not replace it or generate a key during a release.
 Changing the key makes an in-place update impossible and Android may display a
 package-conflict error. The workflow intentionally fails when any signing secret is
 missing so it can never publish an APK with a one-off certificate.
@@ -25,6 +30,11 @@ and newer may permit migration when the old signing key is available and support
 signer rotation is configured with a certificate lineage, but this workflow does not
 currently use that migration mechanism. Subsequent releases signed by the same
 permanent key will update normally.
+
+In practical terms, users of old versions signed with a temporary key may need to
+uninstall TunnelGuard once and then install the first permanently signed stable
+version. No safe in-place migration is possible without that old signing key.
+After that one-time reinstall, later stable releases should update normally.
 
 ## Configure GitHub Actions signing secrets
 
@@ -83,7 +93,9 @@ been saved as `KEYSTORE_BASE64`.
 The release workflow only builds and publishes the official, stable application.
 Every run executes the release unit tests, assembles the `release` build type,
 verifies that the APK has the production package ID and app label, signs it with the
-permanent release key, verifies the signer, and creates the GitHub Release. It does
+permanent release key, verifies the pinned signer, and compares its package ID,
+certificate, and increasing `versionCode` with the latest previous stable Release
+before creating the GitHub Release. It does
 not offer an unsigned or alpha mode. Use the separate **Build Alpha APK** workflow
 for alpha builds.
 
