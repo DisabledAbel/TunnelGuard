@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.Q])
 class ApkSigningCertificateVerifierTest {
-    private fun signingInfo(current: Array<Signature>, history: Array<Signature>? = null, multiple: Boolean = false): SigningInfo =
+    private fun signingInfo(current: Array<Signature>?, history: Array<Signature>? = null, multiple: Boolean = false): SigningInfo =
         mock<SigningInfo>().also {
             whenever(it.hasMultipleSigners()).thenReturn(multiple)
             whenever(it.apkContentsSigners).thenReturn(current)
@@ -52,5 +52,38 @@ class ApkSigningCertificateVerifierTest {
 
     @Test fun missingSigningInfoRejected() {
         assertEquals(SignerVerificationResult.SIGNING_INFO_MISSING, ApkSigningCertificateVerifier.verify(null, null))
+    }
+
+    @Test fun oneSidedMultiSignerRejected() {
+        val first = Signature(byteArrayOf(1)); val second = Signature(byteArrayOf(2))
+        assertEquals(
+            SignerVerificationResult.SIGNATURE_MISMATCH,
+            ApkSigningCertificateVerifier.verify(
+                signingInfo(arrayOf(first, second), multiple = true),
+                signingInfo(arrayOf(first), multiple = false)
+            )
+        )
+    }
+
+    @Test fun lineageNotEndingInCurrentSignerRejected() {
+        val old = Signature(byteArrayOf(1)); val current = Signature(byteArrayOf(2))
+        assertEquals(
+            SignerVerificationResult.SIGNING_LINEAGE_INVALID,
+            ApkSigningCertificateVerifier.verify(
+                signingInfo(arrayOf(current), arrayOf(current, old)),
+                signingInfo(arrayOf(old))
+            )
+        )
+    }
+
+    @Test fun partiallyMissingSigningInformationRejected() {
+        val signer = Signature(byteArrayOf(1))
+        assertEquals(
+            SignerVerificationResult.SIGNING_INFO_MISSING,
+            ApkSigningCertificateVerifier.verify(
+                signingInfo(arrayOf(signer)),
+                signingInfo(null)
+            )
+        )
     }
 }
