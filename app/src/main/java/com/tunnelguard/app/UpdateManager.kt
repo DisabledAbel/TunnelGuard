@@ -3,7 +3,6 @@ package com.tunnelguard.app
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.SigningInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -14,6 +13,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 
 enum class ApkValidationResult {
@@ -21,7 +21,9 @@ enum class ApkValidationResult {
     FILE_NOT_FOUND_OR_EMPTY,
     PACKAGE_INFO_NULL,
     PACKAGE_NAME_MISMATCH,
+    SIGNING_INFO_MISSING,
     SIGNATURE_MISMATCH,
+    SIGNING_LINEAGE_INVALID,
     ERROR
 }
 
@@ -29,6 +31,8 @@ class UpdateManager(
     private val activity: Activity,
     private val config: TunnelGuardConfig
 ) {
+
+    private var lastInstallFailureMessage: String? = null
 
     companion object {
         val isUpdateInProgress = AtomicBoolean(false)
@@ -185,7 +189,8 @@ class UpdateManager(
                                 .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
                                 .show()
                         } else {
-                            showUpdateErrorDialog("Failed to initialize or launch package installer intent.")
+                            showUpdateErrorDialog(lastInstallFailureMessage
+                                ?: "Failed to initialize or launch package installer intent.")
                         }
                     } else {
                         val errorMsg = errorBuilder.toString()
@@ -271,23 +276,12 @@ class UpdateManager(
         throw IOException("Too many redirects")
     }
 
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
-    private fun SigningInfo.signersMatchExactly(other: SigningInfo): Boolean {
-        val thisHistory = this.getSigningCertificateHistory() ?: this.getApkContentsSigners()
-        val otherHistory = other.getSigningCertificateHistory() ?: other.getApkContentsSigners()
-        if (thisHistory == null || otherHistory == null) return false
-        return thisHistory.any { thisSig ->
-            otherHistory.any { otherSig ->
-                thisSig == otherSig
-            }
-        }
-    }
-
     fun validateApkFile(apkFile: File, outError: StringBuilder? = null): Boolean {
         return validateApkFileWithResult(apkFile, outError) == ApkValidationResult.SUCCESS
     }
 
     fun validateApkFileWithResult(apkFile: File, outError: StringBuilder? = null): ApkValidationResult {
+        config.addLog("APK validation started: ${apkFile.name}")
         return try {
             val pm = activity.packageManager
 
@@ -314,37 +308,30 @@ class UpdateManager(
                     config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
                     return ApkValidationResult.PACKAGE_NAME_MISMATCH
                 }
+                config.addLog("APK package identity verified: ${activity.packageName}")
 
                 val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
 
                 val archiveSigningInfo = packageInfo.signingInfo
                 val currentSigningInfo = currentPackageInfo.signingInfo
 
-                if (archiveSigningInfo == null || currentSigningInfo == null) {
-                    outError?.append("Signing information is missing.")
-                    config.addLog("validateApkFile: SigningInfo is null.")
-                    return ApkValidationResult.SIGNATURE_MISMATCH
-                }
-
-                val archiveMultiple = archiveSigningInfo.hasMultipleSigners()
-                val currentMultiple = currentSigningInfo.hasMultipleSigners()
-
-                if (archiveMultiple || currentMultiple) {
-                    // Retaining exact signer-set comparison for multi-signer packages
-                    val archiveSigs = archiveSigningInfo.getApkContentsSigners()?.toSet() ?: emptySet()
-                    val currentSigs = currentSigningInfo.getApkContentsSigners()?.toSet() ?: emptySet()
-                    if (archiveSigs != currentSigs) {
-                        outError?.append("Signature mismatch on multi-signer package.")
-                        config.addLog("validateApkFile: Multi-signer signature mismatch!")
-                        return ApkValidationResult.SIGNATURE_MISMATCH
+                logSignerFingerprints("Current", currentSigningInfo?.apkContentsSigners)
+                logSignerFingerprints("Downloaded", archiveSigningInfo?.apkContentsSigners)
+                when (ApkSigningCertificateVerifier.verify(archiveSigningInfo, currentSigningInfo)) {
+                    SignerVerificationResult.SUCCESS -> config.addLog("APK signer verification passed.")
+                    SignerVerificationResult.SIGNING_INFO_MISSING -> {
+                        outError?.append("Update blocked — signing information is missing.")
+                        config.addLog("APK signer verification failed: signing information missing.")
+                        return ApkValidationResult.SIGNING_INFO_MISSING
                     }
-                } else {
-                    // Use SigningInfo.signersMatchExactly() for single-signer APKs (supporting rotation/rotated single-signer)
-                    if (!archiveSigningInfo.signersMatchExactly(currentSigningInfo)) {
-                        outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
-                                "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
-                                "To install this update, please uninstall the current version and install the new version manually.")
-                        config.addLog("validateApkFile: Signature mismatch!")
+                    SignerVerificationResult.SIGNING_LINEAGE_INVALID -> {
+                        appendSignatureSecurityError(outError)
+                        config.addLog("APK signer verification failed: invalid signing lineage.")
+                        return ApkValidationResult.SIGNING_LINEAGE_INVALID
+                    }
+                    SignerVerificationResult.SIGNATURE_MISMATCH -> {
+                        appendSignatureSecurityError(outError)
+                        config.addLog("APK signer verification failed: certificate mismatch.")
                         return ApkValidationResult.SIGNATURE_MISMATCH
                     }
                 }
@@ -363,6 +350,7 @@ class UpdateManager(
                     config.addLog("validateApkFile: Package name mismatch: ${packageInfo.packageName}")
                     return ApkValidationResult.PACKAGE_NAME_MISMATCH
                 }
+                config.addLog("APK package identity verified: ${activity.packageName}")
 
                 val archiveSignatures = packageInfo.signatures
                 val currentPackageInfo = pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNATURES)
@@ -371,19 +359,21 @@ class UpdateManager(
                 if (archiveSignatures.isNullOrEmpty() || currentSignatures.isNullOrEmpty()) {
                     outError?.append("Signing signatures are missing.")
                     config.addLog("validateApkFile: Signatures are null or empty.")
-                    return ApkValidationResult.SIGNATURE_MISMATCH
+                    return ApkValidationResult.SIGNING_INFO_MISSING
                 }
+
+                logSignerFingerprints("Current", currentSignatures)
+                logSignerFingerprints("Downloaded", archiveSignatures)
 
                 val archiveSigSet = archiveSignatures.toSet()
                 val currentSigSet = currentSignatures.toSet()
 
                 if (archiveSigSet != currentSigSet) {
-                    outError?.append("Signature mismatch. The downloaded update is signed with a different certificate from the currently installed version.\n\n" +
-                            "This conflict usually occurs when upgrading between a debug build and a release build, or builds from different developers.\n\n" +
-                            "To install this update, please uninstall the current version and install the new version manually.")
-                    config.addLog("validateApkFile: Signature mismatch!")
+                    appendSignatureSecurityError(outError)
+                    config.addLog("APK signer verification failed: certificate mismatch.")
                     return ApkValidationResult.SIGNATURE_MISMATCH
                 }
+                config.addLog("APK signer verification passed.")
             }
 
             ApkValidationResult.SUCCESS
@@ -392,6 +382,28 @@ class UpdateManager(
             config.addLog("validateApkFile failed: ${e.message}")
             ApkValidationResult.ERROR
         }
+    }
+
+    private fun appendSignatureSecurityError(outError: StringBuilder?) {
+        outError?.append("Update blocked — invalid signature.\n\nThe downloaded APK is not signed with a certificate trusted for this TunnelGuard installation. The update will not be installed.")
+    }
+
+    private fun logSignerFingerprints(label: String, signatures: Array<android.content.pm.Signature>?) {
+        signatures?.forEach {
+            config.addLog("$label signer SHA-256: ${ApkSigningCertificateVerifier.sha256Fingerprint(it)}")
+        }
+    }
+
+    private fun sha256(file: File): ByteArray = MessageDigest.getInstance("SHA-256").let { digest ->
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        digest.digest()
     }
 
     fun uninstallCurrentVersion(): Boolean {
@@ -409,6 +421,7 @@ class UpdateManager(
     }
 
     fun installApkFile(versionName: String): Boolean {
+        lastInstallFailureMessage = null
         return try {
             if (!validateVersionName(versionName)) {
                 throw IllegalArgumentException("Invalid version name format: $versionName")
@@ -424,10 +437,35 @@ class UpdateManager(
 
             if (!updateApkFile.exists() || updateApkFile.length() == 0L) {
                 config.addLog("Install failed: update APK file does not exist or is empty.")
+                lastInstallFailureMessage = "Downloaded APK file does not exist or is empty."
                 return false
             }
 
             config.addLog("Preparing to install downloaded APK: ${updateApkFile.absolutePath}")
+
+            // This is deliberately the final gate. Earlier post-download validation is
+            // useful feedback, but can never authorize a later installer launch.
+            val hashBeforeValidation = sha256(updateApkFile)
+            val validationError = StringBuilder()
+            val validationResult = validateApkFileWithResult(updateApkFile, validationError)
+            if (validationResult != ApkValidationResult.SUCCESS) {
+                config.addLog("Installation blocked: final APK validation returned $validationResult.")
+                lastInstallFailureMessage = validationError.toString().ifBlank {
+                    "Update blocked because the downloaded APK could not be positively verified."
+                }
+                if (updateApkFile.exists() && !updateApkFile.delete()) {
+                    config.addLog("Installation blocked APK could not be deleted: ${updateApkFile.name}")
+                }
+                return false
+            }
+            val hashAfterValidation = sha256(updateApkFile)
+            if (!hashBeforeValidation.contentEquals(hashAfterValidation)) {
+                config.addLog("Installation blocked: APK changed during final validation.")
+                lastInstallFailureMessage = "Update blocked because the downloaded APK changed during final security validation."
+                updateApkFile.delete()
+                return false
+            }
+            config.addLog("Installation validation passed; APK SHA-256: ${hashAfterValidation.joinToString("") { "%02x".format(it) }}")
 
             // Generate content URI using FileProvider
             val apkUri = FileProvider.getUriForFile(
@@ -447,6 +485,7 @@ class UpdateManager(
             true
         } catch (e: Exception) {
             config.addLog("Failed to auto-install APK: ${e.message}")
+            lastInstallFailureMessage = "Failed to initialize or launch package installer intent."
             false
         }
     }
@@ -465,14 +504,7 @@ class UpdateManager(
                 dialog.dismiss()
             }
 
-        if (errorMessage.contains("Signature mismatch", ignoreCase = true)) {
-            builder.setNeutralButton("Uninstall Current App") { dialog, _ ->
-                dialog.dismiss()
-                if (!uninstallCurrentVersion()) {
-                    showUpdateErrorDialog("Failed to launch uninstaller for current version.")
-                }
-            }
-        } else if (!targetUrl.isNullOrBlank()) {
+        if (!errorMessage.contains("invalid signature", ignoreCase = true) && !targetUrl.isNullOrBlank()) {
             builder.setNeutralButton("Open Download Link") { dialog, _ ->
                 dialog.dismiss()
                 try {

@@ -23,6 +23,7 @@ import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.nio.file.Files
 
 @RunWith(RobolectricTestRunner::class)
 class UpdateManagerValidationTest {
@@ -59,11 +60,13 @@ class UpdateManagerValidationTest {
 
         val mockArchiveSigningInfo = mock(SigningInfo::class.java)
         whenever(mockArchiveSigningInfo.hasMultipleSigners()).thenReturn(false)
+        whenever(mockArchiveSigningInfo.getApkContentsSigners()).thenReturn(arrayOf(sigNew))
         // Rotated key history contains both old and new keys
         whenever(mockArchiveSigningInfo.getSigningCertificateHistory()).thenReturn(arrayOf(sigOld, sigNew))
 
         val mockCurrentSigningInfo = mock(SigningInfo::class.java)
         whenever(mockCurrentSigningInfo.hasMultipleSigners()).thenReturn(false)
+        whenever(mockCurrentSigningInfo.getApkContentsSigners()).thenReturn(arrayOf(sigOld))
         whenever(mockCurrentSigningInfo.getSigningCertificateHistory()).thenReturn(arrayOf(sigOld))
 
         val archivePackageInfo = PackageInfo().apply {
@@ -139,10 +142,12 @@ class UpdateManagerValidationTest {
 
         val mockArchiveSigningInfo = mock(SigningInfo::class.java)
         whenever(mockArchiveSigningInfo.hasMultipleSigners()).thenReturn(false)
+        whenever(mockArchiveSigningInfo.getApkContentsSigners()).thenReturn(arrayOf(sig1))
         whenever(mockArchiveSigningInfo.getSigningCertificateHistory()).thenReturn(arrayOf(sig1))
 
         val mockCurrentSigningInfo = mock(SigningInfo::class.java)
         whenever(mockCurrentSigningInfo.hasMultipleSigners()).thenReturn(false)
+        whenever(mockCurrentSigningInfo.getApkContentsSigners()).thenReturn(arrayOf(sig2))
         whenever(mockCurrentSigningInfo.getSigningCertificateHistory()).thenReturn(arrayOf(sig2))
 
         val archivePackageInfo = PackageInfo().apply {
@@ -165,7 +170,7 @@ class UpdateManagerValidationTest {
         val result = updateManager.validateApkFile(mockFile, errorBuilder)
 
         assertFalse(result)
-        assertTrue(errorBuilder.toString().contains("Signature mismatch"))
+        assertTrue(errorBuilder.toString().contains("invalid signature"))
     }
 
     @Test
@@ -183,6 +188,64 @@ class UpdateManagerValidationTest {
 
         assertFalse(result)
         assertTrue(errorBuilder.toString().contains("Package name mismatch"))
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun testValidateApkFile_CorruptApkRejected() {
+        whenever(mockPackageManager.getPackageArchiveInfo(anyString(), anyInt())).thenReturn(null)
+
+        assertEquals(
+            com.tunnelguard.app.ApkValidationResult.PACKAGE_INFO_NULL,
+            updateManager.validateApkFileWithResult(mockFile)
+        )
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun testValidateApkFile_MissingSigningInfoRejected() {
+        val archive = PackageInfo().apply { packageName = "com.tunnelguard.app" }
+        val installed = PackageInfo().apply { packageName = "com.tunnelguard.app" }
+        whenever(mockPackageManager.getPackageArchiveInfo(anyString(), anyInt())).thenReturn(archive)
+        whenever(mockPackageManager.getPackageInfo(anyString(), anyInt())).thenReturn(installed)
+
+        assertEquals(
+            com.tunnelguard.app.ApkValidationResult.SIGNING_INFO_MISSING,
+            updateManager.validateApkFileWithResult(mockFile)
+        )
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun testInstallPerformsFinalValidationAndNeverLaunchesInstallerAfterFailure() {
+        val cacheDir = Files.createTempDirectory("updater-test").toFile()
+        whenever(mockActivity.cacheDir).thenReturn(cacheDir)
+        val apk = File(cacheDir, "updates/TunnelGuard-v1.2.3-update.apk")
+        apk.parentFile!!.mkdirs()
+        apk.writeBytes(byteArrayOf(1, 2, 3))
+        val signer = Signature(byteArrayOf(7, 8, 9))
+        val signingInfo = mock(SigningInfo::class.java)
+        whenever(signingInfo.hasMultipleSigners()).thenReturn(false)
+        whenever(signingInfo.apkContentsSigners).thenReturn(arrayOf(signer))
+        whenever(signingInfo.signingCertificateHistory).thenReturn(null)
+        val validArchive = PackageInfo().apply {
+            packageName = "com.tunnelguard.app"
+            this.signingInfo = signingInfo
+        }
+        val installed = PackageInfo().apply {
+            packageName = "com.tunnelguard.app"
+            this.signingInfo = signingInfo
+        }
+        whenever(mockPackageManager.getPackageArchiveInfo(anyString(), anyInt()))
+            .thenReturn(validArchive)
+            .thenReturn(null)
+        whenever(mockPackageManager.getPackageInfo(anyString(), anyInt())).thenReturn(installed)
+
+        assertTrue(updateManager.validateApkFile(apk)) // Post-download validation succeeded.
+        assertFalse(updateManager.installApkFile("1.2.3"))
+        verify(mockPackageManager, times(2)).getPackageArchiveInfo(anyString(), anyInt())
+        verify(mockActivity, never()).startActivity(any<android.content.Intent>())
+        assertFalse(apk.exists())
     }
 
     @Test
@@ -242,7 +305,7 @@ class UpdateManagerValidationTest {
         val result = updateManager.validateApkFile(mockFile, errorBuilder)
 
         assertFalse(result)
-        assertTrue(errorBuilder.toString().contains("Signature mismatch"))
+        assertTrue(errorBuilder.toString().contains("invalid signature"))
     }
 
     @Test
