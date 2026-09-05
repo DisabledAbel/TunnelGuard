@@ -16,6 +16,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.Q])
@@ -74,13 +76,22 @@ class PerAppCountriesRegressionTest {
 
     @Test
     fun countryScreenIsLabelledAndScrollableForTvUsers() {
-        val manifest = File("src/main/AndroidManifest.xml").readText()
-        val screenLayout = File("src/main/res/layout/activity_per_app_countries.xml").readText()
+        val manifest = parseXml(File("src/main/AndroidManifest.xml"))
+        val manifestActivity = manifest.getElementsByTagName("activity").elements()
+            .firstOrNull { it.getAttributeNS(ANDROID_NAMESPACE, "name") == ".PerAppCountriesActivity" }
+        assertNotNull("PerAppCountriesActivity must be declared", manifestActivity)
+        assertEquals("@string/per_app_countries_title", manifestActivity!!.getAttributeNS(ANDROID_NAMESPACE, "label"))
 
-        assertTrue(manifest.contains("android:label=\"@string/per_app_countries_title\""))
-        assertTrue(screenLayout.contains("android:scrollbars=\"vertical\""))
-        assertTrue(screenLayout.contains("android:fadeScrollbars=\"false\""))
-        assertTrue(screenLayout.contains("android:contentDescription=\"@string/per_app_countries_list_accessibility\""))
+        val screenLayout = parseXml(File("src/main/res/layout/activity_per_app_countries.xml"))
+        val countryList = screenLayout.getElementsByTagName("androidx.recyclerview.widget.RecyclerView").elements()
+            .firstOrNull { it.getAttributeNS(ANDROID_NAMESPACE, "id") == "@+id/rv_per_app_countries" }
+        assertNotNull("The per-app countries list must exist", countryList)
+        assertEquals("vertical", countryList!!.getAttributeNS(ANDROID_NAMESPACE, "scrollbars"))
+        assertEquals("false", countryList.getAttributeNS(ANDROID_NAMESPACE, "fadeScrollbars"))
+        assertEquals(
+            "@string/per_app_countries_list_accessibility",
+            countryList.getAttributeNS(ANDROID_NAMESPACE, "contentDescription")
+        )
     }
 
     @Test
@@ -101,5 +112,16 @@ class PerAppCountriesRegressionTest {
             serviceController.destroy()
             activityController.destroy()
         }
+    }
+
+    private fun parseXml(file: File) = DocumentBuilderFactory.newInstance().apply {
+        isNamespaceAware = true
+    }.newDocumentBuilder().parse(file)
+
+    private fun org.w3c.dom.NodeList.elements(): List<Element> =
+        (0 until length).map { item(it) as Element }
+
+    companion object {
+        private const val ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
     }
 }
