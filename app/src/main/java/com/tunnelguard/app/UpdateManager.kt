@@ -24,6 +24,7 @@ enum class ApkValidationResult {
     SIGNING_INFO_MISSING,
     SIGNATURE_MISMATCH,
     SIGNING_LINEAGE_INVALID,
+    FILE_CHANGED,
     ERROR
 }
 
@@ -33,6 +34,7 @@ class UpdateManager(
 ) {
 
     private var lastInstallFailureMessage: String? = null
+    private var lastInstallValidationResult: ApkValidationResult? = null
 
     companion object {
         val isUpdateInProgress = AtomicBoolean(false)
@@ -178,7 +180,8 @@ class UpdateManager(
                     downloadDialog.dismiss()
 
                     val errorBuilder = StringBuilder()
-                    if (validateApkFile(updateApkFile, errorBuilder)) {
+                    val validationResult = validateApkFileWithResult(updateApkFile, errorBuilder)
+                    if (validationResult == ApkValidationResult.SUCCESS) {
                         // Install the APK and report back
                         val installSuccess = installApkFile(latestVersion)
                         if (installSuccess) {
@@ -190,11 +193,15 @@ class UpdateManager(
                                 .show()
                         } else {
                             showUpdateErrorDialog(lastInstallFailureMessage
-                                ?: "Failed to initialize or launch package installer intent.")
+                                ?: "Failed to initialize or launch package installer intent.",
+                                lastInstallValidationResult)
                         }
                     } else {
                         val errorMsg = errorBuilder.toString()
-                        showUpdateErrorDialog(errorMsg.ifBlank { "Downloaded APK file validation failed." })
+                        showUpdateErrorDialog(
+                            errorMsg.ifBlank { "Downloaded APK file validation failed." },
+                            validationResult
+                        )
                         if (updateApkFile.exists()) {
                             updateApkFile.delete()
                         }
@@ -422,6 +429,7 @@ class UpdateManager(
 
     fun installApkFile(versionName: String): Boolean {
         lastInstallFailureMessage = null
+        lastInstallValidationResult = null
         return try {
             if (!validateVersionName(versionName)) {
                 throw IllegalArgumentException("Invalid version name format: $versionName")
@@ -438,6 +446,7 @@ class UpdateManager(
             if (!updateApkFile.exists() || updateApkFile.length() == 0L) {
                 config.addLog("Install failed: update APK file does not exist or is empty.")
                 lastInstallFailureMessage = "Downloaded APK file does not exist or is empty."
+                lastInstallValidationResult = ApkValidationResult.FILE_NOT_FOUND_OR_EMPTY
                 return false
             }
 
@@ -453,6 +462,7 @@ class UpdateManager(
                 lastInstallFailureMessage = validationError.toString().ifBlank {
                     "Update blocked because the downloaded APK could not be positively verified."
                 }
+                lastInstallValidationResult = validationResult
                 if (updateApkFile.exists() && !updateApkFile.delete()) {
                     config.addLog("Installation blocked APK could not be deleted: ${updateApkFile.name}")
                 }
@@ -462,6 +472,7 @@ class UpdateManager(
             if (!hashBeforeValidation.contentEquals(hashAfterValidation)) {
                 config.addLog("Installation blocked: APK changed during final validation.")
                 lastInstallFailureMessage = "Update blocked because the downloaded APK changed during final security validation."
+                lastInstallValidationResult = ApkValidationResult.FILE_CHANGED
                 updateApkFile.delete()
                 return false
             }
@@ -490,7 +501,10 @@ class UpdateManager(
         }
     }
 
-    fun showUpdateErrorDialog(errorMessage: String) {
+    fun showUpdateErrorDialog(
+        errorMessage: String,
+        validationResult: ApkValidationResult? = null
+    ) {
         val repo = UpdateRepository.getInstance(activity)
         val targetUrl = com.tunnelguard.app.update.UpdateLinkIntent.preferredUrl(
             repo.getCachedApkUrl(),
@@ -504,7 +518,10 @@ class UpdateManager(
                 dialog.dismiss()
             }
 
-        if (!errorMessage.contains("invalid signature", ignoreCase = true) && !targetUrl.isNullOrBlank()) {
+        // A concrete validation failure is a trust decision, not a download
+        // inconvenience. Do not offer an alternate APK path around that decision.
+        val isTrustFailure = validationResult != null && validationResult != ApkValidationResult.SUCCESS
+        if (!isTrustFailure && !targetUrl.isNullOrBlank()) {
             builder.setNeutralButton("Open Download Link") { dialog, _ ->
                 dialog.dismiss()
                 try {
