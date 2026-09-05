@@ -54,6 +54,7 @@
         <activity
             android:name=".PerAppCountriesActivity"
             android:exported="false"
+            android:label="@string/per_app_countries_title"
             android:theme="@style/Theme.TunnelGuard" />
 
         <activity

@@ -73,6 +73,17 @@ class PerAppCountriesRegressionTest {
     }
 
     @Test
+    fun countryScreenIsLabelledAndScrollableForTvUsers() {
+        val manifest = File("src/main/AndroidManifest.xml").readText()
+        val screenLayout = File("src/main/res/layout/activity_per_app_countries.xml").readText()
+
+        assertTrue(manifest.contains("android:label=\"@string/per_app_countries_title\""))
+        assertTrue(screenLayout.contains("android:scrollbars=\"vertical\""))
+        assertTrue(screenLayout.contains("android:fadeScrollbars=\"false\""))
+        assertTrue(screenLayout.contains("android:contentDescription=\"@string/per_app_countries_list_accessibility\""))
+    }
+
+    @Test
     fun countryChangeUsesExistingVpnPolicyUpdateAction() {
         // Only onCreate is needed for this policy-dispatch test; avoid starting the async app list load.
         val activityController = Robolectric.buildActivity(PerAppCountriesActivity::class.java).create()
