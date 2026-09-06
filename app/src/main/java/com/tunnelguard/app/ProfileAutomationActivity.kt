@@ -18,6 +18,11 @@ class ProfileAutomationActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var toggleRow: LinearLayout
 
+    /**
+     * Initializes the profile automation screen and configures its controls.
+     *
+     * @param state Previously saved activity state, if available.
+     */
     override fun onCreate(state: Bundle?) {
         super.onCreate(state); setContentView(R.layout.activity_profile_automation)
         config = TunnelGuardConfig(this); rules = findViewById(R.id.automation_rules)
@@ -31,8 +36,14 @@ class ProfileAutomationActivity : AppCompatActivity() {
         render()
     }
 
-    override fun onResume() { super.onResume(); render() }
+    /**
+ * Refreshes the displayed profile-switching rules and status when the activity resumes.
+ */
+override fun onResume() { super.onResume(); render() }
 
+    /**
+     * Refreshes the automatic profile-switching interface with the current setting, status, and rules.
+     */
     private fun render() {
         toggle.isChecked = config.isAutomaticProfileSwitchingEnabled(); rules.removeAllViews()
         toggleRow.contentDescription = "Automatic Profile Switching, ${if (toggle.isChecked) "enabled" else "disabled"}. Select to toggle."
@@ -51,6 +62,13 @@ class ProfileAutomationActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Displays actions for enabling, editing, reordering, or deleting a profile-switching rule.
+     *
+     * @param rule The rule to manage.
+     * @param index The rule's position in the list.
+     * @param all All profile-switching rules.
+     */
     private fun actions(rule: ProfileSwitchRule, index: Int, all: List<ProfileSwitchRule>) {
         val labels = arrayOf(if (rule.enabled) "Disable" else "Enable", "Change condition", "Change target profile", "Move Up", "Move Down", "Delete")
         AlertDialog.Builder(this).setTitle("Manage rule").setItems(labels) { _, which ->
@@ -67,12 +85,25 @@ class ProfileAutomationActivity : AppCompatActivity() {
         }.setNegativeButton("Cancel", null).show()
     }
 
+    /**
+     * Starts editing a profile-switching rule, creating a default rule when none is provided.
+     *
+     * @param existing The rule to edit, or `null` to create a new rule.
+     */
     private fun edit(existing: ProfileSwitchRule?) {
         val base = existing ?: ProfileSwitchRule("rule_${UUID.randomUUID()}", ProfileRuleCondition.WIFI_CONNECTED, config.getDefaultProfileId(), true, config.getProfileSwitchRules().size)
         val list = config.getProfileSwitchRules().toMutableList().apply { add(base) }
         chooseCondition(base, list.lastIndex, list, thenProfile = true)
     }
 
+    /**
+     * Prompts the user to select a condition for a profile-switching rule.
+     *
+     * @param rule The rule whose condition is being changed.
+     * @param index The rule's position in the mutable list.
+     * @param list The list containing the rule to update.
+     * @param thenProfile Whether to continue to profile selection after choosing a condition.
+     */
     private fun chooseCondition(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean = false) {
         val values = ProfileRuleCondition.values()
         AlertDialog.Builder(this).setTitle("Condition").setItems(values.map { it.label }.toTypedArray()) { _, selected ->
@@ -81,6 +112,13 @@ class ProfileAutomationActivity : AppCompatActivity() {
         }.show()
     }
 
+    /**
+     * Prompts the user to select the rule's target profile and saves the updated rule list.
+     *
+     * @param rule The rule whose target profile is being selected.
+     * @param index The rule's position in the list.
+     * @param list The mutable list of profile-switching rules to update.
+     */
     private fun chooseProfile(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>) {
         val profiles = config.getProfiles()
         AlertDialog.Builder(this).setTitle("Target profile").setItems(profiles.map { it.name }.toTypedArray()) { _, selected ->
@@ -88,5 +126,10 @@ class ProfileAutomationActivity : AppCompatActivity() {
         }.show()
     }
 
-    private fun saveOrdered(list: List<ProfileSwitchRule>) { config.saveProfileSwitchRules(list.mapIndexed { i, r -> r.copy(priority = i) }); render() }
+    /**
+ * Saves profile-switching rules with priorities matching their order in the list and refreshes the display.
+ *
+ * @param list The profile-switching rules in their desired order.
+ */
+private fun saveOrdered(list: List<ProfileSwitchRule>) { config.saveProfileSwitchRules(list.mapIndexed { i, r -> r.copy(priority = i) }); render() }
 }

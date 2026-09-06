@@ -79,6 +79,11 @@ class ProfilesActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Displays actions for selecting, setting the default, renaming, or deleting a profile.
+     *
+     * @param profile The profile whose available management actions are displayed.
+     */
     private fun showProfileActionsDialog(profile: TunnelGuardConfig.ProtectionProfile) {
         val options = mutableListOf<String>()
 
@@ -224,6 +229,11 @@ class ProfilesActivity : AppCompatActivity() {
 
         override fun getItemCount(): Int = items.size
 
+        /**
+         * Replaces the displayed profiles with a new list.
+         *
+         * @param newList The profiles to display.
+         */
         fun updateList(newList: List<TunnelGuardConfig.ProtectionProfile>) {
             items = newList
             notifyDataSetChanged()

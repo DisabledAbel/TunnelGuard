@@ -82,7 +82,7 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         /**
-         * Handles network loss by clearing cached network data and re-evaluating VPN routing.
+         * Handles network loss by clearing cached network data and requesting VPN routing and profile automation reevaluation.
          *
          * @param network The network that was lost.
          */
@@ -95,10 +95,10 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         /**
-         * Re-evaluates VPN routing when a network's capabilities change.
+         * Re-evaluates VPN routing and notifies profile automation of updated network capabilities.
          *
          * @param network The network whose capabilities changed.
-         * @param networkCapabilities The updated capabilities of the network.
+         * @param networkCapabilities The network's updated capabilities.
          */
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             super.onCapabilitiesChanged(network, networkCapabilities)
@@ -133,7 +133,12 @@ class TunnelGuardVpnService : VpnService() {
         const val ACTION_STOP = "com.tunnelguard.app.STOP"
         const val ACTION_UPDATE = "com.tunnelguard.app.UPDATE"
 
-        /** Defines the service lifecycle actions that enter the common automation startup path. */
+        /**
+ * Determines whether profile automation should resume for a service action.
+ *
+ * @param action The service action to evaluate.
+ * @return `true` if the action is not `ACTION_STOP`, `false` otherwise.
+ */
         internal fun shouldResumeProfileAutomation(action: String?): Boolean = action != ACTION_STOP
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "TunnelGuardVpnChannel"
@@ -490,9 +495,9 @@ class TunnelGuardVpnService : VpnService() {
     }
 
     /**
-     * Handles service start, update, and stop commands, registering required callbacks and evaluating VPN routing.
+     * Processes service lifecycle commands and initiates VPN protection and monitoring.
      *
-     * @return `START_NOT_STICKY` when the service is stopped; `START_STICKY` for normal operation.
+     * @return `START_NOT_STICKY` when stopping the service; `START_STICKY` otherwise.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action

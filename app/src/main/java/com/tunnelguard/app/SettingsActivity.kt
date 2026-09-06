@@ -89,6 +89,11 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Initializes the settings screen, loads the current configuration, and binds preference controls and their actions.
+     *
+     * @param savedInstanceState Previously saved activity state, if available.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)

@@ -47,6 +47,11 @@ class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var rvDiagLogs: RecyclerView
     private lateinit var logsAdapter: DiagLogsAdapter
 
+    /**
+     * Initializes the diagnostics screen, configures its controls and log list, and loads the current diagnostic information.
+     *
+     * @param savedInstanceState Previously saved activity state, if available.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_diagnostics)
@@ -118,6 +123,9 @@ class DiagnosticsActivity : AppCompatActivity() {
         refreshDiagnostics()
     }
 
+    /**
+     * Refreshes the diagnostics display with current VPN, protection, profile, boot, device, version, and log information.
+     */
     private fun refreshDiagnostics() {
         if (!config.isSimulatedVpnEnabled()) {
             val detection = config.detectRealVpnCapabilities(connectivityManager)
@@ -195,6 +203,9 @@ class DiagnosticsActivity : AppCompatActivity() {
         logsAdapter.updateList(allLogs)
     }
 
+    /**
+     * Copies a formatted diagnostics report to the clipboard.
+     */
     private fun copyDiagnosticsToClipboard() {
         refreshDiagnostics()
         val lastTrans = config.getLastStateTransitionTime()

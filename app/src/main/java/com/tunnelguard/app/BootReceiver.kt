@@ -6,6 +6,9 @@ import android.content.Intent
 import android.net.VpnService
 
 class BootReceiver : BroadcastReceiver() {
+    /**
+     * Evaluates the configured start-on-boot behavior when the device finishes booting.
+     */
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             val config = TunnelGuardConfig(context)
