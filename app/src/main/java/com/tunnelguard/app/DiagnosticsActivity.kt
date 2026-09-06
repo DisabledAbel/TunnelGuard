@@ -30,6 +30,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var tvAppsCount: TextView
     private lateinit var tvLastTransition: TextView
     private lateinit var tvBootStatus: TextView
+    private lateinit var tvAutomationStatus: TextView
     private lateinit var tvIpv4Status: TextView
     private lateinit var tvIpv6Status: TextView
     private lateinit var tvAndroidVersion: TextView
@@ -59,6 +60,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         tvAppsCount = findViewById(R.id.diag_apps_count)
         tvLastTransition = findViewById(R.id.diag_last_transition)
         tvBootStatus = findViewById(R.id.diag_boot_status)
+        tvAutomationStatus = findViewById(R.id.diag_automation_status)
         tvIpv4Status = findViewById(R.id.diag_ipv4_status)
         tvIpv6Status = findViewById(R.id.diag_ipv6_status)
         tvAndroidVersion = findViewById(R.id.diag_android_version)
@@ -159,6 +161,8 @@ class DiagnosticsActivity : AppCompatActivity() {
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             tvLastTransition.text = format.format(Date(lastTrans))
         }
+        val activeProfile = config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
@@ -218,6 +222,11 @@ class DiagnosticsActivity : AppCompatActivity() {
             Last Transition: $transStr
             IPv4 Protection: ${tvIpv4Status.text}
             IPv6 Protection: ${tvIpv6Status.text}
+            Automatic Profile Switching: ${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"}
+            Active Profile: ${config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"}
+            Selection Source: ${config.getProfileSelectionSource()}
+            Configured Rules: ${config.getProfileSwitchRules().size}
+            Last Automatic Switch: ${config.getLastAutomaticProfileSwitch().let { if (it == 0L) "Never" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it)) }}
 
             ${ProtectionHealthCollector(this, config).collect().diagnosticsText()}
 

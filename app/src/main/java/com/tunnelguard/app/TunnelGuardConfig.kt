@@ -34,6 +34,8 @@ class TunnelGuardConfig(private val context: Context) {
         private const val KEY_ACTIVE_VPN_COUNTRY = "active_vpn_country"
         private const val KEY_ACTIVE_VPN_COUNTRY_OWNER = "active_vpn_country_owner"
         private const val KEY_APP_VPN_COUNTRIES = "app_vpn_countries"
+        private const val KEY_AUTOMATIC_PROFILES = "automatic_profile_switching_enabled"
+        private const val KEY_PROFILE_RULES = "profile_switch_rules"
 
         const val TUNNEL_ADDRESS = "10.0.0.1"
         const val TUNNEL_PREFIX_LENGTH = 24
@@ -252,8 +254,55 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     fun setSelectedProfileId(id: String) {
-        prefs.edit().putString("selected_profile_id", id).apply()
+        prefs.edit().putString("selected_profile_id", id).putString("profile_selection_source", "Manual selection").apply()
         addLog("Selected profile changed to: $id")
+    }
+
+    fun setSelectedProfileIdAutomatically(id: String, rule: ProfileSwitchRule) {
+        prefs.edit().putString("selected_profile_id", id)
+            .putString("profile_selection_source", "Rule: ${rule.condition.label}")
+            .putLong("last_automatic_profile_switch", System.currentTimeMillis()).apply()
+    }
+
+    fun getProfileSelectionSource() = prefs.getString("profile_selection_source", "Manual selection") ?: "Manual selection"
+    fun getLastAutomaticProfileSwitch() = prefs.getLong("last_automatic_profile_switch", 0L)
+    fun isAutomaticProfileSwitchingEnabled() = prefs.getBoolean(KEY_AUTOMATIC_PROFILES, false)
+    fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTOMATIC_PROFILES, enabled).apply()
+
+    fun getProfileSwitchRules(): List<ProfileSwitchRule> {
+        val profiles = getProfiles().map { it.id }.toSet()
+        val seen = mutableSetOf<String>(); val result = mutableListOf<ProfileSwitchRule>()
+        try {
+            val array = JSONArray(prefs.getString(KEY_PROFILE_RULES, "[]") ?: "[]")
+            for (i in 0 until array.length()) try {
+                val o = array.getJSONObject(i); val id = o.getString("id")
+                require(id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(id))
+                val condition = ProfileRuleCondition.valueOf(o.getString("condition"))
+                val target = o.getString("profileId")
+                var enabled = o.optBoolean("enabled", true)
+                if (target !in profiles && enabled) { enabled = false; addLog("Profile automation rule disabled: target profile no longer exists ($id)", "WARN") }
+                result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i))
+            } catch (e: Exception) { addLog("Ignored malformed profile automation rule at index $i: ${e.message}", "WARN") }
+        } catch (e: Exception) { addLog("Ignored malformed profile switch rules: ${e.message}", "WARN") }
+        return result.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id })
+    }
+
+    fun saveProfileSwitchRules(rules: List<ProfileSwitchRule>) {
+        val array = JSONArray(); val seen = mutableSetOf<String>()
+        rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
+            if (rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(rule.id)) array.put(JSONObject()
+                .put("id", rule.id).put("condition", rule.condition.name).put("profileId", rule.profileId)
+                .put("enabled", rule.enabled).put("priority", rule.priority))
+        }
+        prefs.edit().putString(KEY_PROFILE_RULES, array.toString()).apply()
+    }
+
+    fun ensureValidSelectedProfile(): ProfileAutomationResult {
+        if (getProfiles().any { it.id == getSelectedProfileId() }) return ProfileAutomationResult.NoMatchingRule
+        val fallback = getDefaultProfileId().takeIf { id -> getProfiles().any { it.id == id } } ?: "streaming"
+        setSelectedProfileIdAutomatically(fallback, ProfileSwitchRule("fallback", ProfileRuleCondition.VPN_DISCONNECTED, fallback))
+        addLog("Invalid active profile replaced by default profile: $fallback", "WARN")
+        return ProfileAutomationResult.NoMatchingRule
     }
 
     fun getDefaultProfileId(): String {
@@ -296,6 +345,7 @@ class TunnelGuardConfig(private val context: Context) {
         if (getDefaultProfileId() == id) {
             setDefaultProfileId("streaming")
         }
+        saveProfileSwitchRules(getProfileSwitchRules().map { if (it.profileId == id) it.copy(enabled = false) else it })
     }
 
     fun getAllLauncherApps(): Set<String> {
@@ -777,6 +827,9 @@ class TunnelGuardConfig(private val context: Context) {
             obj.put("country_vpn_setting_enabled", isCountryVpnSettingEnabled())
             obj.put("country_vpn_target_country", getCountryVpnTargetCountry())
             obj.put("selected_profile_id", getSelectedProfileId())
+            obj.put("default_profile_id", getDefaultProfileId())
+            obj.put(KEY_AUTOMATIC_PROFILES, isAutomaticProfileSwitchingEnabled())
+            obj.put(KEY_PROFILE_RULES, JSONArray(prefs.getString(KEY_PROFILE_RULES, "[]")))
             obj.put("app_vpn_countries", JSONObject(getAppVpnCountries()))
 
             val profilesStr = prefs.getString("protection_profiles", null)
@@ -808,6 +861,8 @@ class TunnelGuardConfig(private val context: Context) {
             val countryVpnEnabled = obj.optBoolean("country_vpn_setting_enabled", false)
             val countryVpnTarget = obj.optString("country_vpn_target_country", "US")
             val selectedProfileId = obj.optString("selected_profile_id", "streaming")
+            val defaultProfileId = obj.optString("default_profile_id", "streaming")
+            val automaticProfiles = obj.optBoolean(KEY_AUTOMATIC_PROFILES, false)
 
             val pkgRegex = Regex("^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+$")
 
@@ -862,6 +917,13 @@ class TunnelGuardConfig(private val context: Context) {
             val validProfileIds = (validatedProfiles.map { it.id } + existingProfiles.map { it.id }).toSet()
             val finalProfileId = if (validProfileIds.contains(selectedProfileId)) selectedProfileId else "streaming"
             setSelectedProfileId(finalProfileId)
+            setDefaultProfileId(if (defaultProfileId in validProfileIds) defaultProfileId else "streaming")
+            setAutomaticProfileSwitchingEnabled(automaticProfiles)
+            val importedRules = obj.optJSONArray(KEY_PROFILE_RULES)
+            if (importedRules != null) {
+                prefs.edit().putString(KEY_PROFILE_RULES, importedRules.toString()).apply()
+                saveProfileSwitchRules(getProfileSwitchRules())
+            }
 
             addLog("Configuration imported successfully.", "INFO")
             return true

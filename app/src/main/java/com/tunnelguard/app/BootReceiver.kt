@@ -22,6 +22,10 @@ class BootReceiver : BroadcastReceiver() {
 
                     // Clear previous boot failure since we are attempting start
                     config.setLastBootFailure(null)
+                    // Select against the currently-known stable network before protection starts.
+                    // When state is unavailable the existing valid profile is retained; invalid
+                    // selections safely fall back to the configured default.
+                    ProfileAutomationManager.onNetworkChanged(context, immediate = true)
                     config.addLog("Boot completed: starting TunnelGuard protection service.")
 
                     val serviceIntent = Intent(context, TunnelGuardVpnService::class.java).apply {

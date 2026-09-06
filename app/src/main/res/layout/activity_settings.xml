@@ -115,6 +115,17 @@
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp" />
 
+            <Button
+                android:id="@+id/btn_settings_profile_automation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:padding="12dp"
+                android:text="Automatic Profile Switching"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
             <!-- Start on Boot Row -->
             <LinearLayout
                 android:id="@+id/layout_pref_boot"

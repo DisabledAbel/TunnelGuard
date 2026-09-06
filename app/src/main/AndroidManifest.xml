@@ -67,6 +67,8 @@
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard" />
 
+        <activity android:name=".ProfileAutomationActivity" android:exported="false" android:theme="@style/Theme.TunnelGuard" />
+
         <activity
             android:name=".TestActivity"
             android:exported="false"

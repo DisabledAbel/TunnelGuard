@@ -31,6 +31,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var cbPrefProtection: CheckBox
     private lateinit var btnManageApps: Button
     private lateinit var btnPerAppCountries: Button
+    private lateinit var btnProfileAutomation: Button
     private lateinit var layoutPrefBoot: LinearLayout
     private lateinit var cbPrefBoot: CheckBox
     private lateinit var layoutPrefMonitor: LinearLayout
@@ -99,6 +100,7 @@ class SettingsActivity : AppCompatActivity() {
         cbPrefProtection = findViewById(R.id.cb_pref_protection)
         btnManageApps = findViewById(R.id.btn_settings_manage_apps)
         btnPerAppCountries = findViewById(R.id.btn_settings_per_app_countries)
+        btnProfileAutomation = findViewById(R.id.btn_settings_profile_automation)
         layoutPrefBoot = findViewById(R.id.layout_pref_boot)
         cbPrefBoot = findViewById(R.id.cb_pref_boot)
         layoutPrefMonitor = findViewById(R.id.layout_pref_monitor)
@@ -178,6 +180,10 @@ class SettingsActivity : AppCompatActivity() {
 
         btnPerAppCountries.setOnClickListener {
             startActivity(Intent(this, PerAppCountriesActivity::class.java))
+        }
+
+        btnProfileAutomation.setOnClickListener {
+            startActivity(Intent(this, ProfileAutomationActivity::class.java))
         }
 
         layoutPrefBoot.setOnClickListener {

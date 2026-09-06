@@ -104,6 +104,7 @@ class ProfilesActivity : AppCompatActivity() {
                 when (which) {
                     selectIndex -> {
                         config.setSelectedProfileId(profile.id)
+                        ProfileAutomationManager.noteManualSelection()
                         Toast.makeText(this, "Selected: ${profile.name}", Toast.LENGTH_SHORT).show()
                     }
                     setDefaultIndex -> {

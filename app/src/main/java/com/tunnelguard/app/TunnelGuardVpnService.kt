@@ -78,6 +78,7 @@ class TunnelGuardVpnService : VpnService() {
             super.onAvailable(network)
             config.addLog("Network Callback: onAvailable. Re-evaluating routing.")
             routingEvaluator.request()
+            ProfileAutomationManager.onNetworkChanged(this@TunnelGuardVpnService)
         }
 
         /**
@@ -90,6 +91,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("Network Callback: onLost. Re-evaluating routing.")
             (vpnDetector as? DefaultVpnDetector)?.countryResolver?.clearCacheForNetwork(network)
             routingEvaluator.request()
+            ProfileAutomationManager.onNetworkChanged(this@TunnelGuardVpnService)
         }
 
         /**
@@ -107,6 +109,7 @@ class TunnelGuardVpnService : VpnService() {
             val transportStr = if (transports.isEmpty()) "OTHER" else transports.joinToString(", ")
             config.addLog("Network Capabilities Changed. Transports: $transportStr. Re-evaluating routing.")
             routingEvaluator.request()
+            ProfileAutomationManager.onNetworkChanged(this@TunnelGuardVpnService)
         }
     }
 
@@ -505,6 +508,8 @@ class TunnelGuardVpnService : VpnService() {
         startForegroundServiceNotification()
 
         startMonitoring()
+
+        if (action == ACTION_START) ProfileAutomationManager.onNetworkChanged(this, immediate = true)
 
         // Listen to connectivity changes for dynamic fail-closed blocking only if NOT already registered
         if (!isCallbackRegistered) {
