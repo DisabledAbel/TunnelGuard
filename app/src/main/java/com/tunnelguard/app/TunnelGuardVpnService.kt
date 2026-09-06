@@ -132,6 +132,9 @@ class TunnelGuardVpnService : VpnService() {
         const val ACTION_START = "com.tunnelguard.app.START"
         const val ACTION_STOP = "com.tunnelguard.app.STOP"
         const val ACTION_UPDATE = "com.tunnelguard.app.UPDATE"
+
+        /** Defines the service lifecycle actions that enter the common automation startup path. */
+        internal fun shouldResumeProfileAutomation(action: String?): Boolean = action != ACTION_STOP
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "TunnelGuardVpnChannel"
         private const val ALERT_CHANNEL_ID = "TunnelGuardAlertChannel"
@@ -510,9 +513,13 @@ class TunnelGuardVpnService : VpnService() {
 
         startMonitoring()
 
-        if (action == ACTION_START) {
+        // ACTION_START, ACTION_UPDATE, and Android null-intent restarts all enter this common
+        // startup path. Resume before scheduling so a prior service shutdown cannot leave
+        // automation permanently cancelled. Initial starts retain immediate evaluation; updates
+        // and sticky restarts use the normal stability debounce.
+        if (shouldResumeProfileAutomation(action)) {
             ProfileAutomationManager.resume()
-            ProfileAutomationManager.onNetworkChanged(this, immediate = true)
+            ProfileAutomationManager.onNetworkChanged(this, immediate = action == ACTION_START)
         }
 
         // Listen to connectivity changes for dynamic fail-closed blocking only if NOT already registered
