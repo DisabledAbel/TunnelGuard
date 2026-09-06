@@ -1,5 +1,20 @@
 # TunnelGuard
 
+## Automatic Profile Switching
+
+Settings → **Automatic Profile Switching** can select an existing protection profile when Wi-Fi,
+Ethernet, or upstream VPN state changes. The feature is off by default. Rules retain stable IDs and
+target profile IDs, so renaming a custom profile is safe. Lower priority numbers win; ties are
+resolved by rule ID. Missing targets are disabled rather than redirected.
+
+Network changes are stabilized for 1.5 seconds. A manual profile selection remains active until the
+next actual network-state change. Simulation Mode intentionally supplies the VPN-connected state to
+automation. In normal mode TunnelGuard uses its existing upstream VPN detector, which excludes its
+own fail-closed tunnel. At boot, available state is evaluated before starting protection; otherwise
+the existing valid selection is retained (or an invalid selection falls back to the default), and the
+service callback evaluates again when network information arrives. Profile changes use `ACTION_UPDATE`,
+so the service immediately rebuilds the protected package routing while fail-closed remains authoritative.
+
 **TunnelGuard** is a security-focused Android TV and Google TV application designed to provide robust per-application VPN protection and enforce **fail-closed networking**.
 
 With TunnelGuard, users can select specific applications (such as TiviMate, media players, or custom apps) that must *only* access the internet when a VPN connection is active. If the VPN path is disconnected or becomes unavailable, TunnelGuard instantly blocks those protected applications from accessing the internet, preventing any normal, unencrypted connection leaks. Other unprotected applications (such as YouTube or Netflix) can continue to access the internet normally.
