@@ -83,6 +83,11 @@
             android:theme="@style/Theme.TunnelGuard" />
 
         <activity
+            android:name=".ProtectionHealthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TunnelGuard" />
+
+        <activity
             android:name=".VpnWarningActivity"
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard.TranslucentDialog" />
