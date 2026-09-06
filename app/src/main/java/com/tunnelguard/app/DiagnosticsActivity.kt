@@ -3,6 +3,7 @@ package com.tunnelguard.app
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
@@ -36,6 +37,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var tvAppVersion: TextView
 
     private lateinit var btnRefresh: Button
+    private lateinit var btnHealthCheck: Button
     private lateinit var btnCopy: Button
     private lateinit var btnExport: Button
     private lateinit var btnClear: Button
@@ -64,6 +66,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         tvAppVersion = findViewById(R.id.diag_app_version)
 
         btnRefresh = findViewById(R.id.btn_refresh_diag)
+        btnHealthCheck = findViewById(R.id.btn_health_check)
         btnCopy = findViewById(R.id.btn_copy_logs)
         btnExport = findViewById(R.id.btn_export_logs_diag)
         btnClear = findViewById(R.id.btn_clear_logs_diag)
@@ -80,6 +83,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         btnRefresh.setOnClickListener {
             refreshDiagnostics()
         }
+        btnHealthCheck.setOnClickListener { startActivity(Intent(this, ProtectionHealthActivity::class.java)) }
 
         btnCopy.setOnClickListener {
             copyDiagnosticsToClipboard()
@@ -106,7 +110,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         }
 
         // Set focus
-        btnRefresh.requestFocus()
+        btnHealthCheck.requestFocus()
 
         // Populate details
         refreshDiagnostics()
@@ -214,6 +218,8 @@ class DiagnosticsActivity : AppCompatActivity() {
             Last Transition: $transStr
             IPv4 Protection: ${tvIpv4Status.text}
             IPv6 Protection: ${tvIpv6Status.text}
+
+            ${ProtectionHealthCollector(this, config).collect().diagnosticsText()}
 
             --- LATEST SYSTEM EVENTS ---
             ${config.getLogs().take(20).joinToString("\n")}

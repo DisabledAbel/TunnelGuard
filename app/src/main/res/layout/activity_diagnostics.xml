@@ -303,11 +303,23 @@
 
             <!-- ACTION BUTTONS -->
             <Button
+                android:id="@+id/btn_health_check"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusDown="@+id/btn_refresh_diag"
+                android:text="Run Protection Health Check"
+                android:textColor="@color/text_primary" />
+
+            <Button
                 android:id="@+id/btn_refresh_diag"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
+                android:nextFocusUp="@+id/btn_health_check"
                 android:nextFocusDown="@+id/btn_copy_logs"
                 android:text="Refresh Diagnostics"
                 android:textColor="@color/text_primary"

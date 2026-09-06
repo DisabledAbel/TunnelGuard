@@ -43,6 +43,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
    * Fully structured system reports detailing VPN state, protection state, app counts, last transition time, boot status, Android version, device information, app version, and IPv4/IPv6 protection status.
    * Clean, formatted events listing.
    * Quick action buttons to Refresh, Copy to clipboard, Export/Share logs to local storage, and Clear logs.
+   * Includes a TV-friendly **Protection Health Check** for VPN permission and runtime state, fail-closed service/protocol coverage, DNS, profiles, monitor permissions, boot, country policy, updater readiness, and Android battery restrictions. Results describe only configuration and prerequisites Android exposes; they do not claim to prove complete security or the absence of every possible leak.
 4. **Configuration Import & Export (Backup/Restore):**
    * Backup/Restore your entire protection configuration (profiles, protected packages, boot settings) via clean JSON.
    * Does NOT export private keys or credentials.
