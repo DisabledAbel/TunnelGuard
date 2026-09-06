@@ -20,12 +20,12 @@ data class ProfileSwitchRule(
     val priority: Int = 0
 )
 
-data class ProfileNetworkState(val wifi: Boolean, val ethernet: Boolean, val upstreamVpn: Boolean) {
+data class ProfileNetworkState(val wifi: Boolean, val ethernet: Boolean, val upstreamVpn: Boolean?) {
     fun matches(condition: ProfileRuleCondition) = when (condition) {
         ProfileRuleCondition.WIFI_CONNECTED -> wifi
         ProfileRuleCondition.ETHERNET_CONNECTED -> ethernet
-        ProfileRuleCondition.VPN_CONNECTED -> upstreamVpn
-        ProfileRuleCondition.VPN_DISCONNECTED -> !upstreamVpn
+        ProfileRuleCondition.VPN_CONNECTED -> upstreamVpn == true
+        ProfileRuleCondition.VPN_DISCONNECTED -> upstreamVpn == false
     }
 }
 
@@ -42,12 +42,28 @@ object ProfileAutomationManager {
     private var pending: Runnable? = null
     private var lastObserved: ProfileNetworkState? = null
     private var manualOverrideState: ProfileNetworkState? = null
+    private var manualOverridePending = false
+    private var cancelled = false
 
-    fun noteManualSelection() { manualOverrideState = lastObserved }
+    fun noteManualSelection() {
+        // Bind the override to the next observed state. This also covers a selection made before
+        // the first evaluation and a selection made while a debounced callback is pending.
+        manualOverrideState = null
+        manualOverridePending = true
+    }
+
+    fun cancelPending() {
+        cancelled = true
+        pending?.let(handler::removeCallbacks)
+        pending = null
+    }
+
+    fun resume() { cancelled = false }
 
     fun onNetworkChanged(context: Context, immediate: Boolean = false) {
+        if (cancelled) return
         pending?.let(handler::removeCallbacks)
-        val task = Runnable { evaluateNow(context) }
+        val task = Runnable { if (!cancelled) evaluateNow(context) }
         pending = task
         if (immediate) task.run() else handler.postDelayed(task, DEBOUNCE_MS)
     }
@@ -57,6 +73,12 @@ object ProfileAutomationManager {
         if (!config.isAutomaticProfileSwitchingEnabled()) return ProfileAutomationResult.Disabled
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val state = readState(config, cm)
+        if (manualOverridePending) {
+            manualOverridePending = false
+            manualOverrideState = state
+            lastObserved = state
+            return ProfileAutomationResult.ManualOverride
+        }
         if (manualOverrideState == state) return ProfileAutomationResult.ManualOverride
         if (lastObserved != null && lastObserved == state) return ProfileAutomationResult.UnchangedState
         lastObserved = state
@@ -88,8 +110,17 @@ object ProfileAutomationManager {
         } catch (_: Exception) { }
         // Simulation intentionally drives VPN rules. Real mode reuses the security-relevant detector,
         // which excludes TunnelGuard's owner UID/tunnel address.
-        val upstream = if (config.isSimulatedVpnEnabled()) config.getVPNState() in setOf(VPNState.CONNECTED, VPNState.PROTECTED)
-        else config.detectRealVpnCapabilities(cm) == VpnDetectionResult.VPN_DETECTED
+        val upstream = if (config.isSimulatedVpnEnabled()) {
+            config.getVPNState() in setOf(VPNState.CONNECTED, VPNState.PROTECTED)
+        } else {
+            // ANY deliberately ignores country policy: automation asks whether an external VPN
+            // exists, while evaluateUpstreamVpn still excludes TunnelGuard's own local tunnel.
+            when (config.evaluateUpstreamVpn(cm, requiredCountryCode = "ANY")) {
+                is UpstreamVpnEvaluation.Valid, is UpstreamVpnEvaluation.CountryMismatch -> true
+                is UpstreamVpnEvaluation.Missing -> false
+                UpstreamVpnEvaluation.ForegroundUnknown, UpstreamVpnEvaluation.Unknown -> null
+            }
+        }
         return ProfileNetworkState(wifi, ethernet, upstream)
     }
 }

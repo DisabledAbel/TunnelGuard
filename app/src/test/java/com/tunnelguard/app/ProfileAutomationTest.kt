@@ -33,4 +33,9 @@ class ProfileAutomationTest {
     @Test fun noConditionProducesNoMatch() {
         assertNull(ProfileRuleEvaluator.match(listOf(rule(ProfileRuleCondition.ETHERNET_CONNECTED)), ProfileNetworkState(true, false, false), valid))
     }
+
+    @Test fun indeterminateVpnMatchesNeitherVpnRule() {
+        val rules = listOf(rule(ProfileRuleCondition.VPN_CONNECTED), rule(ProfileRuleCondition.VPN_DISCONNECTED, id = "disconnected"))
+        assertNull(ProfileRuleEvaluator.match(rules, ProfileNetworkState(false, false, null), valid))
+    }
 }
