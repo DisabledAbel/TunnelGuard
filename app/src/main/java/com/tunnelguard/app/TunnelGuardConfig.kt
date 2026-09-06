@@ -249,26 +249,69 @@ class TunnelGuardConfig(private val context: Context) {
         prefs.edit().putString("protection_profiles", arr.toString()).apply()
     }
 
+    /**
+     * Retrieves the identifier of the currently selected protection profile.
+     *
+     * @return The selected profile identifier, or `"streaming"` if none is stored.
+     */
     fun getSelectedProfileId(): String {
         return prefs.getString("selected_profile_id", "streaming") ?: "streaming"
     }
 
+    /**
+     * Selects a protection profile manually and records the selection source.
+     *
+     * @param id The identifier of the profile to select.
+     */
     fun setSelectedProfileId(id: String) {
         prefs.edit().putString("selected_profile_id", id).putString("profile_selection_source", "Manual selection").apply()
         addLog("Selected profile changed to: $id")
     }
 
+    /**
+     * Selects a profile automatically and records the rule that triggered the selection.
+     *
+     * @param id The identifier of the profile to select.
+     * @param rule The profile-switching rule that triggered the selection.
+     */
     fun setSelectedProfileIdAutomatically(id: String, rule: ProfileSwitchRule) {
         prefs.edit().putString("selected_profile_id", id)
             .putString("profile_selection_source", "Rule: ${rule.condition.label}")
             .putLong("last_automatic_profile_switch", System.currentTimeMillis()).apply()
     }
 
-    fun getProfileSelectionSource() = prefs.getString("profile_selection_source", "Manual selection") ?: "Manual selection"
-    fun getLastAutomaticProfileSwitch() = prefs.getLong("last_automatic_profile_switch", 0L)
-    fun isAutomaticProfileSwitchingEnabled() = prefs.getBoolean(KEY_AUTOMATIC_PROFILES, false)
-    fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTOMATIC_PROFILES, enabled).apply()
+    /**
+ * Retrieves the source of the current profile selection.
+ *
+ * @return The stored profile selection source, or "Manual selection" when none is set.
+ */
+fun getProfileSelectionSource() = prefs.getString("profile_selection_source", "Manual selection") ?: "Manual selection"
+    /**
+ * Retrieves the timestamp of the most recent automatic profile switch.
+ *
+ * @return The switch timestamp in milliseconds, or `0` if no automatic switch has occurred.
+ */
+fun getLastAutomaticProfileSwitch() = prefs.getLong("last_automatic_profile_switch", 0L)
+    /**
+ * Checks whether automatic profile switching is enabled.
+ *
+ * @return `true` if automatic profile switching is enabled, `false` otherwise.
+ */
+fun isAutomaticProfileSwitchingEnabled() = prefs.getBoolean(KEY_AUTOMATIC_PROFILES, false)
+    /**
+ * Enables or disables automatic profile switching.
+ *
+ * @param enabled Whether automatic profile switching should be enabled.
+ */
+fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTOMATIC_PROFILES, enabled).apply()
 
+    /**
+     * Loads and validates the configured profile-switching rules.
+     *
+     * Malformed, duplicate, or invalid rules are ignored. Rules targeting profiles that no longer exist are disabled.
+     *
+     * @return The valid profile-switching rules sorted by priority and identifier.
+     */
     fun getProfileSwitchRules(): List<ProfileSwitchRule> {
         val profiles = getProfiles().map { it.id }.toSet()
         val seen = mutableSetOf<String>(); val result = mutableListOf<ProfileSwitchRule>()
@@ -287,6 +330,11 @@ class TunnelGuardConfig(private val context: Context) {
         return result.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id })
     }
 
+    /**
+     * Saves valid, unique profile-switching rules in priority order.
+     *
+     * @param rules The profile-switching rules to persist.
+     */
     fun saveProfileSwitchRules(rules: List<ProfileSwitchRule>) {
         val array = JSONArray(); val seen = mutableSetOf<String>()
         rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
@@ -297,6 +345,11 @@ class TunnelGuardConfig(private val context: Context) {
         prefs.edit().putString(KEY_PROFILE_RULES, array.toString()).apply()
     }
 
+    /**
+     * Ensures that the selected profile references an existing profile.
+     *
+     * @return The result of the profile automation operation.
+     */
     fun ensureValidSelectedProfile(): ProfileAutomationResult {
         if (getProfiles().any { it.id == getSelectedProfileId() }) return ProfileAutomationResult.NoMatchingRule
         val fallback = getDefaultProfileId().takeIf { id -> getProfiles().any { it.id == id } } ?: "streaming"
@@ -305,6 +358,11 @@ class TunnelGuardConfig(private val context: Context) {
         return ProfileAutomationResult.NoMatchingRule
     }
 
+    /**
+     * Retrieves the identifier of the default protection profile.
+     *
+     * @return The configured default profile identifier, or `streaming` when none is configured.
+     */
     fun getDefaultProfileId(): String {
         return prefs.getString("default_profile_id", "streaming") ?: "streaming"
     }
@@ -335,6 +393,13 @@ class TunnelGuardConfig(private val context: Context) {
         addLog("Renamed profile $id -> $newName")
     }
 
+    /**
+     * Deletes a user profile and resets references to it to the Streaming profile.
+     *
+     * Rules targeting the deleted profile are disabled.
+     *
+     * @param id The identifier of the profile to delete.
+     */
     fun deleteProfile(id: String) {
         val profiles = getProfiles().filter { it.id != id || it.isSystem }
         saveProfiles(profiles)
@@ -348,6 +413,11 @@ class TunnelGuardConfig(private val context: Context) {
         saveProfileSwitchRules(getProfileSwitchRules().map { if (it.profileId == id) it.copy(enabled = false) else it })
     }
 
+    /**
+     * Retrieves packages that expose TV or standard launcher activities.
+     *
+     * @return The set of launcher application package names, excluding TunnelGuard.
+     */
     fun getAllLauncherApps(): Set<String> {
         val set = mutableSetOf<String>()
         try {
@@ -844,12 +914,12 @@ class TunnelGuardConfig(private val context: Context) {
     }
 
     /**
-     * Imports application settings, protection profiles, and per-app VPN country assignments from JSON.
+     * Imports application settings, protection profiles, automatic switching rules, and per-app VPN country assignments from JSON.
      *
-     * Invalid package names, country assignments, and unsupported profile entries are ignored and logged.
+     * Invalid package names and country assignments are ignored and logged. Parsing or other import failures are logged and cause the import to fail.
      *
      * @param jsonStr The JSON configuration to import.
-     * @return `true` if the configuration is imported successfully, `false` if parsing or import fails.
+     * @return `true` if the configuration is imported successfully, `false` otherwise.
      */
     fun importConfigFromJson(jsonStr: String): Boolean {
         try {

@@ -21,6 +21,12 @@ data class ProfileSwitchRule(
 )
 
 data class ProfileNetworkState(val wifi: Boolean, val ethernet: Boolean, val upstreamVpn: Boolean?) {
+    /**
+     * Determines whether the network state satisfies the specified condition.
+     *
+     * @param condition The network condition to evaluate.
+     * @return `true` if the state satisfies the condition, `false` otherwise.
+     */
     fun matches(condition: ProfileRuleCondition) = when (condition) {
         ProfileRuleCondition.WIFI_CONNECTED -> wifi
         ProfileRuleCondition.ETHERNET_CONNECTED -> ethernet
@@ -30,7 +36,15 @@ data class ProfileNetworkState(val wifi: Boolean, val ethernet: Boolean, val ups
 }
 
 object ProfileRuleEvaluator {
-    fun match(rules: List<ProfileSwitchRule>, state: ProfileNetworkState, validProfiles: Set<String>): ProfileSwitchRule? =
+    /**
+             * Selects the highest-priority enabled rule that matches the network state and targets a valid profile.
+             *
+             * @param rules The candidate profile-switching rules.
+             * @param state The current network state.
+             * @param validProfiles The profile IDs that can be selected.
+             * @return The matching rule with the lowest priority and ID, or `null` if no rule matches.
+             */
+            fun match(rules: List<ProfileSwitchRule>, state: ProfileNetworkState, validProfiles: Set<String>): ProfileSwitchRule? =
         rules.asSequence().filter { it.enabled && it.profileId in validProfiles && state.matches(it.condition) }
             .sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).firstOrNull()
 }
@@ -45,6 +59,9 @@ object ProfileAutomationManager {
     private var manualOverridePending = false
     private var cancelled = false
 
+    /**
+     * Marks the next observed network state as manually overridden.
+     */
     fun noteManualSelection() {
         // Bind the override to the next observed state. This also covers a selection made before
         // the first evaluation and a selection made while a debounced callback is pending.
@@ -52,14 +69,25 @@ object ProfileAutomationManager {
         manualOverridePending = true
     }
 
+    /**
+     * Cancels any pending profile automation evaluation and disables further processing.
+     */
     fun cancelPending() {
         cancelled = true
         pending?.let(handler::removeCallbacks)
         pending = null
     }
 
-    fun resume() { cancelled = false }
+    /**
+ * Re-enables profile automation evaluation.
+ */
+fun resume() { cancelled = false }
 
+    /**
+     * Schedules profile automation evaluation after a network state change.
+     *
+     * @param immediate Whether to evaluate immediately instead of applying the debounce delay.
+     */
     fun onNetworkChanged(context: Context, immediate: Boolean = false) {
         if (cancelled) return
         pending?.let(handler::removeCallbacks)
@@ -68,6 +96,13 @@ object ProfileAutomationManager {
         if (immediate) task.run() else handler.postDelayed(task, DEBOUNCE_MS)
     }
 
+    /**
+     * Evaluates the current network state and applies the highest-priority matching profile rule.
+     *
+     * @param context Context used to read configuration and network state.
+     * @return The evaluation outcome, including whether automation is disabled, overridden,
+     * unchanged, already active, switched, or no matching rule was found.
+     */
     fun evaluateNow(context: Context): ProfileAutomationResult {
         val config = TunnelGuardConfig(context.applicationContext)
         if (!config.isAutomaticProfileSwitchingEnabled()) return ProfileAutomationResult.Disabled
@@ -96,6 +131,13 @@ object ProfileAutomationManager {
         return ProfileAutomationResult.Switched(previous, rule.profileId, rule.id)
     }
 
+    /**
+     * Reads the current Wi-Fi, Ethernet, and upstream VPN connectivity state.
+     *
+     * @param config Configuration used to determine simulated or real VPN state.
+     * @param cm Connectivity manager used to inspect active network transports.
+     * @return The observed network state, including an indeterminate upstream VPN state when detection is unavailable.
+     */
     fun readState(config: TunnelGuardConfig, cm: ConnectivityManager?): ProfileNetworkState {
         var wifi = false; var ethernet = false
         try {
