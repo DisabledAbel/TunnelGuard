@@ -14,6 +14,16 @@ class TunnelGuardVpnServiceTest {
     }
 
     @Test
+    fun allSupportedServiceStartVariantsUseTheCommonAutomationLifecyclePath() {
+        val variants = listOf(TunnelGuardVpnService.ACTION_START, TunnelGuardVpnService.ACTION_UPDATE, null)
+
+        variants.forEach { action ->
+            assertTrue(TunnelGuardVpnService.shouldResumeProfileAutomation(action))
+        }
+        assertFalse(TunnelGuardVpnService.shouldResumeProfileAutomation(TunnelGuardVpnService.ACTION_STOP))
+    }
+
+    @Test
     fun testStateEnums() {
         // Verify VPNState values exist and conform to requested API
         val states = VPNState.values().map { it.name }
