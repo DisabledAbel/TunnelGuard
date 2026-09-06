@@ -16,12 +16,14 @@ class ProfileAutomationActivity : AppCompatActivity() {
     private lateinit var rules: LinearLayout
     private lateinit var toggle: CheckBox
     private lateinit var status: TextView
+    private lateinit var toggleRow: LinearLayout
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state); setContentView(R.layout.activity_profile_automation)
         config = TunnelGuardConfig(this); rules = findViewById(R.id.automation_rules)
         toggle = findViewById(R.id.automation_toggle); status = findViewById(R.id.automation_status)
-        findViewById<LinearLayout>(R.id.automation_toggle_row).setOnClickListener {
+        toggleRow = findViewById(R.id.automation_toggle_row)
+        toggleRow.setOnClickListener {
             config.setAutomaticProfileSwitchingEnabled(!config.isAutomaticProfileSwitchingEnabled()); render()
         }
         findViewById<Button>(R.id.automation_add).setOnClickListener { edit(null) }
@@ -33,6 +35,7 @@ class ProfileAutomationActivity : AppCompatActivity() {
 
     private fun render() {
         toggle.isChecked = config.isAutomaticProfileSwitchingEnabled(); rules.removeAllViews()
+        toggleRow.contentDescription = "Automatic Profile Switching, ${if (toggle.isChecked) "enabled" else "disabled"}. Select to toggle."
         val profiles = config.getProfiles(); val all = config.getProfileSwitchRules()
         val active = profiles.find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
         val last = config.getLastAutomaticProfileSwitch().let { if (it == 0L) "Never" else DateFormat.getDateTimeInstance().format(Date(it)) }

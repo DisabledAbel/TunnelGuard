@@ -496,6 +496,7 @@ class TunnelGuardVpnService : VpnService() {
         config.addLog("VpnService received action: $action")
 
         if (action == ACTION_STOP) {
+            ProfileAutomationManager.cancelPending()
             config.setLastDisconnectReason("User stopped protection")
             synchronized(stateLock) {
                 transitionTo(ServiceState.TUNNELGUARD_STOPPING)
@@ -509,7 +510,10 @@ class TunnelGuardVpnService : VpnService() {
 
         startMonitoring()
 
-        if (action == ACTION_START) ProfileAutomationManager.onNetworkChanged(this, immediate = true)
+        if (action == ACTION_START) {
+            ProfileAutomationManager.resume()
+            ProfileAutomationManager.onNetworkChanged(this, immediate = true)
+        }
 
         // Listen to connectivity changes for dynamic fail-closed blocking only if NOT already registered
         if (!isCallbackRegistered) {
@@ -549,6 +553,7 @@ class TunnelGuardVpnService : VpnService() {
      * Releases VPN resources and unregisters service callbacks when the service is destroyed.
      */
     override fun onDestroy() {
+        ProfileAutomationManager.cancelPending()
         super.onDestroy()
         isServiceRunning = false
         isServiceStarting = false

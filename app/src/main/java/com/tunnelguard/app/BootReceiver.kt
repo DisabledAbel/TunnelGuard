@@ -25,6 +25,7 @@ class BootReceiver : BroadcastReceiver() {
                     // Select against the currently-known stable network before protection starts.
                     // When state is unavailable the existing valid profile is retained; invalid
                     // selections safely fall back to the configured default.
+                    ProfileAutomationManager.resume()
                     ProfileAutomationManager.onNetworkChanged(context, immediate = true)
                     config.addLog("Boot completed: starting TunnelGuard protection service.")
 
