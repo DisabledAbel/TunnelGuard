@@ -18,6 +18,10 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import com.tunnelguard.app.vpnprovider.VpnLaunchReason
+import com.tunnelguard.app.vpnprovider.VpnLaunchRequest
+import com.tunnelguard.app.vpnprovider.VpnLaunchResult
+import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -324,25 +328,48 @@ class TunnelGuardVpnService : VpnService() {
                                     config.addLog("Auto-Connect target changed from ${activeAttempt.targetPackage} to $currentApp; replacing the old attempt.")
                                     cancelAutoConnectAttempt()
                                 }
-                                config.addLog("Protected app opened ($currentApp) without VPN. Auto-connect VPN active; launching $vpnChoice directly in background.")
-                                config.setPendingVpnRedirectTarget(currentApp)
-                                try {
-                                    val launchIntent = packageManager.getLaunchIntentForPackage(vpnChoice)
-                                    if (launchIntent != null) {
+                                val policy = config.getForegroundVpnPolicy(currentApp)
+                                val requiredCountry = policy.requiredCountry.takeUnless { it == "ANY" }
+                                val adapter = VpnProviderRegistry.resolve(vpnChoice)
+                                val providerName = adapter.getDisplayName(this@TunnelGuardVpnService)
+                                config.addLog("VPN provider resolved: $providerName (${adapter.integrationLevel})")
+                                config.addLog("Auto-Connect provider request: target=$currentApp provider=$providerName country=${requiredCountry ?: "ANY"}")
+                                val request = VpnLaunchRequest(
+                                    currentApp,
+                                    requiredCountry,
+                                    if (requiredCountry != null) VpnLaunchReason.COUNTRY_MISMATCH else VpnLaunchReason.PROTECTED_APP_OPENED
+                                )
+                                when (val launch = adapter.buildLaunchRequest(this@TunnelGuardVpnService, request)) {
+                                    is VpnLaunchResult.Ready -> try {
+                                        config.setPendingVpnRedirectTarget(currentApp)
                                         autoConnectCoordinator.start(currentApp, vpnChoice)
                                         refreshForegroundNotification()
                                         scheduleAutoConnectTimeout()
-                                        config.addLog("Auto-Connect attempt started for $currentApp using $vpnChoice.")
-                                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        startActivity(launchIntent)
-                                    } else {
-                                        config.addLog("Could not find launch intent for VPN app $vpnChoice, falling back to VpnWarningActivity", "WARN")
+                                        startActivity(launch.intent)
+                                        config.addLog("VPN provider launched successfully.")
+                                        if (requiredCountry != null && !adapter.capabilities.supportsCountryRequest) {
+                                            config.addLog("VPN provider does not support automated country selection; waiting for manual provider connection.")
+                                        }
+                                    } catch (e: Exception) {
+                                        cancelAutoConnectAttempt()
+                                        config.addLog("VPN provider launch failed: ${e.message ?: e.javaClass.simpleName}.", "ERROR")
                                         launchWarningActivity(currentApp)
                                     }
-                                } catch (e: Exception) {
-                                    cancelAutoConnectAttempt()
-                                    config.addLog("Failed to auto-launch VPN app $vpnChoice: ${e.message}, falling back to VpnWarningActivity", "ERROR")
-                                    launchWarningActivity(currentApp)
+                                    is VpnLaunchResult.Unavailable -> {
+                                        cancelAutoConnectAttempt()
+                                        config.addLog("VPN provider launch failed: ${launch.reason}.", "WARN")
+                                        launchWarningActivity(currentApp)
+                                    }
+                                    is VpnLaunchResult.UnsupportedAction -> {
+                                        cancelAutoConnectAttempt()
+                                        config.addLog("VPN provider action unsupported: ${launch.reason}.", "WARN")
+                                        launchWarningActivity(currentApp)
+                                    }
+                                    is VpnLaunchResult.Error -> {
+                                        cancelAutoConnectAttempt()
+                                        config.addLog("VPN provider launch failed: ${launch.reason}.", "ERROR")
+                                        launchWarningActivity(currentApp)
+                                    }
                                 }
                             } else {
                                 launchWarningActivity(currentApp)

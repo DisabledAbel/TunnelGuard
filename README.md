@@ -41,7 +41,7 @@ Before running or developing TunnelGuard, it is vital to understand Android's ne
 2. **How TunnelGuard's Fail-Closed Protection Works:**
    * **When the Upstream VPN is Active (or Simulated Connected):** TunnelGuard stays out of the way (`closeVpnInterface()`). This allows your protected apps to use the standard network path (e.g. routed through simulated/real gateways).
    * **When the Upstream VPN fails / disconnects:** TunnelGuard instantly activates its local `VpnService` interface. Using Android's official `addAllowedApplication(packageName)` API, Android routes all outgoing traffic of your selected (protected) apps *exclusively* into TunnelGuard's local TUN interface. Since TunnelGuard acts as a local packet sink (blackhole) and **does not forward packets**, all network traffic from the protected apps is instantly dropped (fail-closed block).
-   * This design achieves 100% reliable, system-level, non-root per-app internet blocking.
+   * This provides system-level, non-root per-app blocking for the IP families successfully routed through TunnelGuard's active local interface. On devices where the IPv6 route cannot be established, TunnelGuard falls back to IPv4-only blocking and reports that IPv6 is not covered.
 
 ---
 
@@ -105,3 +105,18 @@ By adding only the package names of selected apps to the builder, Android routes
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
+
+## VPN provider integration
+
+TunnelGuard resolves the configured VPN application through a small provider-adapter registry. Any
+installed, launchable VPN app remains supported by the generic adapter. Known providers are labelled
+**Standard** when only their normal Android launcher activity is verified; no undocumented connect,
+disconnect, deep-link, or country-selection API is assumed. Capabilities are compiled into TunnelGuard
+and cannot be supplied by an imported configuration.
+
+An adapter only makes a safe, package-scoped request to open a provider. TunnelGuard validates that
+the resolved launcher belongs to the selected package and resolves it fresh after app updates. A
+successful launch is **not** treated as a VPN connection. Android network detection and country
+verification remain authoritative, and fail-closed traffic blocking continues until the active upstream
+VPN independently satisfies the effective policy. If launching is unavailable, TunnelGuard retains the
+block and presents manual recovery.

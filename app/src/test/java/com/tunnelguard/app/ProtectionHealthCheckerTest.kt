@@ -21,6 +21,12 @@ class ProtectionHealthCheckerTest {
     private fun check(snapshot: ProtectionHealthSnapshot, id: String) =
         ProtectionHealthChecker.evaluate(snapshot).checks.first { it.id == id }
 
+    @Test fun autoConnectWarnsWhenProviderCannotBeLaunched() {
+        val result = check(healthy().copy(autoConnect = true, vpnAppConfigured = true, vpnAppInstalled = true, vpnAppLaunchable = false), "auto_connect")
+        assertEquals(HealthCheckStatus.WARNING, result.status)
+        assertEquals(HealthCheckAction.SELECT_VPN_APP, result.action)
+    }
+
     @Test fun allCriticalChecksPassIsHealthy() = assertEquals(OverallHealthStatus.HEALTHY, ProtectionHealthChecker.evaluate(healthy()).overall)
     @Test fun protectedIsSecure() = assertEquals(HealthCheckStatus.PASS, check(healthy(), "security_state").status)
     @Test fun blockingWithTunnelIsSecure() {
