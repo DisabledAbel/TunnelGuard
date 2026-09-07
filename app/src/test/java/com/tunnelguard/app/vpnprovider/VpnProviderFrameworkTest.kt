@@ -38,7 +38,7 @@ class VpnProviderFrameworkTest {
         val launch = Intent(Intent.ACTION_MAIN).setComponent(ComponentName(pkg, "$pkg.Main"))
         whenever(pm.getApplicationInfo(pkg, 0)).thenReturn(ApplicationInfo())
         whenever(pm.getLaunchIntentForPackage(pkg)).thenReturn(launch)
-        whenever(pm.resolveActivity(any(), any())).thenReturn(resolveInfo(pkg))
+        whenever(pm.resolveActivity(any(), any<Int>())).thenReturn(resolveInfo(pkg))
         whenever(pm.getApplicationLabel(any())).thenReturn("Custom VPN")
 
         val result = GenericVpnProviderAdapter(pkg).buildLaunchRequest(context, request("US"))
@@ -69,7 +69,7 @@ class VpnProviderFrameworkTest {
         val context = mock<Context> { on { packageManager } doReturn pm }
         whenever(pm.getApplicationInfo(pkg, 0)).thenReturn(ApplicationInfo())
         whenever(pm.getLaunchIntentForPackage(pkg)).thenReturn(Intent(Intent.ACTION_MAIN))
-        whenever(pm.resolveActivity(any(), any())).thenReturn(resolveInfo("com.attacker"))
+        whenever(pm.resolveActivity(any(), any<Int>())).thenReturn(resolveInfo("com.attacker"))
         assertTrue(GenericVpnProviderAdapter(pkg).buildLaunchRequest(context, request(null)) is VpnLaunchResult.Error)
     }
 
@@ -77,7 +77,7 @@ class VpnProviderFrameworkTest {
         val request = request("us")
         assertEquals("US", request.requiredCountry?.uppercase())
         assertFalse(VpnProviderRegistry.resolve(pkg).capabilities.supportsCountryRequest)
-        assertTrue(VpnLaunchResult.Ready(Intent(), "VPN") !is VpnLaunchResult.Unavailable)
+        assertTrue(VpnLaunchResult.Ready(Intent(), "VPN") != VpnLaunchResult.Unavailable("x"))
     }
 
     private fun request(country: String?) = VpnLaunchRequest("com.example.video", country, VpnLaunchReason.PROTECTED_APP_OPENED)
