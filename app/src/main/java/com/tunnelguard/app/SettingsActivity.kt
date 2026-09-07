@@ -18,6 +18,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.tunnelguard.app.update.UpdateCheckResult
+import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 import com.tunnelguard.app.update.UpdateRepository
 import kotlinx.coroutines.launch
 import java.io.File
@@ -444,10 +445,11 @@ class SettingsActivity : AppCompatActivity() {
             try {
                 val pm = packageManager
                 val appInfo = pm.getApplicationInfo(vpnPkg, 0)
+                val adapter = VpnProviderRegistry.resolve(vpnPkg)
                 val label = pm.getApplicationLabel(appInfo).toString()
-                tvPrefVpnChoiceValue.text = "$label ($vpnPkg)"
+                tvPrefVpnChoiceValue.text = "$label ($vpnPkg)\nIntegration: ${adapter.integrationLevel} App Launch\nCountry Automation: ${if (adapter.capabilities.supportsCountryRequest) "Supported" else "Not supported by provider integration"}\nTunnelGuard independently verifies VPN protection."
             } catch (e: Exception) {
-                tvPrefVpnChoiceValue.text = vpnPkg
+                tvPrefVpnChoiceValue.text = "Configured VPN app is not installed ($vpnPkg)\nSelect VPN App to repair this setting."
             }
         } else {
             tvPrefVpnChoiceValue.text = "None (System Settings)"
@@ -553,7 +555,7 @@ class SettingsActivity : AppCompatActivity() {
         options.add("None (System Settings)")
 
         sortedList.forEach {
-            options.add("${it.second} (${it.first})")
+            options.add("${it.second} (${it.first}) — ${VpnProviderRegistry.resolve(it.first).integrationLevel}")
         }
 
         AlertDialog.Builder(this)

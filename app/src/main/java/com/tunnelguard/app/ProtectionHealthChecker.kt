@@ -60,7 +60,8 @@ data class ProtectionHealthSnapshot(
     val appVersionKnown: Boolean,
     val installPermissionApplicable: Boolean,
     val installPermissionGranted: Boolean,
-    val batteryRestricted: Boolean?
+    val batteryRestricted: Boolean?,
+    val vpnAppLaunchable: Boolean = true
 )
 
 /** Pure, fail-closed protection health policy. It never changes VPN or configuration state. */
@@ -180,7 +181,8 @@ object ProtectionHealthChecker {
         !s.autoConnect -> result("auto_connect", "Auto-Connect", HealthCheckStatus.NOT_APPLICABLE, "Disabled.")
         !s.vpnAppConfigured -> result("auto_connect", "Auto-Connect", HealthCheckStatus.WARNING, "Enabled but no VPN application is selected.", HealthCheckAction.SELECT_VPN_APP)
         !s.vpnAppInstalled -> result("auto_connect", "Auto-Connect", HealthCheckStatus.WARNING, "The selected VPN application is no longer installed.", HealthCheckAction.SELECT_VPN_APP)
-        else -> result("auto_connect", "Auto-Connect", HealthCheckStatus.PASS, "VPN application is configured and installed.")
+        !s.vpnAppLaunchable -> result("auto_connect", "Auto-Connect", HealthCheckStatus.WARNING, "The selected VPN application has no safe launcher activity.", HealthCheckAction.SELECT_VPN_APP)
+        else -> result("auto_connect", "Auto-Connect", HealthCheckStatus.PASS, "Configured VPN provider is installed and launchable.")
     }
 
     private fun country(value: CountryHealth) = when (value) {

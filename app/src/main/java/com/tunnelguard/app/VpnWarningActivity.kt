@@ -11,6 +11,10 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.tunnelguard.app.vpnprovider.VpnLaunchReason
+import com.tunnelguard.app.vpnprovider.VpnLaunchRequest
+import com.tunnelguard.app.vpnprovider.VpnLaunchResult
+import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 
 class VpnWarningActivity : AppCompatActivity() {
 
@@ -232,16 +236,24 @@ class VpnWarningActivity : AppCompatActivity() {
         }
         val vpnAppChoice = config.getVpnAppOfChoice()
         if (vpnAppChoice != null) {
-            try {
-                config.addLog("Redirecting to chosen VPN app: $vpnAppChoice")
-                val intent = packageManager.getLaunchIntentForPackage(vpnAppChoice)
-                if (intent != null) {
-                    startActivity(intent)
+            val adapter = VpnProviderRegistry.resolve(vpnAppChoice)
+            val requiredCountry = targetPackage?.let { config.getForegroundVpnPolicy(it).requiredCountry }
+                ?.takeUnless { it == "ANY" }
+            val request = VpnLaunchRequest(
+                targetPackage.orEmpty(), requiredCountry, VpnLaunchReason.MANUAL_RECOVERY
+            )
+            when (val launch = adapter.buildLaunchRequest(this, request)) {
+                is VpnLaunchResult.Ready -> try {
+                    startActivity(launch.intent)
+                    config.addLog("VPN provider launched for manual recovery: ${launch.providerName}.")
                     finish()
                     return
+                } catch (e: Exception) {
+                    config.addLog("VPN provider manual launch failed: ${e.message}", "ERROR")
                 }
-            } catch (e: Exception) {
-                config.addLog("Error launching VPN App of Choice: ${e.message}")
+                is VpnLaunchResult.Unavailable -> config.addLog("VPN provider unavailable: ${launch.reason}", "WARN")
+                is VpnLaunchResult.UnsupportedAction -> config.addLog("VPN provider action unsupported: ${launch.reason}", "WARN")
+                is VpnLaunchResult.Error -> config.addLog("VPN provider error: ${launch.reason}", "ERROR")
             }
         }
 
