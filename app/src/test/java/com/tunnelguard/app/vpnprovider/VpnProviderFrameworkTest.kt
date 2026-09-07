@@ -7,15 +7,21 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.os.Build
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.Q])
 class VpnProviderFrameworkTest {
     private val pkg = "com.example.customvpn"
 
@@ -105,7 +111,7 @@ class VpnProviderFrameworkTest {
         val request = request("us")
         assertEquals("US", request.requiredCountry?.uppercase())
         assertFalse(VpnProviderRegistry.resolve(pkg).capabilities.supportsCountryRequest)
-        assertTrue(VpnLaunchResult.Ready(Intent(), "VPN") != VpnLaunchResult.Unavailable("x"))
+        assertFalse(VpnProviderRegistry.resolve(pkg).capabilities.supportsConnectRequest)
     }
 
     private fun request(country: String?) = VpnLaunchRequest("com.example.video", country, VpnLaunchReason.PROTECTED_APP_OPENED)
