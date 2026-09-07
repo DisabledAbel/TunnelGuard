@@ -209,4 +209,18 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(null)
         assertEquals(VpnDetectionResult.VPN_UNKNOWN, config.detectRealVpnCapabilities(mockConnectivityManager))
     }
+    @Test
+    fun restoredVpnProviderAcceptsOnlyPackageAndIgnoresIntentMetadata() {
+        val json = """{
+            "vpn_app_of_choice":"com.example.vpn",
+            "vpn_intent_action":"com.attacker.CONNECT",
+            "vpn_intent_uri":"attacker://connect"
+        }""".trimIndent()
+
+        assertTrue(config.importConfigFromJson(json))
+        assertEquals("com.example.vpn", config.getVpnAppOfChoice())
+        val exported = config.exportConfigToJson().orEmpty()
+        assertFalse(exported.contains("vpn_intent_action"))
+        assertFalse(exported.contains("vpn_intent_uri"))
+    }
 }

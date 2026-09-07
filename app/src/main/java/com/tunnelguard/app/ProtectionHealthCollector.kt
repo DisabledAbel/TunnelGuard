@@ -5,6 +5,10 @@ import android.net.ConnectivityManager
 import android.net.VpnService
 import android.os.Build
 import android.os.PowerManager
+import com.tunnelguard.app.vpnprovider.VpnLaunchReason
+import com.tunnelguard.app.vpnprovider.VpnLaunchRequest
+import com.tunnelguard.app.vpnprovider.VpnLaunchResult
+import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 
 /** Android-facing observation layer. No method here starts or stops protection. */
 class ProtectionHealthCollector(private val context: Context, private val config: TunnelGuardConfig) {
@@ -34,6 +38,13 @@ class ProtectionHealthCollector(private val context: Context, private val config
             val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             power?.isIgnoringBatteryOptimizations(context.packageName)?.not()
         } else null
+        val vpnInstalled = vpnPackage?.let(::isInstalled) ?: false
+        val vpnLaunchable = vpnPackage?.let {
+            VpnProviderRegistry.resolve(it).buildLaunchRequest(
+                context,
+                VpnLaunchRequest(foreground.orEmpty(), requiredCountry.takeUnless { country -> country == "ANY" }, VpnLaunchReason.MANUAL_RECOVERY)
+            ) is VpnLaunchResult.Ready
+        } ?: false
         val snapshot = ProtectionHealthSnapshot(
             config.isProtectionEnabled(), VpnService.prepare(context) == null, security,
             TunnelGuardVpnService.isServiceRunning, TunnelGuardVpnService.isServiceStarting,
@@ -43,9 +54,9 @@ class ProtectionHealthCollector(private val context: Context, private val config
             config.hasNotificationPermission(), config.isIpv6ProtectionActive(),
             config.detectDnsStatus(connectivity, TunnelGuardVpnService.isServiceRunning),
             config.isStartOnBootEnabled(), config.getLastBootFailure(), config.isAutoConnectVpnEnabled(),
-            !vpnPackage.isNullOrBlank(), vpnPackage?.let(::isInstalled) ?: false, country,
+            !vpnPackage.isNullOrBlank(), vpnInstalled, country,
             config.getAppVersionName().isNotBlank(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
-            installGranted, batteryRestricted
+            installGranted, batteryRestricted, vpnLaunchable
         )
         return ProtectionHealthChecker.evaluate(snapshot)
     }

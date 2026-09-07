@@ -894,6 +894,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
             obj.put("app_monitor_enabled", isAppMonitorEnabled())
             obj.put("forced_updates_enabled", isForcedUpdatesEnabled())
             obj.put("auto_connect_vpn_enabled", isAutoConnectVpnEnabled())
+            obj.put("vpn_app_of_choice", getVpnAppOfChoice() ?: JSONObject.NULL)
             obj.put("country_vpn_setting_enabled", isCountryVpnSettingEnabled())
             obj.put("country_vpn_target_country", getCountryVpnTargetCountry())
             obj.put("selected_profile_id", getSelectedProfileId())
@@ -928,6 +929,8 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
             val appMonitorEnabled = obj.optBoolean("app_monitor_enabled", false)
             val forcedUpdatesEnabled = obj.optBoolean("forced_updates_enabled", true)
             val autoConnectVpnEnabled = obj.optBoolean("auto_connect_vpn_enabled", true)
+            val hasRestoredVpnPackage = obj.has("vpn_app_of_choice")
+            val restoredVpnPackage = obj.optString("vpn_app_of_choice", "").takeIf { it.isNotBlank() && it != "null" }
             val countryVpnEnabled = obj.optBoolean("country_vpn_setting_enabled", false)
             val countryVpnTarget = obj.optString("country_vpn_target_country", "US")
             val selectedProfileId = obj.optString("selected_profile_id", "streaming")
@@ -964,6 +967,13 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
             setAppMonitorEnabled(appMonitorEnabled)
             setForcedUpdatesEnabled(forcedUpdatesEnabled)
             setAutoConnectVpnEnabled(autoConnectVpnEnabled)
+            if (hasRestoredVpnPackage) {
+                if (restoredVpnPackage == null || pkgRegex.matches(restoredVpnPackage)) {
+                    setVpnAppOfChoice(restoredVpnPackage)
+                } else {
+                    addLog("Ignored invalid VPN application package on import.", "WARN")
+                }
+            }
             setCountryVpnSettingEnabled(countryVpnEnabled)
             setCountryVpnTargetCountry(countryVpnTarget)
 

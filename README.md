@@ -105,3 +105,18 @@ By adding only the package names of selected apps to the builder, Android routes
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
+
+## VPN provider integration
+
+TunnelGuard resolves the configured VPN application through a small provider-adapter registry. Any
+installed, launchable VPN app remains supported by the generic adapter. Known providers are labelled
+**Standard** when only their normal Android launcher activity is verified; no undocumented connect,
+disconnect, deep-link, or country-selection API is assumed. Capabilities are compiled into TunnelGuard
+and cannot be supplied by an imported configuration.
+
+An adapter only makes a safe, package-scoped request to open a provider. TunnelGuard validates that
+the resolved launcher belongs to the selected package and resolves it fresh after app updates. A
+successful launch is **not** treated as a VPN connection. Android network detection and country
+verification remain authoritative, and fail-closed traffic blocking continues until the active upstream
+VPN independently satisfies the effective policy. If launching is unavailable, TunnelGuard retains the
+block and presents manual recovery.

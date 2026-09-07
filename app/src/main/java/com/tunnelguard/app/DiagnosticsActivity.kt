@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -170,7 +171,9 @@ class DiagnosticsActivity : AppCompatActivity() {
             tvLastTransition.text = format.format(Date(lastTrans))
         }
         val activeProfile = config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules"
+        val vpnPackage = config.getVpnAppOfChoice()
+        val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules$providerText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
@@ -221,6 +224,10 @@ class DiagnosticsActivity : AppCompatActivity() {
             connectivityManager
         )
 
+        val providerPackage = config.getVpnAppOfChoice()
+        val provider = providerPackage?.let(VpnProviderRegistry::resolve)
+        val providerSummary = if (provider == null) "Not configured" else
+            "${provider.getDisplayName(this)}\nPackage: $providerPackage\nIntegration: ${provider.integrationLevel}\nCountry Request Support: ${if (provider.capabilities.supportsCountryRequest) "Yes" else "No"}\nAuto-Connect: ${if (config.isAutoConnectVpnEnabled()) "Enabled" else "Disabled"}"
         val report = """
             === TUNNELGUARD DIAGNOSTICS REPORT ===
             App Version: ${config.getAppVersionName()}
@@ -228,6 +235,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             Device Model: ${Build.MANUFACTURER} ${Build.MODEL}
             VPN State: ${vpnState.name}
             Protection State: ${securityState.name}
+            VPN Provider: $providerSummary
             Protected Apps Count: ${config.getProtectedApps().size}
             Start on Boot: ${config.isStartOnBootEnabled()}
             Last Transition: $transStr
