@@ -21,6 +21,10 @@ class ProtectionHealthCheckerTest {
     private fun check(snapshot: ProtectionHealthSnapshot, id: String) =
         ProtectionHealthChecker.evaluate(snapshot).checks.first { it.id == id }
 
+    /**
+     * Verifies that the auto-connect health check issues a warning when the configured
+     * VPN provider cannot be launched due to missing launcher activity.
+     */
     @Test fun autoConnectWarnsWhenProviderCannotBeLaunched() {
         val result = check(healthy().copy(autoConnect = true, vpnAppConfigured = true, vpnAppInstalled = true, vpnAppLaunchable = false), "auto_connect")
         assertEquals(HealthCheckStatus.WARNING, result.status)

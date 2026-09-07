@@ -12,6 +12,14 @@ import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 
 /** Android-facing observation layer. No method here starts or stops protection. */
 class ProtectionHealthCollector(private val context: Context, private val config: TunnelGuardConfig) {
+    /**
+     * Collects the current protection health state and evaluates it against TunnelGuard's security policy.
+     *
+     * Gathers Android permissions, VPN service state, configuration settings, and VPN provider
+     * capabilities, then evaluates them to produce a comprehensive health report.
+     *
+     * @return A [ProtectionHealthReport] containing the overall health status and individual check results.
+     */
     fun collect(): ProtectionHealthReport {
         val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val security = SecurityStateMachine.getSecurityState(

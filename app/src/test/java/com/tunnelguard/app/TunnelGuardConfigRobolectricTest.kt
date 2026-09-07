@@ -209,6 +209,11 @@ class TunnelGuardConfigRobolectricTest {
         whenever(mockConnectivityManager.getLinkProperties(mockNetwork)).thenReturn(null)
         assertEquals(VpnDetectionResult.VPN_UNKNOWN, config.detectRealVpnCapabilities(mockConnectivityManager))
     }
+
+    /**
+     * Verifies that configuration import accepts only the VPN provider package name
+     * and ignores any injected intent metadata that could be used for attacks.
+     */
     @Test
     fun restoredVpnProviderAcceptsOnlyPackageAndIgnoresIntentMetadata() {
         val json = """{
