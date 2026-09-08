@@ -173,7 +173,8 @@ class DiagnosticsActivity : AppCompatActivity() {
         val activeProfile = config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
         val vpnPackage = config.getVpnAppOfChoice()
         val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules$providerText"
+        val monitoring = if (ProtectionMonitorService.isMonitoringRunning) "running" else "stopped"
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules • VPN monitoring: $monitoring$providerText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
