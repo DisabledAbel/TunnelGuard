@@ -18,8 +18,12 @@ With TunnelGuard, users can select specific applications (such as TiviMate, medi
 
 Android strictly permits **only one active `VpnService` at a time**.
 
-- If an external VPN app (like Proton VPN, NordVPN, or ExpressVPN) is running and active, starting TunnelGuard's protection will instantly terminate the external VPN's connection.
-- If TunnelGuard's protection is running, starting an external VPN app will instantly terminate TunnelGuard.
+- Android transfers the single VPN slot when another VPN starts. TunnelGuard releases its local
+  blocking interface, but a separate foreground monitor continues observing the VPN transport.
+- While the external VPN satisfies the selected policy, TunnelGuard reports upstream protection and
+  does not compete for the slot. When it disconnects, TunnelGuard restores the local block only if
+  Android still grants VPN consent. If consent was revoked, the dashboard and notification report
+  the unprotected fault and opening TunnelGuard provides the user-initiated permission flow.
 - **TunnelGuard does NOT fake or spoof third-party VPN control.** Instead, TunnelGuard implements a **Local Loopback Fail-Closed Firewall**.
 
 ### Fail-Closed Blocking
@@ -132,7 +136,26 @@ By adding only the package names of selected apps to the builder, Android routes
 
 ### VPN Coexistence & Country Requirements
 
-Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same time as a standard on-device VPN app like Proton VPN. It is designed to act as the firewall wrapper itself, or be used in environments where the VPN is configured or simulated via state simulation tools.
+Because Android only allows one VPN app, TunnelGuard's fail-closed interface cannot run at the same
+time as a standard on-device VPN app like Proton VPN. During that interval policy enforcement depends
+on the external VPN: TunnelGuard can observe and report it, but cannot blackhole protected-app traffic.
+After the external VPN disconnects there can be an unprotected interval while Android reports the
+transition and local blocking is restored. If Android revoked TunnelGuard's VPN consent, local blocking
+cannot resume until the user opens TunnelGuard and approves the system VPN dialog again.
+
+### Device / emulator VPN handoff verification
+
+1. Select at least one protected app, approve Android's VPN dialog, and enable protection; verify the
+   dashboard says **Blocking** and the ongoing notification is present.
+2. Connect a second VPN application; verify TunnelGuard changes to **Protected** (or a policy-conflict
+   warning), its monitoring notification remains present, and diagnostics show no local tunnel.
+3. Disconnect the second VPN without changing Wi-Fi or Ethernet. Verify TunnelGuard restores
+   **Blocking** when consent remains available.
+4. Repeat after revoking TunnelGuard under Android's VPN settings. Verify TunnelGuard reports an
+   unprotected permission fault and does not repeatedly open consent or reclaim the VPN slot. Open
+   TunnelGuard, use the protection control to approve consent, and verify blocking returns.
+5. During step 3, turn protection off. Verify both ongoing notifications disappear and delayed network
+   callbacks do not restart either service.
 
 Per-app country assignments are routing requirements, not simultaneous VPN tunnels: the installed upstream VPN must connect to the assigned country, and only one country can be active at a time.
 

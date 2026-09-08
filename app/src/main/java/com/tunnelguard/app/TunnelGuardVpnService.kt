@@ -37,6 +37,7 @@ enum class ServiceState {
     TUNNELGUARD_STOPPING,
     UPSTREAM_VPN,
     VPN_CONFLICT,
+    PERMISSION_REQUIRED,
     ERROR
 }
 
@@ -60,6 +61,7 @@ class TunnelGuardVpnService : VpnService() {
     private var autoConnectTimeoutJob: Job? = null
     private val autoConnectCoordinator = AutoConnectCoordinator(SystemClock::elapsedRealtime)
     private var manualRecoveryTarget: String? = null
+    @Volatile private var vpnControlRevoked = false
     private val notificationLock = Any()
     private val notificationChangeTracker = ForegroundNotificationChangeTracker()
     @Volatile
@@ -136,6 +138,7 @@ class TunnelGuardVpnService : VpnService() {
         const val ACTION_START = "com.tunnelguard.app.START"
         const val ACTION_STOP = "com.tunnelguard.app.STOP"
         const val ACTION_UPDATE = "com.tunnelguard.app.UPDATE"
+        const val ACTION_RECOVER = "com.tunnelguard.app.RECOVER"
 
         /**
  * Determines whether profile automation should resume for a service action.
@@ -531,6 +534,7 @@ class TunnelGuardVpnService : VpnService() {
         config.addLog("VpnService received action: $action")
 
         if (action == ACTION_STOP) {
+            ProtectionMonitorService.stop(this)
             ProfileAutomationManager.cancelPending()
             config.setLastDisconnectReason("User stopped protection")
             synchronized(stateLock) {
@@ -539,6 +543,19 @@ class TunnelGuardVpnService : VpnService() {
             }
             return START_NOT_STICKY
         }
+
+        if (action == ACTION_RECOVER) {
+            // Recovery is observer-driven only after the VPN transport disappeared and prepare()
+            // confirmed that Android still authorizes this application.
+            if (VpnService.prepare(this) != null) {
+                transitionTo(ServiceState.PERMISSION_REQUIRED)
+                config.setVPNState(VPNState.ERROR)
+                return START_STICKY
+            }
+            vpnControlRevoked = false
+        }
+
+        ProtectionMonitorService.start(this)
 
         // Default or ACTION_START or ACTION_UPDATE: Establish/Update VPN interface
         startForegroundServiceNotification()
@@ -592,7 +609,8 @@ class TunnelGuardVpnService : VpnService() {
      * Releases VPN resources and unregisters service callbacks when the service is destroyed.
      */
     override fun onDestroy() {
-        ProfileAutomationManager.cancelPending()
+        val keepObserving = config.isProtectionEnabled() || config.isEmergencyLockEnabled()
+        if (!keepObserving) ProfileAutomationManager.cancelPending()
         super.onDestroy()
         isServiceRunning = false
         isServiceStarting = false
@@ -615,7 +633,13 @@ class TunnelGuardVpnService : VpnService() {
                 // Ignored
             }
         }
-        stopVpn()
+        // Destruction can follow system revocation. Only release this component's resources;
+        // do not translate it into an intentional stop or overwrite the observer's upstream /
+        // permission-required state.
+        closeVpnInterface()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else stopForeground(true)
+        if (!keepObserving) transitionTo(ServiceState.NO_VPN)
         config.addLog("VpnService destroyed")
     }
 
@@ -623,16 +647,20 @@ class TunnelGuardVpnService : VpnService() {
      * Handles system revocation of the VPN connection and updates the service to a conflict state.
      */
     override fun onRevoke() {
-        config.addLog("VpnService revoked by the system (another VPN started).")
-        config.setLastDisconnectReason("System revoked VPN (another VPN started)")
-        transitionTo(ServiceState.VPN_CONFLICT)
+        config.addLog("VpnService permission/control was revoked; releasing the local interface while the independent observer verifies network state.")
+        config.setLastDisconnectReason("Local VPN control revoked")
+        vpnControlRevoked = true
         closeVpnInterface()
+        config.setVPNState(VPNState.DISCONNECTED)
+        ProtectionMonitorService.start(this)
         synchronized(notificationLock) {
-            notificationProblem = "Another VPN took control of the VPN connection"
+            notificationProblem = "VPN control changed; checking protection"
             refreshForegroundNotification()
         }
-        routingEvaluator.request()
-        super.onRevoke()
+        // VpnService's default implementation calls stopSelf(). Monitoring has a separate,
+        // Android-14-compatible foreground-service owner and must survive this component. Stop
+        // this revoked systemExempted FGS explicitly rather than relying on that default.
+        stopSelf()
     }
 
     /**
@@ -734,6 +762,10 @@ class TunnelGuardVpnService : VpnService() {
      */
     private fun checkAndRunVpnRouting() {
         synchronized(stateLock) {
+            if (vpnControlRevoked) {
+                config.addLog("Routing check skipped because local VPN control is revoked; independent monitoring remains active.")
+                return
+            }
             val simulated = config.isSimulatedVpnEnabled()
         val currentVpnState: VPNState
         var upstreamEvaluation: UpstreamVpnEvaluation? = null

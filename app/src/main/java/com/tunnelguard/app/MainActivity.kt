@@ -340,6 +340,16 @@ class MainActivity : AppCompatActivity() {
     private fun toggleProtection() {
         val isEnabled = config.isProtectionEnabled()
         if (isEnabled) {
+            if (TunnelGuardVpnService.currentServiceState == ServiceState.PERMISSION_REQUIRED) {
+                val permissionIntent = VpnService.prepare(this)
+                if (permissionIntent != null) {
+                    config.addLog("User requested recovery after VPN permission revocation.")
+                    startActivityForResult(permissionIntent, REQUEST_VPN_PREPARE)
+                    return
+                }
+                startVpnService()
+                return
+            }
             config.setProtectionEnabled(false)
             config.addLog("User stopped protection.")
             stopVpnService()
@@ -502,7 +512,8 @@ class MainActivity : AppCompatActivity() {
         )
 
         // 1. Update VPN status display
-        tvVpnStatus.text = "● ${vpnState.name}"
+        val observation = if (ProtectionMonitorService.isMonitoringRunning) " • MONITORING" else ""
+        tvVpnStatus.text = "● ${vpnState.name}$observation"
         when (vpnState) {
             VPNState.CONNECTED, VPNState.PROTECTED -> {
                 tvVpnStatus.setTextColor(resources.getColor(R.color.status_connected))
