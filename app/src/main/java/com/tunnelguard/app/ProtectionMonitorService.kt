@@ -29,6 +29,7 @@ class ProtectionMonitorService : Service() {
     private var callbackRegistered = false
     private var stopping = false
     private var recoveryInFlight = false
+    private val lifecycleLock = Any()
 
     private val vpnCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = reevaluate("VPN became available")
@@ -41,20 +42,36 @@ class ProtectionMonitorService : Service() {
         super.onCreate()
         config = TunnelGuardConfig(this)
         connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        isMonitoringRunning = true
-        startForeground(NOTIFICATION_ID, notification("Watching VPN connection changes"))
-        registerVpnObserver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP || !protectionRequested()) {
-            stopping = true
-            stopSelf()
-            return START_NOT_STICKY
+        synchronized(lifecycleLock) {
+            if (intent?.action == ACTION_STOP || !protectionRequested()) {
+                stopping = true
+                recoveryInFlight = false
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            stopping = false
+            if (!isMonitoringRunning) {
+                startForeground(NOTIFICATION_ID, notification("Watching VPN connection changes"))
+                isMonitoringRunning = true
+            }
+            registerVpnObserver()
         }
-        stopping = false
         reevaluate("Monitoring started")
         return START_STICKY
+    }
+
+    private fun stopIfNoLongerRequested(): Boolean = synchronized(lifecycleLock) {
+        if (stopping || !protectionRequested()) {
+            stopping = true
+            recoveryInFlight = false
+            stopSelf()
+            true
+        } else {
+            false
+        }
     }
 
     private fun registerVpnObserver() {
@@ -69,7 +86,7 @@ class ProtectionMonitorService : Service() {
     }
 
     private fun reevaluate(reason: String) {
-        if (stopping || !protectionRequested()) return
+        if (stopIfNoLongerRequested()) return
         val upstreamPresent = connectivity.allNetworks.any { network ->
             connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
         }
@@ -108,13 +125,18 @@ class ProtectionMonitorService : Service() {
             broadcastState()
             return
         }
-        if (!recoveryInFlight && !TunnelGuardVpnService.isTunnelEstablished) {
-            recoveryInFlight = true
-            TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_STARTING)
-            val recover = Intent(this, TunnelGuardVpnService::class.java)
-                .setAction(TunnelGuardVpnService.ACTION_RECOVER)
-            ContextCompat.startForegroundService(this, recover)
-            updateNotification("Restoring local fail-closed blocking")
+        synchronized(lifecycleLock) {
+            // Serialize the last eligibility check and dispatch with ACTION_STOP. A callback that
+            // began before protection was disabled must never enqueue a late recovery.
+            if (stopping || !protectionRequested()) return
+            if (!recoveryInFlight && !TunnelGuardVpnService.isTunnelEstablished) {
+                recoveryInFlight = true
+                TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_STARTING)
+                val recover = Intent(this, TunnelGuardVpnService::class.java)
+                    .setAction(TunnelGuardVpnService.ACTION_RECOVER)
+                ContextCompat.startForegroundService(this, recover)
+                updateNotification("Restoring local fail-closed blocking")
+            }
         }
     }
 
