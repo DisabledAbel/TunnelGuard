@@ -96,21 +96,26 @@ class ProtectionMonitorServiceLifecycleTest {
 
     @Test
     fun failedTunnelEstablishmentRetriesAfterBoundedDelay() {
+        val previousServiceState = TunnelGuardVpnService.currentServiceState
         TunnelGuardConfig(context).setProtectionEnabled(true)
         ShadowVpnService.setPrepareResult(null)
         val appShadow = shadowOf(context)
         while (appShadow.nextStartedService != null) { /* clear starts from other lifecycle tests */ }
         val controller = Robolectric.buildService(ProtectionMonitorService::class.java).create()
-        controller.get().onStartCommand(Intent().setAction(ProtectionMonitorService.ACTION_START), 0, 1)
-        while (appShadow.nextStartedService != null) { /* discard the first recovery attempt */ }
+        try {
+            controller.get().onStartCommand(Intent().setAction(ProtectionMonitorService.ACTION_START), 0, 1)
+            while (appShadow.nextStartedService != null) { /* discard the first recovery attempt */ }
 
-        TunnelGuardVpnService.updateServiceState(ServiceState.ERROR)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+            TunnelGuardVpnService.updateServiceState(ServiceState.ERROR)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
 
-        val retries = generateSequence { appShadow.nextStartedService }
-            .count { it.action == TunnelGuardVpnService.ACTION_RECOVER }
-        assertEquals(1, retries)
-        controller.destroy()
+            val retries = generateSequence { appShadow.nextStartedService }
+                .count { it.action == TunnelGuardVpnService.ACTION_RECOVER }
+            assertEquals(1, retries)
+        } finally {
+            controller.destroy()
+            TunnelGuardVpnService.updateServiceState(previousServiceState)
+        }
     }
 
     @Test
