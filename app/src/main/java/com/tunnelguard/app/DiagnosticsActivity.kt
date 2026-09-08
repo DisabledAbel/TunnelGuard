@@ -207,7 +207,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     /**
-     * Copies a formatted diagnostics report to the clipboard.
+     * Copies a formatted report of the current TunnelGuard diagnostics to the clipboard.
      */
     private fun copyDiagnosticsToClipboard() {
         refreshDiagnostics()

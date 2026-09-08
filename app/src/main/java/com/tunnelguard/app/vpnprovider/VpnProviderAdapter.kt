@@ -79,14 +79,14 @@ interface VpnProviderAdapter {
     fun getDisplayName(context: Context): String
 
     /**
-     * Builds a launch request for the VPN provider.
-     *
-     * Validates that the provider is installed and can be safely launched.
-     * Does not modify VPN state or guarantee connection establishment.
-     *
-     * @param context Android context for accessing the package manager.
-     * @param request The VPN launch request containing target app and country requirements.
-     * @return A result indicating whether the launch can proceed and the prepared intent.
-     */
+ * Prepares a launch request for the VPN provider.
+ *
+ * The operation does not change VPN state or guarantee that a connection is established.
+ *
+ * @param context Context used to access provider availability information.
+ * @param request The requested VPN action and its target app or country.
+ * @return The prepared launch intent, or a result describing why it is unavailable,
+ * unsupported, or could not be prepared.
+ */
     fun buildLaunchRequest(context: Context, request: VpnLaunchRequest): VpnLaunchResult
 }

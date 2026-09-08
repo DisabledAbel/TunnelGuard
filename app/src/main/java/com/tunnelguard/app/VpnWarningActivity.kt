@@ -230,6 +230,11 @@ class VpnWarningActivity : AppCompatActivity() {
         finish()
     }
 
+    /**
+     * Redirects the user to the configured VPN provider for manual recovery or to Android VPN settings.
+     *
+     * Falls back to system settings when the configured provider is unavailable or cannot be launched.
+     */
     private fun redirectAndFinish() {
         targetPackage?.let { pkg ->
             config.setPendingVpnRedirectTarget(pkg)

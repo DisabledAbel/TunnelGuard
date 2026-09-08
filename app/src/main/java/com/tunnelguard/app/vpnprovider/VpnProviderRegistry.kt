@@ -12,14 +12,11 @@ object VpnProviderRegistry {
     )
 
     /**
-     * Resolves a VPN provider adapter for the given package name.
-     *
-     * Known providers are assigned STANDARD integration level with their display names.
-     * Unknown providers receive GENERIC integration level with package-derived names.
-     *
-     * @param packageName The Android package name of the VPN application.
-     * @return A [VpnProviderAdapter] for the specified package.
-     */
+         * Resolves a VPN provider adapter for the specified package name.
+         *
+         * @param packageName The Android package name of the VPN application.
+         * @return An adapter configured with the known provider display name, if available.
+         */
     fun resolve(packageName: String): VpnProviderAdapter =
         GenericVpnProviderAdapter(packageName, knownProviders[packageName])
 }
