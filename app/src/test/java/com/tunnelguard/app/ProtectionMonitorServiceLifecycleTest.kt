@@ -1,6 +1,8 @@
 package com.tunnelguard.app
 
 import android.content.Intent
+import android.os.Looper
+import java.time.Duration
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,9 +49,15 @@ class ProtectionMonitorServiceLifecycleTest {
         TunnelGuardConfig(context).setProtectionEnabled(true)
         ShadowVpnService.setPrepareResult(null)
         val appShadow = shadowOf(context)
-        while (appShadow.nextStartedService != null) { }
+        while (appShadow.nextStartedService != null) { /* clear starts from other lifecycle tests */ }
         val controller = Robolectric.buildService(ProtectionMonitorService::class.java).create()
         val service = controller.get()
+        service.onStartCommand(
+            Intent(context, ProtectionMonitorService::class.java).setAction(ProtectionMonitorService.ACTION_START),
+            0,
+            1
+        )
+        while (appShadow.nextStartedService != null) { /* discard the legitimate initial recovery */ }
         TunnelGuardConfig(context).setProtectionEnabled(false)
 
         val result = service.onStartCommand(
@@ -83,6 +91,25 @@ class ProtectionMonitorServiceLifecycleTest {
             .filter { it.action == TunnelGuardVpnService.ACTION_RECOVER }
         assertEquals(1, starts.size)
         assertEquals(ServiceState.TUNNELGUARD_STARTING, TunnelGuardVpnService.currentServiceState)
+        controller.destroy()
+    }
+
+    @Test
+    fun failedTunnelEstablishmentRetriesAfterBoundedDelay() {
+        TunnelGuardConfig(context).setProtectionEnabled(true)
+        ShadowVpnService.setPrepareResult(null)
+        val appShadow = shadowOf(context)
+        while (appShadow.nextStartedService != null) { /* clear starts from other lifecycle tests */ }
+        val controller = Robolectric.buildService(ProtectionMonitorService::class.java).create()
+        controller.get().onStartCommand(Intent().setAction(ProtectionMonitorService.ACTION_START), 0, 1)
+        while (appShadow.nextStartedService != null) { /* discard the first recovery attempt */ }
+
+        TunnelGuardVpnService.updateServiceState(ServiceState.ERROR)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+
+        val retries = generateSequence { appShadow.nextStartedService }
+            .count { it.action == TunnelGuardVpnService.ACTION_RECOVER }
+        assertEquals(1, retries)
         controller.destroy()
     }
 

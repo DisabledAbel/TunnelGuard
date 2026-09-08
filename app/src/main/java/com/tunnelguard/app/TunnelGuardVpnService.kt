@@ -554,6 +554,7 @@ class TunnelGuardVpnService : VpnService() {
             startForegroundServiceNotification()
             transitionTo(ServiceState.PERMISSION_REQUIRED)
             config.setVPNState(VPNState.ERROR)
+            ProtectionMonitorService.start(this)
             stopSelf()
             return START_STICKY
         }

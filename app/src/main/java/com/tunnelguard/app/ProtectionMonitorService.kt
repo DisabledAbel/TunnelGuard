@@ -12,7 +12,9 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.ContextCompat
 import androidx.core.app.NotificationCompat
 
@@ -29,7 +31,28 @@ class ProtectionMonitorService : Service() {
     private var callbackRegistered = false
     private var stopping = false
     private var recoveryInFlight = false
+    private var recoveryAttempts = 0
     private val lifecycleLock = Any()
+    private val recoveryHandler = Handler(Looper.getMainLooper())
+    private val recoveryCheck = Runnable {
+        val shouldRetry = synchronized(lifecycleLock) {
+            when {
+                stopping || !protectionRequested() -> false
+                TunnelGuardVpnService.isTunnelEstablished -> {
+                    recoveryInFlight = false
+                    recoveryAttempts = 0
+                    false
+                }
+                TunnelGuardVpnService.currentServiceState == ServiceState.ERROR &&
+                    recoveryAttempts < MAX_RECOVERY_ATTEMPTS -> {
+                    recoveryInFlight = false
+                    true
+                }
+                else -> false
+            }
+        }
+        if (shouldRetry) reevaluate("Local blocking recovery failed; retrying")
+    }
 
     private val vpnCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = reevaluate("VPN became available")
@@ -49,6 +72,7 @@ class ProtectionMonitorService : Service() {
             if (intent?.action == ACTION_STOP || !protectionRequested()) {
                 stopping = true
                 recoveryInFlight = false
+                recoveryHandler.removeCallbacks(recoveryCheck)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -67,6 +91,7 @@ class ProtectionMonitorService : Service() {
         if (stopping || !protectionRequested()) {
             stopping = true
             recoveryInFlight = false
+            recoveryHandler.removeCallbacks(recoveryCheck)
             stopSelf()
             true
         } else {
@@ -94,12 +119,14 @@ class ProtectionMonitorService : Service() {
         ProfileAutomationManager.onNetworkChanged(this)
         if (TunnelGuardVpnService.isTunnelEstablished) {
             recoveryInFlight = false
+            recoveryAttempts = 0
             TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_ACTIVE)
             updateNotification("Local fail-closed blocking is active")
             return
         }
         if (upstreamPresent) {
             recoveryInFlight = false
+            recoveryAttempts = 0
             val foreground = config.getForegroundPackageName(this)
             val evaluation = DefaultVpnDetector(config).evaluateUpstreamVpn(
                 connectivity, config.getForegroundVpnPolicy(foreground)
@@ -118,6 +145,7 @@ class ProtectionMonitorService : Service() {
         }
         if (VpnService.prepare(this) != null) {
             recoveryInFlight = false
+            recoveryAttempts = 0
             TunnelGuardVpnService.updateServiceState(ServiceState.PERMISSION_REQUIRED)
             config.setVPNState(VPNState.ERROR)
             config.setLastDisconnectReason("VPN permission is required to restore local blocking")
@@ -131,11 +159,14 @@ class ProtectionMonitorService : Service() {
             if (stopping || !protectionRequested()) return
             if (!recoveryInFlight && !TunnelGuardVpnService.isTunnelEstablished) {
                 recoveryInFlight = true
+                recoveryAttempts++
                 TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_STARTING)
                 val recover = Intent(this, TunnelGuardVpnService::class.java)
                     .setAction(TunnelGuardVpnService.ACTION_RECOVER)
                 ContextCompat.startForegroundService(this, recover)
                 updateNotification("Restoring local fail-closed blocking")
+                recoveryHandler.removeCallbacks(recoveryCheck)
+                recoveryHandler.postDelayed(recoveryCheck, RECOVERY_RETRY_DELAY_MS)
             }
         }
     }
@@ -168,6 +199,7 @@ class ProtectionMonitorService : Service() {
     override fun onDestroy() {
         isMonitoringRunning = false
         recoveryInFlight = false
+        recoveryHandler.removeCallbacks(recoveryCheck)
         if (callbackRegistered) {
             connectivity.unregisterNetworkCallback(vpnCallback)
             callbackRegistered = false
@@ -183,6 +215,8 @@ class ProtectionMonitorService : Service() {
         const val ACTION_STOP = "com.tunnelguard.app.MONITOR_STOP"
         private const val CHANNEL_ID = "TunnelGuardMonitorChannel"
         private const val NOTIFICATION_ID = 1003
+        private const val RECOVERY_RETRY_DELAY_MS = 5_000L
+        private const val MAX_RECOVERY_ATTEMPTS = 3
 
         @Volatile var isMonitoringRunning = false
             private set
