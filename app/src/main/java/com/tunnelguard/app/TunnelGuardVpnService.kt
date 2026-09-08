@@ -544,15 +544,18 @@ class TunnelGuardVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
-        if (action == ACTION_RECOVER) {
-            // Recovery is observer-driven only after the VPN transport disappeared and prepare()
-            // confirmed that Android still authorizes this application.
-            if (VpnService.prepare(this) != null) {
-                transitionTo(ServiceState.PERMISSION_REQUIRED)
-                config.setVPNState(VPNState.ERROR)
-                return START_STICKY
-            }
+        // Every non-stop command revalidates Android's single-VPN authorization. This also lets a
+        // user-approved ACTION_START/ACTION_UPDATE clear a prior revocation, not only RECOVER.
+        if (VpnService.prepare(this) == null) {
             vpnControlRevoked = false
+        } else {
+            // A foreground-service start must be promoted before any early return. This revoked
+            // VpnService has no work to retain; the independent monitor owns observation.
+            startForegroundServiceNotification()
+            transitionTo(ServiceState.PERMISSION_REQUIRED)
+            config.setVPNState(VPNState.ERROR)
+            stopSelf()
+            return START_STICKY
         }
 
         ProtectionMonitorService.start(this)

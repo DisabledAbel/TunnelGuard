@@ -46,9 +46,10 @@ class ProtectionMonitorServiceLifecycleTest {
     fun explicitStopWinsOverPendingRecoveryLifecycle() {
         TunnelGuardConfig(context).setProtectionEnabled(true)
         ShadowVpnService.setPrepareResult(null)
+        val appShadow = shadowOf(context)
+        while (appShadow.nextStartedService != null) { }
         val controller = Robolectric.buildService(ProtectionMonitorService::class.java).create()
         val service = controller.get()
-        service.onStartCommand(Intent().setAction(ProtectionMonitorService.ACTION_START), 0, 1)
         TunnelGuardConfig(context).setProtectionEnabled(false)
 
         val result = service.onStartCommand(
@@ -58,6 +59,9 @@ class ProtectionMonitorServiceLifecycleTest {
         )
 
         assertEquals(android.app.Service.START_NOT_STICKY, result)
+        assertFalse(generateSequence { appShadow.nextStartedService }.any {
+            it.action == TunnelGuardVpnService.ACTION_RECOVER
+        })
         controller.destroy()
         assertFalse(ProtectionMonitorService.isMonitoringRunning)
         assertEquals(0, ProtectionMonitorService.observerRegistrationCount)

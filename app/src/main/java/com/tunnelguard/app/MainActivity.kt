@@ -546,7 +546,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnToggleProtection.text = if (config.isProtectionEnabled()) "Stop Protection" else "Start Protection"
+        btnToggleProtection.text = when {
+            TunnelGuardVpnService.currentServiceState == ServiceState.PERMISSION_REQUIRED -> "Restore Protection"
+            config.isProtectionEnabled() -> "Stop Protection"
+            else -> "Start Protection"
+        }
 
         if (isLocked) {
             btnToggleEmergency.text = "Unlock Network"
