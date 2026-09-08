@@ -883,7 +883,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
     }
 
     /**
-     * Exports selected configuration settings, protection profiles, and app-specific VPN country mappings as JSON.
+     * Exports selected configuration settings, protection profiles, profile rules, and app-specific VPN country mappings as JSON.
      *
      * @return The exported configuration JSON, or `null` if the export fails.
      */
@@ -915,9 +915,11 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
     }
 
     /**
-     * Imports application settings, protection profiles, automatic switching rules, and per-app VPN country assignments from JSON.
+     * Imports general settings, the selected VPN application, protection profiles, profile-switching rules,
+     * and per-app VPN country assignments from JSON.
      *
-     * Invalid package names and country assignments are ignored and logged. Parsing or other import failures are logged and cause the import to fail.
+     * Invalid package names, country codes, and profile references are ignored or adjusted to valid defaults.
+     * Returns `false` when parsing or another import operation fails.
      *
      * @param jsonStr The JSON configuration to import.
      * @return `true` if the configuration is imported successfully, `false` otherwise.

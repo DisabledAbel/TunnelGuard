@@ -24,13 +24,8 @@ open class GenericVpnProviderAdapter(
     } catch (_: Exception) { packageName }
 
     /**
-     * Builds a validated launch intent for the VPN provider application.
+     * Builds a validated launch request for the configured VPN provider application.
      *
-     * Verifies that the configured VPN application is installed, has a launcher activity,
-     * and that the activity is owned by the configured package to prevent hijacking.
-     *
-     * @param context Android context for accessing the package manager.
-     * @param request The VPN launch request containing target app and country requirements.
      * @return A [VpnLaunchResult] indicating whether the provider can be launched.
      */
     override fun buildLaunchRequest(context: Context, request: VpnLaunchRequest): VpnLaunchResult {

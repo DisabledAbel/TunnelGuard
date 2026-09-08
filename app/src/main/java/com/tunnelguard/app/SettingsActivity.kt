@@ -439,6 +439,9 @@ class SettingsActivity : AppCompatActivity() {
         tvAboutVersion.text = "Version: $currentVersion\nDeveloper: DisabledAbel\nDesigned for Android TV / Google TV."
     }
 
+    /**
+     * Updates the displayed VPN provider selection and its integration capabilities.
+     */
     private fun updateVpnAppOfChoiceDisplay() {
         val vpnPkg = config.getVpnAppOfChoice()
         if (vpnPkg != null) {
@@ -520,6 +523,9 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Displays a dialog for selecting an installed VPN provider or system settings.
+     */
     private fun showVpnAppOfChoiceDialog() {
         val pm = packageManager
         val standardIntent = Intent(Intent.ACTION_MAIN, null).apply {
