@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class VpnCountryResolverTest {
 
@@ -223,5 +224,125 @@ class VpnCountryResolverTest {
         resolver.clearCache()
         resolver.resolveCountry(mockNet)
         assertEquals(2, callCount)
+    }
+
+    @Test
+    fun testNetworkLostWhileLookupIsInProgressDiscardsResult() {
+        val network = mock(Network::class.java)
+        whenever(network.toString()).thenReturn("network-a")
+        val lookupStarted = CountDownLatch(1)
+        val releaseLookup = CountDownLatch(1)
+        val fetchCount = AtomicInteger()
+        val resolver = VpnCountryResolver(config, fetcher = { _, url ->
+            if (url != "https://api.country.is") {
+                null
+            } else if (fetchCount.incrementAndGet() == 1) {
+                lookupStarted.countDown()
+                releaseLookup.await(2, TimeUnit.SECONDS)
+                """{"country":"US"}"""
+            } else {
+                """{"country":"CA"}"""
+            }
+        })
+        val executor = Executors.newSingleThreadExecutor()
+        val staleLookup = executor.submit<String?> { resolver.resolveCountry(network) }
+        assertTrue(lookupStarted.await(2, TimeUnit.SECONDS))
+
+        resolver.clearCacheForNetwork(network)
+        releaseLookup.countDown()
+        assertNull(staleLookup.get(2, TimeUnit.SECONDS))
+        assertNotEquals("US", config.getActiveVpnCountryCode())
+
+        assertEquals("CA", resolver.resolveCountry(network))
+        assertEquals(2, fetchCount.get())
+        executor.shutdownNow()
+    }
+
+    @Test
+    fun testOlderLookupCannotOverwriteNewerLookup() {
+        val network = mock(Network::class.java)
+        whenever(network.toString()).thenReturn("network-a")
+        val oldLookupStarted = CountDownLatch(1)
+        val releaseOldLookup = CountDownLatch(1)
+        val fetchCount = AtomicInteger()
+        val resolver = VpnCountryResolver(config, fetcher = { _, url ->
+            if (url != "https://api.country.is") {
+                null
+            } else if (fetchCount.incrementAndGet() == 1) {
+                oldLookupStarted.countDown()
+                releaseOldLookup.await(2, TimeUnit.SECONDS)
+                """{"country":"US"}"""
+            } else {
+                """{"country":"CA"}"""
+            }
+        })
+        val executor = Executors.newSingleThreadExecutor()
+        val oldLookup = executor.submit<String?> { resolver.resolveCountry(network) }
+        assertTrue(oldLookupStarted.await(2, TimeUnit.SECONDS))
+
+        resolver.clearCacheForNetwork(network)
+        assertEquals("CA", resolver.resolveCountry(network))
+        releaseOldLookup.countDown()
+        assertNull(oldLookup.get(2, TimeUnit.SECONDS))
+
+        assertEquals("CA", config.getActiveVpnCountryCode())
+        assertEquals("CA", resolver.resolveCountry(network))
+        executor.shutdownNow()
+    }
+
+    @Test
+    fun testStaleFailureCannotClearNewerState() {
+        val network = mock(Network::class.java)
+        whenever(network.toString()).thenReturn("network-a")
+        val oldLookupStarted = CountDownLatch(1)
+        val releaseOldLookup = CountDownLatch(1)
+        val firstRequest = AtomicInteger()
+        val resolver = VpnCountryResolver(config, fetcher = { _, url ->
+            if (url == "https://api.country.is" && firstRequest.incrementAndGet() == 1) {
+                oldLookupStarted.countDown()
+                releaseOldLookup.await(2, TimeUnit.SECONDS)
+                null
+            } else if (url == "https://api.country.is") {
+                """{"country":"GB"}"""
+            } else {
+                null
+            }
+        })
+        val executor = Executors.newSingleThreadExecutor()
+        val oldLookup = executor.submit<String?> { resolver.resolveCountry(network) }
+        assertTrue(oldLookupStarted.await(2, TimeUnit.SECONDS))
+
+        resolver.clearCacheForNetwork(network)
+        assertEquals("GB", resolver.resolveCountry(network))
+        releaseOldLookup.countDown()
+        assertNull(oldLookup.get(2, TimeUnit.SECONDS))
+
+        assertEquals("GB", config.getActiveVpnCountryCode())
+        executor.shutdownNow()
+    }
+
+    @Test
+    fun testGlobalClearInvalidatesRunningLookup() {
+        val network = mock(Network::class.java)
+        val lookupStarted = CountDownLatch(1)
+        val releaseLookup = CountDownLatch(1)
+        val resolver = VpnCountryResolver(config, fetcher = { _, url ->
+            if (url == "https://api.country.is") {
+                lookupStarted.countDown()
+                releaseLookup.await(2, TimeUnit.SECONDS)
+                """{"country":"US"}"""
+            } else {
+                null
+            }
+        })
+        val executor = Executors.newSingleThreadExecutor()
+        val staleLookup = executor.submit<String?> { resolver.resolveCountry(network) }
+        assertTrue(lookupStarted.await(2, TimeUnit.SECONDS))
+
+        resolver.clearCache()
+        releaseLookup.countDown()
+        assertNull(staleLookup.get(2, TimeUnit.SECONDS))
+        assertNotEquals("US", config.getActiveVpnCountryCode())
+        executor.shutdownNow()
     }
 }
