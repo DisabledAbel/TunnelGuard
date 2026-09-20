@@ -26,6 +26,8 @@ class VpnCountryResolver(
 
     private val cache = ConcurrentHashMap<String, CachedCountry>()
     private val lookupSequence = AtomicLong()
+    private val lookupStateLock = Any()
+    private val currentLookupByNetwork = mutableMapOf<String, Long>()
 
     companion object {
         private const val CACHE_TTL_MS = 300_000L // 5 minutes
@@ -45,24 +47,29 @@ class VpnCountryResolver(
      */
     fun resolveCountry(network: Network?): String? {
         val netKey = network?.toString() ?: "default"
-        val cached = cache[netKey]
         val now = clock()
-        if (cached != null && (now - cached.timestamp) < CACHE_TTL_MS) {
-            return cached.countryCode
-        }
-        val owner = "$netKey:${lookupSequence.incrementAndGet()}"
-        if (cached != null && cache.remove(netKey, cached)) {
-            config.transferActiveVpnCountryOwnership(cached.owner, owner)
+        val (lookupToken, owner) = synchronized(lookupStateLock) {
+            val cached = cache[netKey]
+            if (cached != null && (now - cached.timestamp) < CACHE_TTL_MS) {
+                return cached.countryCode
+            }
+            val token = lookupSequence.incrementAndGet()
+            val lookupOwner = "$netKey:$token"
+            currentLookupByNetwork[netKey] = token
+            if (cached != null && cache.remove(netKey, cached)) {
+                config.transferActiveVpnCountryOwnership(cached.owner, lookupOwner)
+            }
+            token to lookupOwner
         }
 
         if (isMainThread()) {
             CoroutineScope(Dispatchers.IO).launch {
-                performLookup(network, netKey, now, owner)
+                performLookup(network, netKey, now, owner, lookupToken)
             }
             return null
         }
 
-        return performLookup(network, netKey, now, owner)
+        return performLookup(network, netKey, now, owner, lookupToken)
     }
 
     /**
@@ -74,7 +81,13 @@ class VpnCountryResolver(
      * @param owner The ownership token for the lookup.
      * @return The resolved uppercase country code, or `null` if all providers fail.
      */
-    private fun performLookup(network: Network?, netKey: String, now: Long, owner: String): String? {
+    private fun performLookup(
+        network: Network?,
+        netKey: String,
+        now: Long,
+        owner: String,
+        lookupToken: Long
+    ): String? {
         for (endpoint in GEOIP_ENDPOINTS) {
             // Never let a VPN-specific lookup fall through to an unbound socket: split-tunnel
             // configurations could otherwise report the physical network's country.
@@ -91,8 +104,14 @@ class VpnCountryResolver(
                         val countryCode = parseCountryCodeFromJson(responseText)
                         if (!countryCode.isNullOrBlank()) {
                             val uppercaseCode = countryCode.uppercase().trim()
-                            cache[netKey] = CachedCountry(uppercaseCode, now, owner)
-                            config.setActiveVpnCountryCode(uppercaseCode, owner)
+                            synchronized(lookupStateLock) {
+                                // A clear or a newer lookup replaces this token. Check while
+                                // committing so stale completion cannot regain ownership.
+                                if (currentLookupByNetwork[netKey] != lookupToken) return null
+                                cache[netKey] = CachedCountry(uppercaseCode, now, owner)
+                                config.setActiveVpnCountryCode(uppercaseCode, owner)
+                                currentLookupByNetwork.remove(netKey, lookupToken)
+                            }
                             val route = if (candidateNetwork == null) "default route" else "VPN network"
                             config.addLogInfo("Country resolved via $endpoint ($route): $uppercaseCode")
                             return uppercaseCode
@@ -104,7 +123,12 @@ class VpnCountryResolver(
             }
         }
 
-        config.clearActiveVpnCountryCodeIfOwnedBy(owner)
+        synchronized(lookupStateLock) {
+            // Failure from an invalidated generation must not clear a newer result.
+            if (currentLookupByNetwork[netKey] != lookupToken) return null
+            config.clearActiveVpnCountryCodeIfOwnedBy(owner)
+            currentLookupByNetwork.remove(netKey, lookupToken)
+        }
         config.addLogWarning("All GeoIP providers failed to resolve country code for network: $netKey")
         return null
     }
@@ -116,14 +140,20 @@ class VpnCountryResolver(
      */
     fun clearCacheForNetwork(network: Network?) {
         val netKey = network?.toString() ?: "default"
-        cache.remove(netKey)
+        synchronized(lookupStateLock) {
+            cache.remove(netKey)
+            currentLookupByNetwork.remove(netKey)
+        }
     }
 
     /**
      * Clears all cached country resolutions.
      */
     fun clearCache() {
-        cache.clear()
+        synchronized(lookupStateLock) {
+            cache.clear()
+            currentLookupByNetwork.clear()
+        }
     }
 
     /**
