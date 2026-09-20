@@ -110,7 +110,7 @@ class VpnCountryResolver(
                                 if (currentLookupByNetwork[netKey] != lookupToken) return null
                                 cache[netKey] = CachedCountry(uppercaseCode, now, owner)
                                 config.setActiveVpnCountryCode(uppercaseCode, owner)
-                                currentLookupByNetwork.remove(netKey, lookupToken)
+                                currentLookupByNetwork.remove(netKey)
                             }
                             val route = if (candidateNetwork == null) "default route" else "VPN network"
                             config.addLogInfo("Country resolved via $endpoint ($route): $uppercaseCode")
@@ -127,7 +127,7 @@ class VpnCountryResolver(
             // Failure from an invalidated generation must not clear a newer result.
             if (currentLookupByNetwork[netKey] != lookupToken) return null
             config.clearActiveVpnCountryCodeIfOwnedBy(owner)
-            currentLookupByNetwork.remove(netKey, lookupToken)
+            currentLookupByNetwork.remove(netKey)
         }
         config.addLogWarning("All GeoIP providers failed to resolve country code for network: $netKey")
         return null
