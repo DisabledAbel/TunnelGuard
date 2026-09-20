@@ -69,6 +69,28 @@ class MainActivityUpdateTest {
     }
 
     @Test
+    fun testPersistedCachedUpdateDoesNotSkipFreshStartupCheck() {
+        val context = RuntimeEnvironment.getApplication()
+        val prefs = context.getSharedPreferences(
+            "tunnel_guard_update_prefs",
+            android.content.Context.MODE_PRIVATE
+        )
+        prefs.edit().putBoolean("update_detected_session", true).commit()
+        val freshRepository = UpdateRepository(context, currentStub)
+        freshRepository.cacheUpdateInfo("2.0.0", "old-apk", "old notes")
+        UpdateRepository.setInstance(freshRepository)
+
+        val activity = Robolectric.buildActivity(MainActivity::class.java).create().get()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertEquals(1, currentStub.invocationsCount)
+        assertFalse(activity.isFinishing)
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertFalse(prefs.contains("update_detected_session"))
+        assertNull(UpdateRepository.getInstance(context).getCachedLatestVersion())
+    }
+
+    @Test
     fun testVersionComparatorDetectsNewerVersion() {
         // Assert some key comparisons in our update path
         assertTrue(VersionComparator.isNewerVersion("1.0.0", "1.0.1"))

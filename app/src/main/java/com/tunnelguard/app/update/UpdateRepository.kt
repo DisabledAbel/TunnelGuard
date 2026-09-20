@@ -11,6 +11,14 @@ class UpdateRepository(
     private val updateChecker: UpdateChecker = GitHubUpdateCheckerImpl()
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    @Volatile private var updateDetectedInSession = false
+
+    init {
+        // This key was written by older versions even though it described process state.
+        // Remove only the obsolete flag; cached release metadata remains available for
+        // conditional requests and the explicit offline fallback.
+        prefs.edit().remove(KEY_UPDATE_DETECTED_SESSION).apply()
+    }
 
     companion object {
         private const val PREFS_NAME = "tunnel_guard_update_prefs"
@@ -31,8 +39,11 @@ class UpdateRepository(
         @androidx.annotation.VisibleForTesting fun setInstance(repo: UpdateRepository?) { instance = repo }
     }
 
-    fun setUpdateDetectedInSession(detected: Boolean) = prefs.edit().putBoolean(KEY_UPDATE_DETECTED_SESSION, detected).apply()
-    fun isUpdateDetectedInSession(): Boolean = prefs.getBoolean(KEY_UPDATE_DETECTED_SESSION, false)
+    fun setUpdateDetectedInSession(detected: Boolean) {
+        updateDetectedInSession = detected
+    }
+
+    fun isUpdateDetectedInSession(): Boolean = updateDetectedInSession
     fun getCachedLatestVersion(): String? = prefs.getString(KEY_LATEST_VERSION, null)
     fun getCachedApkUrl(): String? = prefs.getString(KEY_APK_URL, null)
     fun getCachedReleaseNotes(): String? = prefs.getString(KEY_RELEASE_NOTES, null)
@@ -65,7 +76,8 @@ class UpdateRepository(
     suspend fun checkForUpdate(currentVersion: String): UpdateCheckResult = withContext(Dispatchers.IO) {
         val storedETag = getCachedETag()
         when (val result = updateChecker.checkForLatestRelease(ifNoneMatch = storedETag)) {
-            is UpdateCheckResult.NotModified -> fromCache(currentVersion, storedETag) ?: UpdateCheckResult.NoUpdate
+            is UpdateCheckResult.NotModified -> fromCache(currentVersion, storedETag, markDetected = true)
+                ?: UpdateCheckResult.NoUpdate.also { setUpdateDetectedInSession(false) }
             is UpdateCheckResult.UpdateAvailable -> {
                 cacheUpdateInfo(result.latestVersion, result.apkUrl, result.releaseNotes, result.releaseName, result.releaseUrl, result.publishedAt)
                 cacheETag(result.eTag)
@@ -73,15 +85,27 @@ class UpdateRepository(
                     setUpdateDetectedInSession(true); result
                 } else { setUpdateDetectedInSession(false); UpdateCheckResult.NoUpdate }
             }
-            is UpdateCheckResult.Failure -> fromCache(currentVersion, storedETag) ?: result
-            else -> result
+            is UpdateCheckResult.Failure -> {
+                // An offline fallback can block this attempt, but it is not a fresh
+                // confirmation and must not become process-session authority.
+                fromCache(currentVersion, storedETag, markDetected = false) ?: result
+            }
+            is UpdateCheckResult.NoUpdate -> {
+                clearCachedReleaseInfo()
+                setUpdateDetectedInSession(false)
+                result
+            }
         }
     }
 
-    private fun fromCache(currentVersion: String, eTag: String?): UpdateCheckResult.UpdateAvailable? {
+    private fun fromCache(
+        currentVersion: String,
+        eTag: String?,
+        markDetected: Boolean
+    ): UpdateCheckResult.UpdateAvailable? {
         val cachedVer = getCachedLatestVersion() ?: return null
         return if (VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
-            setUpdateDetectedInSession(true)
+            if (markDetected) setUpdateDetectedInSession(true)
             UpdateCheckResult.UpdateAvailable(
                 latestVersion = cachedVer,
                 apkUrl = getCachedApkUrl(),
@@ -91,6 +115,22 @@ class UpdateRepository(
                 releaseUrl = getCachedReleaseUrl(),
                 publishedAt = getCachedPublishedAt()
             )
-        } else null
+        } else {
+            if (markDetected) setUpdateDetectedInSession(false)
+            null
+        }
+    }
+
+    private fun clearCachedReleaseInfo() {
+        prefs.edit()
+            .remove(KEY_LATEST_VERSION)
+            .remove(KEY_APK_URL)
+            .remove(KEY_RELEASE_NOTES)
+            .remove(KEY_RELEASE_NAME)
+            .remove(KEY_RELEASE_URL)
+            .remove(KEY_PUBLISHED_AT)
+            .remove(KEY_LATEST_ETAG)
+            .putLong(KEY_LAST_CHECK_TIME, System.currentTimeMillis())
+            .apply()
     }
 }

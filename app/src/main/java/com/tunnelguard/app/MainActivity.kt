@@ -90,7 +90,8 @@ class MainActivity : AppCompatActivity() {
         val rawVersion = config.getAppVersionName()
         val currentVersion = VersionComparator.validateAndNormalizeVersion(rawVersion)
 
-        // 1. Immediately block and route if a newer version is already known/detected
+        // Only a release confirmed during this process may take the fast path. A new
+        // process always starts with this flag false and therefore revalidates GitHub.
         val cachedVer = repo.getCachedLatestVersion()
         if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
             val intent = Intent(this, ForceUpdateActivity::class.java).apply {
@@ -106,7 +107,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // 2. Show non-dismissible checking dialog
+        // Otherwise perform an authoritative check. UpdateRepository may use its
+        // separately persisted metadata as a one-attempt offline fallback.
         val checkingDialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Checking for Updates")
             .setMessage("Checking for mandatory updates...")
@@ -135,7 +137,7 @@ class MainActivity : AppCompatActivity() {
                     is UpdateCheckResult.Failure -> {
                         config.addLog("Mandatory Update Check Failed: ${result.errorMessage}")
                         Toast.makeText(this@MainActivity, "Update checking is currently unavailable. Continuing offline.", Toast.LENGTH_LONG).show()
-                        // If offline but a session-level update was previously detected, force the update
+                        // A prior fresh confirmation in this process remains fail-safe.
                         if (repo.isUpdateDetectedInSession() && cachedVer != null && VersionComparator.isNewerVersion(currentVersion, cachedVer)) {
                             val intent = Intent(this@MainActivity, ForceUpdateActivity::class.java).apply {
                                 putExtra(ForceUpdateActivity.EXTRA_LATEST_VERSION, cachedVer)
