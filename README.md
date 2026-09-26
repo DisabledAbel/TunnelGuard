@@ -79,21 +79,36 @@ Android strictly permits **only one active `VpnService` at a time**.
 
 ### Automatic Profile Switching
 
-Settings → **Automatic Profile Switching** can select an existing protection profile when Wi-Fi,
-Ethernet, or upstream VPN state changes. The feature is off by default. Rules retain stable IDs and
-target profile IDs, so renaming a custom profile is safe. Lower priority numbers win; ties are
-resolved by rule ID. Missing targets are disabled rather than redirected.
+Settings → **Automatic Profile Switching** can select an existing protection profile for any Wi-Fi,
+a named Wi-Fi network, an unrecognized Wi-Fi network, Ethernet, or an upstream VPN state. Named
+rules accept the currently connected network name or a manually entered SSID. **Unknown Wi-Fi** means
+a usable SSID that does not match an enabled named-network rule; it never treats a hidden,
+permission-restricted, blank, or Android `<unknown ssid>` value as an unrecognized network.
+
+The feature is off by default. Rules retain stable IDs and target profile IDs, so renaming a custom
+profile is safe. Lower priority numbers win; ties are resolved by rule ID. This lets a named rule be
+placed ahead of a generic Wi-Fi rule while keeping both available. Missing targets are disabled
+rather than redirected.
 
 <details>
 <summary>Network changes, manual overrides, and boot behavior</summary>
 
 Network changes are stabilized for 1.5 seconds. A manual profile selection remains active until the
-next actual network-state change. Simulation Mode intentionally supplies the VPN-connected state to
+next actual network-state change, including a change from one usable Wi-Fi SSID to another; repeated
+callbacks for the same network do not cancel it. Simulation Mode intentionally supplies the VPN-connected state to
 automation. In normal mode TunnelGuard uses its existing upstream VPN detector, which excludes its
 own fail-closed tunnel. At boot, available state is evaluated before starting protection; otherwise
 the existing valid selection is retained (or an invalid selection falls back to the default), and the
 service callback evaluates again when network information arrives. Profile changes use `ACTION_UPDATE`,
 so the service immediately rebuilds the protected package routing while fail-closed remains authoritative.
+
+Wi-Fi names are evaluated locally and are never sent to a server; TunnelGuard does not read BSSIDs,
+MAC addresses, location coordinates, or retain a network history. Android may require Nearby Wi-Fi
+Devices (Android 13+) or location permission (older releases) before exposing an SSID. Permission is
+requested only after selecting the clearly labelled control on this screen. If permission is denied,
+or a TV manufacturer does not expose the name, named and Unknown Wi-Fi rules are skipped while
+transport-level Wi-Fi, Ethernet, and VPN rules continue to work. Availability therefore varies by
+Android TV/Google TV device and OS version.
 
 </details>
 

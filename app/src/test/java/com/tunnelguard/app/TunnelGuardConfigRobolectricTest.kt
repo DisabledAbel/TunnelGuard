@@ -14,6 +14,8 @@ import org.mockito.kotlin.*
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.json.JSONArray
+import org.json.JSONObject
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.Q])
@@ -129,6 +131,41 @@ class TunnelGuardConfigRobolectricTest {
 
         assertTrue(config.importConfigFromJson(exported))
         assertEquals("JP", config.getAppVpnCountry("com.example.video"))
+    }
+
+    @Test
+    fun networkSpecificAutomationRuleRoundTripsThroughBackup() {
+        config.saveProfileSwitchRules(listOf(ProfileSwitchRule(
+            "home", ProfileRuleCondition.WIFI_NETWORK, "streaming", true, 3, "HomeNetwork"
+        )))
+        val exported = requireNotNull(config.exportConfigToJson())
+        config.saveProfileSwitchRules(emptyList())
+
+        assertTrue(config.importConfigFromJson(exported))
+        assertEquals("HomeNetwork", config.getProfileSwitchRules().single().networkIdentifier)
+    }
+
+    @Test
+    fun oldAutomationRuleWithoutNewFieldStillImports() {
+        val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
+        backup.put("profile_switch_rules", JSONArray().put(JSONObject()
+            .put("id", "old_wifi").put("condition", "WIFI_CONNECTED")
+            .put("profileId", "streaming").put("enabled", true).put("priority", 0)))
+
+        assertTrue(config.importConfigFromJson(backup.toString()))
+        assertEquals(ProfileRuleCondition.WIFI_CONNECTED, config.getProfileSwitchRules().single().condition)
+        assertNull(config.getProfileSwitchRules().single().networkIdentifier)
+    }
+
+    @Test
+    fun malformedNamedNetworkRuleIsIgnoredWithoutFailingImport() {
+        val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
+        backup.put("profile_switch_rules", JSONArray().put(JSONObject()
+            .put("id", "bad").put("condition", "WIFI_NETWORK")
+            .put("profileId", "streaming").put("networkIdentifier", "<unknown ssid>")))
+
+        assertTrue(config.importConfigFromJson(backup.toString()))
+        assertTrue(config.getProfileSwitchRules().isEmpty())
     }
 
     @Test

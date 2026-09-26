@@ -1,12 +1,18 @@
 package com.tunnelguard.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import java.util.Date
 import java.util.UUID
@@ -17,6 +23,7 @@ class ProfileAutomationActivity : AppCompatActivity() {
     private lateinit var toggle: CheckBox
     private lateinit var status: TextView
     private lateinit var toggleRow: LinearLayout
+    private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { render() }
 
     /**
      * Initializes the profile automation screen and configures its controls.
@@ -32,6 +39,12 @@ class ProfileAutomationActivity : AppCompatActivity() {
             config.setAutomaticProfileSwitchingEnabled(!config.isAutomaticProfileSwitchingEnabled()); render()
         }
         findViewById<Button>(R.id.automation_add).setOnClickListener { edit(null) }
+        findViewById<Button>(R.id.automation_wifi_permission).setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Wi-Fi network name access")
+                .setMessage("Android may require permission to reveal the connected Wi-Fi name. TunnelGuard uses it only on this device for profile rules; it does not collect location or send network names anywhere.")
+                .setPositiveButton("Continue") { _, _ -> permissionRequest.launch(wifiPermission()) }
+                .setNegativeButton("Not now", null).show()
+        }
         findViewById<Button>(R.id.automation_back).setOnClickListener { finish() }
         render()
     }
@@ -50,12 +63,20 @@ override fun onResume() { super.onResume(); render() }
         val profiles = config.getProfiles(); val all = config.getProfileSwitchRules()
         val active = profiles.find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
         val last = config.getLastAutomaticProfileSwitch().let { if (it == 0L) "Never" else DateFormat.getDateTimeInstance().format(Date(it)) }
-        status.text = "Active Profile: $active\nSelected By: ${config.getProfileSelectionSource()}\nLast Automatic Switch: $last"
+        val network = currentNetworkState()
+        val identity = when (network.wifiIdentity) {
+            WifiIdentityStatus.KNOWN -> "Wi-Fi Network: ${network.wifiSsid}"
+            WifiIdentityStatus.UNAVAILABLE -> "Wi-Fi Network: identity unavailable (generic Wi-Fi rules still work)"
+            WifiIdentityStatus.NOT_WIFI -> "Wi-Fi Network: not connected"
+        }
+        status.text = "Active Profile: $active\nSelected By: ${config.getProfileSelectionSource()}\nTransport: ${network.transportDescription()}\n$identity\nLast Automatic Switch: $last"
+        findViewById<Button>(R.id.automation_wifi_permission).visibility =
+            if (hasWifiPermission()) android.view.View.GONE else android.view.View.VISIBLE
         all.forEachIndexed { index, rule ->
             val target = profiles.find { it.id == rule.profileId }?.name ?: "Target profile no longer exists"
             val button = Button(this).apply {
                 isAllCaps = false; isFocusable = true
-                text = "${index + 1}. ${rule.condition.label} → $target\n${if (rule.enabled) "Enabled" else "Disabled"} — Select to manage"
+                text = "${index + 1}. ${rule.summaryCondition()} → $target\n${if (rule.enabled) "Enabled" else "Disabled"} — Select to manage"
                 contentDescription = text; setOnClickListener { actions(rule, index, all) }
             }
             rules.addView(button, LinearLayout.LayoutParams(-1, -2))
@@ -107,10 +128,46 @@ override fun onResume() { super.onResume(); render() }
     private fun chooseCondition(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean = false) {
         val values = ProfileRuleCondition.values()
         AlertDialog.Builder(this).setTitle("Condition").setItems(values.map { it.label }.toTypedArray()) { _, selected ->
-            list[index] = rule.copy(condition = values[selected])
-            if (thenProfile) chooseProfile(list[index], index, list) else saveOrdered(list)
+            val updated = rule.copy(condition = values[selected], networkIdentifier = null)
+            list[index] = updated
+            if (updated.condition == ProfileRuleCondition.WIFI_NETWORK) {
+                enterNetwork(updated, index, list, thenProfile)
+            } else if (thenProfile) chooseProfile(updated, index, list) else saveOrdered(list)
         }.show()
     }
+
+    private fun enterNetwork(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean) {
+        val current = currentNetworkState().takeIf { it.wifiIdentity == WifiIdentityStatus.KNOWN }?.wifiSsid.orEmpty()
+        val input = EditText(this).apply {
+            hint = "Network name (SSID)"
+            setText(normalizeSsid(rule.networkIdentifier) ?: current)
+            isSingleLine = true
+            isFocusableInTouchMode = true
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("Specific Wi-Fi network")
+            .setMessage(if (current.isNotBlank()) "Currently connected: $current\nYou can use it or enter another network name." else "Enter a network name. Android is not currently exposing a usable connected name.")
+            .setView(input).setPositiveButton("Continue", null).setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val normalized = normalizeSsid(input.text?.toString())
+                if (normalized == null) input.error = "Enter a usable network name" else {
+                    val updated = rule.copy(networkIdentifier = normalized)
+                    list[index] = updated
+                    dialog.dismiss()
+                    if (thenProfile) chooseProfile(updated, index, list) else saveOrdered(list)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun currentNetworkState(): ProfileNetworkState {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        return ProfileNetworkStateCollector.collect(this, config, cm)
+    }
+
+    private fun wifiPermission() = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
+    private fun hasWifiPermission() = ContextCompat.checkSelfPermission(this, wifiPermission()) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Prompts the user to select the rule's target profile and saves the updated rule list.
