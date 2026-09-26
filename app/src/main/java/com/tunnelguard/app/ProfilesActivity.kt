@@ -65,7 +65,7 @@ class ProfilesActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) {
                     val id = config.createProfile(name)
                     config.setSelectedProfileId(id)
-                    ProfileAutomationManager.noteManualSelection()
+                    ProfileAutomationManager.noteManualSelection(this)
                     loadProfilesList()
                     triggerVpnServiceUpdate()
                     Toast.makeText(this, "Profile '$name' created and selected", Toast.LENGTH_SHORT).show()
@@ -110,7 +110,7 @@ class ProfilesActivity : AppCompatActivity() {
                 when (which) {
                     selectIndex -> {
                         config.setSelectedProfileId(profile.id)
-                        ProfileAutomationManager.noteManualSelection()
+                        ProfileAutomationManager.noteManualSelection(this)
                         Toast.makeText(this, "Selected: ${profile.name}", Toast.LENGTH_SHORT).show()
                     }
                     setDefaultIndex -> {

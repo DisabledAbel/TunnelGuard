@@ -93,11 +93,26 @@ class ProfileAutomationTest {
 
     @Test fun manualOverrideSurvivesSameIdentityAndClearsOnSsidChange() {
         val tracker = ProfileAutomationStateTracker()
-        tracker.noteManualSelection()
-        assertEquals(ProfileAutomationResult.ManualOverride, tracker.observe(wifi("A")))
+        tracker.noteManualSelection(wifi("A"))
         assertEquals(ProfileAutomationResult.ManualOverride, tracker.observe(wifi("A")))
         assertNull(tracker.observe(wifi("B")))
         assertEquals(ProfileAutomationResult.UnchangedState, tracker.observe(wifi("B")))
+    }
+
+    @Test fun ssidIdentifierEnforcesAndroidLengthLimits() {
+        assertTrue(isValidSsidIdentifier("é".repeat(16)))
+        assertFalse(isValidSsidIdentifier("é".repeat(17)))
+        assertTrue(isValidSsidIdentifier("ab".repeat(32)))
+        assertTrue(isValidSsidIdentifier("0x" + "ab".repeat(32)))
+        assertFalse(isValidSsidIdentifier("ab".repeat(33)))
+        assertFalse(isValidSsidIdentifier("gg".repeat(20)))
+    }
+
+    @Test fun clearingTrackerRemovesBoundManualOverride() {
+        val tracker = ProfileAutomationStateTracker()
+        tracker.noteManualSelection(wifi("A"))
+        tracker.clear()
+        assertNull(tracker.observe(wifi("A")))
     }
 
     private fun wifi(ssid: String) = ProfileNetworkState(true, false, false, WifiIdentityStatus.KNOWN, ssid)

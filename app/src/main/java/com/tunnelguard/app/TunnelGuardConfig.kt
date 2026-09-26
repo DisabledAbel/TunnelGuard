@@ -335,7 +335,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
                 var enabled = o.optBoolean("enabled", true)
                 if (target !in profiles && enabled) { enabled = false; addLog("Profile automation rule disabled: target profile no longer exists ($id)", "WARN") }
                 val identifier = (o.opt("networkIdentifier") as? String)?.takeIf { it.isNotBlank() }
-                if (condition == ProfileRuleCondition.WIFI_NETWORK && normalizeSsid(identifier) == null) {
+                if (condition == ProfileRuleCondition.WIFI_NETWORK && !isValidSsidIdentifier(identifier)) {
                     throw IllegalArgumentException("specific Wi-Fi rule has no usable network identifier")
                 }
                 result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i), normalizeSsid(identifier))
@@ -354,7 +354,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
         rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
             val identifier = normalizeSsid(rule.networkIdentifier)
             if (rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(rule.id) &&
-                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || identifier != null)) {
+                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || isValidSsidIdentifier(identifier))) {
                 val obj = JSONObject().put("id", rule.id).put("condition", rule.condition.name)
                     .put("profileId", rule.profileId).put("enabled", rule.enabled).put("priority", rule.priority)
                 if (identifier != null) obj.put("networkIdentifier", identifier)
