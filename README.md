@@ -104,8 +104,8 @@ so the service immediately rebuilds the protected package routing while fail-clo
 
 Wi-Fi names are evaluated locally and are never sent to a server; TunnelGuard does not read BSSIDs,
 MAC addresses, location coordinates, or retain a network history. Android may require Nearby Wi-Fi
-Devices (Android 13+) or location permission (older releases) before exposing an SSID. Permission is
-requested only after selecting the clearly labelled control on this screen. If permission is denied,
+Devices (Android 13+) and location permission before exposing an SSID; Location Services may also
+need to be enabled. Permissions are requested only after selecting the clearly labelled control. If permission is denied,
 or a TV manufacturer does not expose the name, named and Unknown Wi-Fi rules are skipped while
 transport-level Wi-Fi, Ethernet, and VPN rules continue to work. Availability therefore varies by
 Android TV/Google TV device and OS version.

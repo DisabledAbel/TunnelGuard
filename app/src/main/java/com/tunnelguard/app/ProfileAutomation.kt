@@ -64,6 +64,14 @@ fun normalizeSsid(value: String?): String? {
     return result
 }
 
+/** Validates Android's UTF-8 SSID form (32 bytes) and hexadecimal form (32 octets). */
+fun isValidSsidIdentifier(value: String?): Boolean {
+    val normalized = normalizeSsid(value) ?: return false
+    if (normalized.toByteArray(Charsets.UTF_8).size <= 32) return true
+    val hex = normalized.removePrefix("0x").removePrefix("0X")
+    return hex.length in 2..64 && hex.length % 2 == 0 && hex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+}
+
 /** Pure deterministic rule selection; Android network discovery is intentionally kept outside. */
 object ProfileRuleEvaluator {
     fun match(rules: List<ProfileSwitchRule>, state: ProfileNetworkState, validProfiles: Set<String>): ProfileSwitchRule? {
@@ -141,14 +149,13 @@ object ProfileNetworkStateCollector {
 class ProfileAutomationStateTracker {
     private var lastObserved: String? = null
     private var manualOverride: String? = null
-    private var manualPending = false
-    fun noteManualSelection() { manualOverride = null; manualPending = true }
+    fun noteManualSelection(state: ProfileNetworkState) {
+        manualOverride = state.signature
+        lastObserved = state.signature
+    }
+    fun clear() { lastObserved = null; manualOverride = null }
     fun observe(state: ProfileNetworkState): ProfileAutomationResult? {
         val signature = state.signature
-        if (manualPending) {
-            manualPending = false; manualOverride = signature; lastObserved = signature
-            return ProfileAutomationResult.ManualOverride
-        }
         if (manualOverride == signature) return ProfileAutomationResult.ManualOverride
         if (lastObserved == signature) return ProfileAutomationResult.UnchangedState
         lastObserved = signature
@@ -167,7 +174,16 @@ object ProfileAutomationManager {
     @Volatile var latestState: ProfileNetworkState? = null
         private set
 
-    fun noteManualSelection() = tracker.noteManualSelection()
+    fun noteManualSelection(context: Context) {
+        val config = TunnelGuardConfig(context.applicationContext)
+        if (!config.isAutomaticProfileSwitchingEnabled()) {
+            tracker.clear()
+            return
+        }
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        tracker.noteManualSelection(readState(context, config, cm))
+    }
+    fun clearManualSelectionState() = tracker.clear()
     fun cancelPending() { cancelled = true; pending?.let(handler::removeCallbacks); pending = null }
     fun resume() { cancelled = false }
     fun onNetworkChanged(context: Context, immediate: Boolean = false) {
@@ -180,7 +196,10 @@ object ProfileAutomationManager {
 
     fun evaluateNow(context: Context): ProfileAutomationResult {
         val config = TunnelGuardConfig(context.applicationContext)
-        if (!config.isAutomaticProfileSwitchingEnabled()) return ProfileAutomationResult.Disabled
+        if (!config.isAutomaticProfileSwitchingEnabled()) {
+            tracker.clear()
+            return ProfileAutomationResult.Disabled
+        }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val state = readState(context, config, cm)
         latestState = state

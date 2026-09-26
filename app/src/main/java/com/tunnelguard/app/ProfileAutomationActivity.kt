@@ -23,7 +23,7 @@ class ProfileAutomationActivity : AppCompatActivity() {
     private lateinit var toggle: CheckBox
     private lateinit var status: TextView
     private lateinit var toggleRow: LinearLayout
-    private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { render() }
+    private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { render() }
 
     /**
      * Initializes the profile automation screen and configures its controls.
@@ -36,13 +36,16 @@ class ProfileAutomationActivity : AppCompatActivity() {
         toggle = findViewById(R.id.automation_toggle); status = findViewById(R.id.automation_status)
         toggleRow = findViewById(R.id.automation_toggle_row)
         toggleRow.setOnClickListener {
-            config.setAutomaticProfileSwitchingEnabled(!config.isAutomaticProfileSwitchingEnabled()); render()
+            val enabled = !config.isAutomaticProfileSwitchingEnabled()
+            config.setAutomaticProfileSwitchingEnabled(enabled)
+            if (!enabled) ProfileAutomationManager.clearManualSelectionState()
+            render()
         }
         findViewById<Button>(R.id.automation_add).setOnClickListener { edit(null) }
         findViewById<Button>(R.id.automation_wifi_permission).setOnClickListener {
             AlertDialog.Builder(this).setTitle("Wi-Fi network name access")
-                .setMessage("Android may require permission to reveal the connected Wi-Fi name. TunnelGuard uses it only on this device for profile rules; it does not collect location or send network names anywhere.")
-                .setPositiveButton("Continue") { _, _ -> permissionRequest.launch(wifiPermission()) }
+                .setMessage("Android requires Wi-Fi and location permission to reveal the connected network name, and Location Services must be enabled. TunnelGuard uses the name only on this device for profile rules; it does not collect coordinates or send network names anywhere.")
+                .setPositiveButton("Continue") { _, _ -> permissionRequest.launch(wifiPermissions()) }
                 .setNegativeButton("Not now", null).show()
         }
         findViewById<Button>(R.id.automation_back).setOnClickListener { finish() }
@@ -128,7 +131,11 @@ override fun onResume() { super.onResume(); render() }
     private fun chooseCondition(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean = false) {
         val values = ProfileRuleCondition.values()
         AlertDialog.Builder(this).setTitle("Condition").setItems(values.map { it.label }.toTypedArray()) { _, selected ->
-            val updated = rule.copy(condition = values[selected], networkIdentifier = null)
+            val condition = values[selected]
+            val updated = rule.copy(
+                condition = condition,
+                networkIdentifier = if (condition == ProfileRuleCondition.WIFI_NETWORK && rule.condition == condition) rule.networkIdentifier else null
+            )
             list[index] = updated
             if (updated.condition == ProfileRuleCondition.WIFI_NETWORK) {
                 enterNetwork(updated, index, list, thenProfile)
@@ -150,7 +157,7 @@ override fun onResume() { super.onResume(); render() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val normalized = normalizeSsid(input.text?.toString())
-                if (normalized == null) input.error = "Enter a usable network name" else {
+                if (!isValidSsidIdentifier(normalized)) input.error = "Enter a Wi-Fi name of at most 32 UTF-8 bytes (or 32 hexadecimal octets)" else {
                     val updated = rule.copy(networkIdentifier = normalized)
                     list[index] = updated
                     dialog.dismiss()
@@ -166,8 +173,13 @@ override fun onResume() { super.onResume(); render() }
         return ProfileNetworkStateCollector.collect(this, config, cm)
     }
 
-    private fun wifiPermission() = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
-    private fun hasWifiPermission() = ContextCompat.checkSelfPermission(this, wifiPermission()) == PackageManager.PERMISSION_GRANTED
+    private fun wifiPermissions() = if (Build.VERSION.SDK_INT >= 33) {
+        arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION)
+    } else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+
+    private fun hasWifiPermission() = wifiPermissions().all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
 
     /**
      * Prompts the user to select the rule's target profile and saves the updated rule list.
