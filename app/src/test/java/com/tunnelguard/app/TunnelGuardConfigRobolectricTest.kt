@@ -169,6 +169,29 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    fun invalidImportedRuleDoesNotReserveItsId() {
+        val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
+        backup.put("profile_switch_rules", JSONArray()
+            .put(JSONObject().put("id", "shared").put("condition", "WIFI_NETWORK")
+                .put("profileId", "streaming").put("networkIdentifier", "<unknown ssid>"))
+            .put(JSONObject().put("id", "shared").put("condition", "WIFI_NETWORK")
+                .put("profileId", "streaming").put("networkIdentifier", "HomeNetwork")))
+
+        assertTrue(config.importConfigFromJson(backup.toString()))
+        assertEquals("HomeNetwork", config.getProfileSwitchRules().single().networkIdentifier)
+    }
+
+    @Test
+    fun invalidSavedRuleDoesNotReserveItsId() {
+        config.saveProfileSwitchRules(listOf(
+            ProfileSwitchRule("shared", ProfileRuleCondition.WIFI_NETWORK, "streaming", priority = 0, networkIdentifier = "<unknown ssid>"),
+            ProfileSwitchRule("shared", ProfileRuleCondition.WIFI_NETWORK, "streaming", priority = 1, networkIdentifier = "HomeNetwork")
+        ))
+
+        assertEquals("HomeNetwork", config.getProfileSwitchRules().single().networkIdentifier)
+    }
+
+    @Test
     @Config(sdk = [Build.VERSION_CODES.R])
     fun testDetectRealVpnCapabilitiesOnAndroidR() {
         val mockConnectivityManager = mock(ConnectivityManager::class.java)

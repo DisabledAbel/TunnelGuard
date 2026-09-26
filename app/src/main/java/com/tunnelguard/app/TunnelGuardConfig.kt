@@ -329,7 +329,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
             val array = JSONArray(prefs.getString(KEY_PROFILE_RULES, "[]") ?: "[]")
             for (i in 0 until array.length()) try {
                 val o = array.getJSONObject(i); val id = o.getString("id")
-                require(id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(id))
+                require(id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")))
                 val condition = ProfileRuleCondition.valueOf(o.getString("condition"))
                 val target = o.getString("profileId")
                 var enabled = o.optBoolean("enabled", true)
@@ -338,6 +338,7 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
                 if (condition == ProfileRuleCondition.WIFI_NETWORK && !isValidSsidIdentifier(identifier)) {
                     throw IllegalArgumentException("specific Wi-Fi rule has no usable network identifier")
                 }
+                require(seen.add(id))
                 result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i), normalizeSsid(identifier))
             } catch (e: Exception) { addLog("Ignored malformed profile automation rule at index $i: ${e.message}", "WARN") }
         } catch (e: Exception) { addLog("Ignored malformed profile switch rules: ${e.message}", "WARN") }
@@ -353,8 +354,9 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
         val array = JSONArray(); val seen = mutableSetOf<String>()
         rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
             val identifier = normalizeSsid(rule.networkIdentifier)
-            if (rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(rule.id) &&
-                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || isValidSsidIdentifier(identifier))) {
+            val valid = rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) &&
+                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || isValidSsidIdentifier(identifier))
+            if (valid && seen.add(rule.id)) {
                 val obj = JSONObject().put("id", rule.id).put("condition", rule.condition.name)
                     .put("profileId", rule.profileId).put("enabled", rule.enabled).put("priority", rule.priority)
                 if (identifier != null) obj.put("networkIdentifier", identifier)
