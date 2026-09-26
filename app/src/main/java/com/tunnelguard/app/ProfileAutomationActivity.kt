@@ -174,8 +174,15 @@ override fun onResume() { super.onResume(); render() }
     }
 
     private fun wifiPermissions() = if (Build.VERSION.SDK_INT >= 33) {
-        arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION)
-    } else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        arrayOf(
+            Manifest.permission.NEARBY_WIFI_DEVICES,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+    } else arrayOf(
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
 
     private fun hasWifiPermission() = wifiPermissions().all {
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
