@@ -174,7 +174,14 @@ class DiagnosticsActivity : AppCompatActivity() {
         val vpnPackage = config.getVpnAppOfChoice()
         val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
         val monitoring = if (ProtectionMonitorService.isMonitoringRunning) "running" else "stopped"
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • $activeProfile • ${config.getProfileSelectionSource()} • ${config.getProfileSwitchRules().size} rules • VPN monitoring: $monitoring$providerText"
+        val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
+        val wifiIdentity = when (automationNetwork.wifiIdentity) {
+            WifiIdentityStatus.KNOWN -> "Wi-Fi: ${automationNetwork.wifiSsid}"
+            WifiIdentityStatus.UNAVAILABLE -> "Wi-Fi identity unavailable"
+            WifiIdentityStatus.NOT_WIFI -> "Wi-Fi not connected"
+        }
+        val matched = config.getLastAutomaticRuleId()?.let { " • Last rule: $it (${config.getLastAutomaticRuleReason()})" }.orEmpty()
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • VPN monitoring: $monitoring$providerText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
@@ -229,6 +236,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         val provider = providerPackage?.let(VpnProviderRegistry::resolve)
         val providerSummary = if (provider == null) "Not configured" else
             "${provider.getDisplayName(this)}\nPackage: $providerPackage\nIntegration: ${provider.integrationLevel}\nCountry Request Support: ${if (provider.capabilities.supportsCountryRequest) "Yes" else "No"}\nAuto-Connect: ${if (config.isAutoConnectVpnEnabled()) "Enabled" else "Disabled"}"
+        val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
         val report = """
             === TUNNELGUARD DIAGNOSTICS REPORT ===
             App Version: ${config.getAppVersionName()}
@@ -246,6 +254,12 @@ class DiagnosticsActivity : AppCompatActivity() {
             Active Profile: ${config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"}
             Selection Source: ${config.getProfileSelectionSource()}
             Configured Rules: ${config.getProfileSwitchRules().size}
+            Automation Transport: ${automationNetwork.transportDescription()}
+            Wi-Fi Identity Status: ${automationNetwork.wifiIdentity}
+            Wi-Fi SSID: ${automationNetwork.wifiSsid ?: "Not available"}
+            Last Matched Rule: ${config.getLastAutomaticRuleId() ?: "None"}
+            Last Match Reason: ${config.getLastAutomaticRuleReason() ?: "None"}
+            Manual Override Active: ${config.getProfileSelectionSource() == "Manual selection"}
             Last Automatic Switch: ${config.getLastAutomaticProfileSwitch().let { if (it == 0L) "Never" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it)) }}
 
             ${ProtectionHealthCollector(this, config).collect().diagnosticsText()}

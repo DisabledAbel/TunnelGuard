@@ -274,11 +274,21 @@ class TunnelGuardConfig(private val context: Context) {
      * @param id The identifier of the profile to select.
      * @param rule The profile-switching rule that triggered the selection.
      */
-    fun setSelectedProfileIdAutomatically(id: String, rule: ProfileSwitchRule) {
+    fun setSelectedProfileIdAutomatically(id: String, rule: ProfileSwitchRule, reason: String = ProfileRuleEvaluator.reason(rule)) {
         prefs.edit().putString("selected_profile_id", id)
             .putString("profile_selection_source", "Rule: ${rule.condition.label}")
+            .putString("last_automatic_rule_id", rule.id)
+            .putString("last_automatic_rule_reason", reason)
             .putLong("last_automatic_profile_switch", System.currentTimeMillis()).apply()
     }
+
+    fun recordAutomaticRuleMatch(rule: ProfileSwitchRule, reason: String) {
+        prefs.edit().putString("last_automatic_rule_id", rule.id)
+            .putString("last_automatic_rule_reason", reason).apply()
+    }
+
+    fun getLastAutomaticRuleId(): String? = prefs.getString("last_automatic_rule_id", null)
+    fun getLastAutomaticRuleReason(): String? = prefs.getString("last_automatic_rule_reason", null)
 
     /**
  * Retrieves the source of the current profile selection.
@@ -324,7 +334,11 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
                 val target = o.getString("profileId")
                 var enabled = o.optBoolean("enabled", true)
                 if (target !in profiles && enabled) { enabled = false; addLog("Profile automation rule disabled: target profile no longer exists ($id)", "WARN") }
-                result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i))
+                val identifier = (o.opt("networkIdentifier") as? String)?.takeIf { it.isNotBlank() }
+                if (condition == ProfileRuleCondition.WIFI_NETWORK && normalizeSsid(identifier) == null) {
+                    throw IllegalArgumentException("specific Wi-Fi rule has no usable network identifier")
+                }
+                result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i), normalizeSsid(identifier))
             } catch (e: Exception) { addLog("Ignored malformed profile automation rule at index $i: ${e.message}", "WARN") }
         } catch (e: Exception) { addLog("Ignored malformed profile switch rules: ${e.message}", "WARN") }
         return result.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id })
@@ -338,9 +352,14 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
     fun saveProfileSwitchRules(rules: List<ProfileSwitchRule>) {
         val array = JSONArray(); val seen = mutableSetOf<String>()
         rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
-            if (rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(rule.id)) array.put(JSONObject()
-                .put("id", rule.id).put("condition", rule.condition.name).put("profileId", rule.profileId)
-                .put("enabled", rule.enabled).put("priority", rule.priority))
+            val identifier = normalizeSsid(rule.networkIdentifier)
+            if (rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) && seen.add(rule.id) &&
+                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || identifier != null)) {
+                val obj = JSONObject().put("id", rule.id).put("condition", rule.condition.name)
+                    .put("profileId", rule.profileId).put("enabled", rule.enabled).put("priority", rule.priority)
+                if (identifier != null) obj.put("networkIdentifier", identifier)
+                array.put(obj)
+            }
         }
         prefs.edit().putString(KEY_PROFILE_RULES, array.toString()).apply()
     }
