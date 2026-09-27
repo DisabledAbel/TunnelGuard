@@ -109,6 +109,20 @@ so they are never transferred to another device. Use overrides intentionally.
 - Quick action buttons to Refresh, Copy to clipboard, Export/Share logs to local storage, and Clear logs.
 - Includes a TV-friendly **Protection Health Check** for VPN permission and runtime state, fail-closed service/protocol coverage, DNS, profiles, monitor permissions, boot, country policy, updater readiness, and Android battery restrictions. Results describe only configuration and prerequisites Android exposes; they do not claim to prove complete security or the absence of every possible leak.
 
+### Policy Tester
+
+Open **System & Protection Diagnostics → Test an app's policy** to select any installed launcher
+app with a D-pad and evaluate it against the active profile, per-app rules, provider and country
+requirements, Auto-Connect, temporary overrides, Emergency Lock, and the currently observable
+upstream VPN. The tester uses the same effective-policy and final-decision resolvers as live
+monitoring. It never launches either app, changes configuration or protection, rebuilds the tunnel,
+or writes a Protection Timeline event. Results can be copied or shared as readable text.
+
+Android does not always expose the identity of an active third-party VPN, and offline country
+lookup may be unavailable. The tester labels such details unknown rather than inventing them;
+where policy requires verification, TunnelGuard applies the same conservative fail-closed result
+as live enforcement.
+
 ### Configuration Backup & Restore
 
 - Backup/Restore your entire protection configuration (profiles, protected packages, boot settings) via clean JSON.

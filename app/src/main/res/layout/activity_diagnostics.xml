@@ -336,6 +336,16 @@
                 android:textColor="@color/text_primary" />
 
             <Button
+                android:id="@+id/btn_policy_tester"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:text="Test an app's policy"
+                android:textColor="@color/text_primary" />
+
+            <Button
                 android:id="@+id/btn_refresh_diag"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

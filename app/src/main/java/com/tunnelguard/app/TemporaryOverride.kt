@@ -190,6 +190,12 @@ object TemporaryOverrideManager {
         initialize(context); pruneAndPersist(true); return engine!!.allStored()
     }
 
+    /** Read-only diagnostic snapshot: never logs, broadcasts, schedules, or writes preferences. */
+    fun snapshot(context: Context): List<TemporaryOverride> {
+        initialize(context)
+        return engine!!.allStored()
+    }
+
     fun onForegroundChanged(context: Context, foregroundPackage: String?) {
         initialize(context)
         val activeEngine = engine!!
