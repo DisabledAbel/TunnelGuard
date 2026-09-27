@@ -93,4 +93,23 @@ class ProtectionTimelineRepositoryTest {
         assertEquals(listOf("second", "first"), recreated.getEvents().map { it.title })
         assertNotEquals(recreated.getEvents()[0].id, recreated.getEvents()[1].id)
     }
+
+    @Test fun deduplicationIsPerKeyAndExpiresAfterWindow() {
+        assertNotNull(repository.record(ProtectionEventType.APP_BACKGROUND, ProtectionEventSeverity.INFO,
+            "background", "background", deduplicationKey = "background:app"))
+        assertNotNull(repository.record(ProtectionEventType.APP_FOREGROUND, ProtectionEventSeverity.INFO,
+            "foreground", "foreground", deduplicationKey = "foreground:app"))
+        assertNull(repository.record(ProtectionEventType.APP_FOREGROUND, ProtectionEventSeverity.INFO,
+            "duplicate", "duplicate", deduplicationKey = "foreground:app"))
+        now += ProtectionTimelineRepository.DEDUPLICATION_WINDOW_MS
+        assertNotNull(repository.record(ProtectionEventType.APP_FOREGROUND, ProtectionEventSeverity.INFO,
+            "later", "later", deduplicationKey = "foreground:app"))
+    }
+
+    @Test fun futureDatedEventsSurviveRetentionPruning() {
+        now += 1_000
+        repository.record(ProtectionEventType.ROUTING_REBUILT, ProtectionEventSeverity.INFO, "future", "future")
+        now -= 1_000
+        assertEquals("future", repository.getEvents().single().title)
+    }
 }
