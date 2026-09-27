@@ -83,6 +83,17 @@ class TemporaryOverrideEngine(private val clock: OverrideClock) {
 
     @Synchronized fun allStored(): List<TemporaryOverride> { reconcile(); return records.values.toList() }
 
+    /** Returns currently valid records without pruning or otherwise changing engine state. */
+    @Synchronized fun nonExpiredSnapshot(): List<TemporaryOverride> {
+        val nowWall = clock.wallTimeMillis()
+        val nowElapsed = clock.elapsedRealtime()
+        return records.values.filter { value ->
+            nowElapsed >= value.createdElapsedTimeMs &&
+                nowWall < requireNotNull(value.expiresWallTimeMs) &&
+                nowElapsed < requireNotNull(value.expiresElapsedTimeMs)
+        }
+    }
+
     @Synchronized fun onForegroundChanged(packageName: String?): List<String> {
         reconcile()
         records[packageName]?.takeIf { it.type == TemporaryOverrideType.UNTIL_APP_CLOSES }?.let {
@@ -193,7 +204,7 @@ object TemporaryOverrideManager {
     /** Read-only diagnostic snapshot: never logs, broadcasts, schedules, or writes preferences. */
     fun snapshot(context: Context): List<TemporaryOverride> {
         initialize(context)
-        return engine!!.allStored()
+        return engine!!.nonExpiredSnapshot()
     }
 
     fun onForegroundChanged(context: Context, foregroundPackage: String?) {

@@ -125,4 +125,16 @@ class TemporaryOverrideEngineTest {
         assertTrue(engine.reconcile().isEmpty())
         assertFalse(engine.cancel("app.video"))
     }
+
+    @Test fun `non-expired snapshot filters without pruning engine records`() {
+        val clock = Clock()
+        val engine = TemporaryOverrideEngine(clock)
+        engine.startTimed("app.expired", 1, "test")
+        engine.startTimed("app.active", 300_000, "test")
+        clock.advance(1)
+
+        assertEquals(listOf("app.active"), engine.nonExpiredSnapshot().map { it.packageName })
+        assertEquals(listOf("app.expired"), engine.reconcile())
+        assertEquals(listOf("app.active"), engine.allStored().map { it.packageName })
+    }
 }

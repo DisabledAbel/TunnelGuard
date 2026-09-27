@@ -34,7 +34,8 @@ object PolicyDecisionResolver {
             "This app has an active temporary override.")
         if (!policy.requireVpn) return result(PolicyDecision.ALLOWED,
             "The active policy does not require an upstream VPN for this app.")
-        if (input.providerAvailable == false) return result(PolicyDecision.VPN_PROVIDER_UNAVAILABLE,
+        if (input.providerAvailable == false && !input.upstream.isValid)
+            return result(PolicyDecision.VPN_PROVIDER_UNAVAILABLE,
             "The configured VPN provider is not installed or cannot be launched.")
         return when (val upstream = input.upstream) {
             is UpstreamVpnEvaluation.Valid -> result(PolicyDecision.PROTECTED,
