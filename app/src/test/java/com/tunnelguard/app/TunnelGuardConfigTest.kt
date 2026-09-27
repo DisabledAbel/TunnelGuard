@@ -33,6 +33,7 @@ class TunnelGuardConfigTest {
     @Before
     fun setUp() {
         mockContext = mock(Context::class.java)
+        whenever(mockContext.applicationContext).thenReturn(mockContext)
         mockPrefs = mock(SharedPreferences::class.java)
         mockEditor = mock(SharedPreferences.Editor::class.java)
 
