@@ -20,6 +20,7 @@ import com.tunnelguard.app.vpnprovider.VpnProviderRegistry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class DiagnosticsActivity : AppCompatActivity() {
 
@@ -175,13 +176,17 @@ class DiagnosticsActivity : AppCompatActivity() {
         val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
         val monitoring = if (ProtectionMonitorService.isMonitoringRunning) "running" else "stopped"
         val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
+        val automationTime = ProfileTimeStateCollector.collect()
+        val scheduleRules = config.getProfileSwitchRules().filter { it.condition == ProfileRuleCondition.SCHEDULED_TIME }
+        val currentSchedule = ProfileRuleEvaluator.match(scheduleRules, automationNetwork, config.getProfiles().map { it.id }.toSet(), automationTime)
         val wifiIdentity = when (automationNetwork.wifiIdentity) {
             WifiIdentityStatus.KNOWN -> "Wi-Fi: ${automationNetwork.wifiSsid}"
             WifiIdentityStatus.UNAVAILABLE -> "Wi-Fi identity unavailable"
             WifiIdentityStatus.NOT_WIFI -> "Wi-Fi not connected"
         }
         val matched = config.getLastAutomaticRuleId()?.let { " • Last rule: $it (${config.getLastAutomaticRuleReason()})" }.orEmpty()
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • VPN monitoring: $monitoring$providerText"
+        val scheduleText = "Schedule: ${if (scheduleRules.any { it.enabled }) "enabled" else "none"} • Now: ${java.text.DateFormat.getDateTimeInstance().format(Date())} ${TimeZone.getDefault().id} • Matching: ${currentSchedule?.id ?: "none"}"
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
@@ -261,6 +266,10 @@ class DiagnosticsActivity : AppCompatActivity() {
             Last Match Reason: ${config.getLastAutomaticRuleReason() ?: "None"}
             Manual Override Active: ${config.getProfileSelectionSource() == "Manual selection"}
             Last Automatic Switch: ${config.getLastAutomaticProfileSwitch().let { if (it == 0L) "Never" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it)) }}
+            Scheduled Automation: ${if (config.getProfileSwitchRules().any { it.enabled && it.condition == ProfileRuleCondition.SCHEDULED_TIME }) "Enabled" else "No enabled rules"}
+            Local Time / Timezone: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())} / ${TimeZone.getDefault().id}
+            Currently Matching Schedule: ${ProfileRuleEvaluator.match(config.getProfileSwitchRules().filter { it.condition == ProfileRuleCondition.SCHEDULED_TIME }, automationNetwork, config.getProfiles().map { it.id }.toSet(), ProfileTimeStateCollector.collect())?.id ?: "None"}
+            Next Schedule Boundary: ${config.getNextProfileScheduleBoundary().let { if (it == 0L) "None" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it)) }}
 
             ${ProtectionHealthCollector(this, config).collect().diagnosticsText()}
 

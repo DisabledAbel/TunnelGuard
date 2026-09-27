@@ -313,7 +313,15 @@ fun isAutomaticProfileSwitchingEnabled() = prefs.getBoolean(KEY_AUTOMATIC_PROFIL
  *
  * @param enabled Whether automatic profile switching should be enabled.
  */
-fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTOMATIC_PROFILES, enabled).apply()
+fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) {
+    prefs.edit().putBoolean(KEY_AUTOMATIC_PROFILES, enabled).apply()
+    ProfileAutomationManager.clearManualSelectionState()
+    ProfileScheduleManager.schedule(context)
+    if (enabled) ProfileAutomationManager.onNetworkChanged(context, immediate = true)
+}
+
+fun setNextProfileScheduleBoundary(value: Long) = prefs.edit().putLong("next_profile_schedule_boundary", value).apply()
+fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boundary", 0L)
 
     /**
      * Loads and validates the configured profile-switching rules.
@@ -338,8 +346,14 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
                 if (condition == ProfileRuleCondition.WIFI_NETWORK && !isValidSsidIdentifier(identifier)) {
                     throw IllegalArgumentException("specific Wi-Fi rule has no usable network identifier")
                 }
+                val start = if (o.has("startMinute")) o.getInt("startMinute") else null
+                val end = if (o.has("endMinute") && !o.isNull("endMinute")) o.getInt("endMinute") else null
+                val days = mutableSetOf<Int>()
+                o.optJSONArray("daysOfWeek")?.let { a -> for (j in 0 until a.length()) days += a.getInt(j) }
+                val parsed = ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i), normalizeSsid(identifier), start, end, days)
+                if (!parsed.hasValidSchedule()) throw IllegalArgumentException("invalid schedule time or days")
                 require(seen.add(id))
-                result += ProfileSwitchRule(id, condition, target, enabled, o.optInt("priority", i), normalizeSsid(identifier))
+                result += parsed
             } catch (e: Exception) { addLog("Ignored malformed profile automation rule at index $i: ${e.message}", "WARN") }
         } catch (e: Exception) { addLog("Ignored malformed profile switch rules: ${e.message}", "WARN") }
         return result.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id })
@@ -355,15 +369,23 @@ fun setAutomaticProfileSwitchingEnabled(enabled: Boolean) = prefs.edit().putBool
         rules.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).forEach { rule ->
             val identifier = normalizeSsid(rule.networkIdentifier)
             val valid = rule.id.matches(Regex("^[A-Za-z0-9_-]{1,64}$")) &&
-                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || isValidSsidIdentifier(identifier))
+                (rule.condition != ProfileRuleCondition.WIFI_NETWORK || isValidSsidIdentifier(identifier)) && rule.hasValidSchedule()
             if (valid && seen.add(rule.id)) {
                 val obj = JSONObject().put("id", rule.id).put("condition", rule.condition.name)
                     .put("profileId", rule.profileId).put("enabled", rule.enabled).put("priority", rule.priority)
                 if (identifier != null) obj.put("networkIdentifier", identifier)
+                if (rule.condition == ProfileRuleCondition.SCHEDULED_TIME) {
+                    obj.put("startMinute", rule.startMinute)
+                    if (rule.endMinute != null) obj.put("endMinute", rule.endMinute)
+                    obj.put("daysOfWeek", JSONArray().apply { rule.daysOfWeek.sorted().forEach(::put) })
+                }
                 array.put(obj)
             }
         }
         prefs.edit().putString(KEY_PROFILE_RULES, array.toString()).apply()
+        ProfileAutomationManager.clearManualSelectionState()
+        ProfileScheduleManager.schedule(context)
+        if (isAutomaticProfileSwitchingEnabled()) ProfileAutomationManager.onNetworkChanged(context, immediate = true)
     }
 
     /**
