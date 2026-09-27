@@ -9,6 +9,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +17,7 @@ import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import java.util.Date
 import java.util.UUID
+import java.util.Calendar
 
 class ProfileAutomationActivity : AppCompatActivity() {
     private lateinit var config: TunnelGuardConfig
@@ -72,14 +74,16 @@ override fun onResume() { super.onResume(); render() }
             WifiIdentityStatus.UNAVAILABLE -> "Wi-Fi Network: identity unavailable (generic Wi-Fi rules still work)"
             WifiIdentityStatus.NOT_WIFI -> "Wi-Fi Network: not connected"
         }
-        status.text = "Active Profile: $active\nSelected By: ${config.getProfileSelectionSource()}\nTransport: ${network.transportDescription()}\n$identity\nLast Automatic Switch: $last"
+        val next = config.getNextProfileScheduleBoundary().let { if (it == 0L) "None scheduled" else DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) }
+        status.text = "Active Profile: $active\nSelected By: ${config.getProfileSelectionSource()}\nTransport: ${network.transportDescription()}\n$identity\nLast Automatic Switch: $last\nNext profile automation event: $next"
         findViewById<Button>(R.id.automation_wifi_permission).visibility =
             if (hasWifiPermission()) android.view.View.GONE else android.view.View.VISIBLE
         all.forEachIndexed { index, rule ->
             val target = profiles.find { it.id == rule.profileId }?.name ?: "Target profile no longer exists"
             val button = Button(this).apply {
                 isAllCaps = false; isFocusable = true
-                text = "${index + 1}. ${rule.summaryCondition()} → $target\n${if (rule.enabled) "Enabled" else "Disabled"} — Select to manage"
+                val validity = if (rule.profileId !in profiles.map { it.id }) "Invalid target — Disabled" else if (rule.enabled) "Enabled" else "Disabled"
+                text = "${index + 1}. ${rule.summaryCondition()} → $target\n$validity — Select to manage"
                 contentDescription = text; setOnClickListener { actions(rule, index, all) }
             }
             rules.addView(button, LinearLayout.LayoutParams(-1, -2))
@@ -134,13 +138,64 @@ override fun onResume() { super.onResume(); render() }
             val condition = values[selected]
             val updated = rule.copy(
                 condition = condition,
-                networkIdentifier = if (condition == ProfileRuleCondition.WIFI_NETWORK && rule.condition == condition) rule.networkIdentifier else null
+                networkIdentifier = if (condition == ProfileRuleCondition.WIFI_NETWORK && rule.condition == condition) rule.networkIdentifier else null,
+                startMinute = if (condition == ProfileRuleCondition.SCHEDULED_TIME) rule.startMinute else null,
+                endMinute = if (condition == ProfileRuleCondition.SCHEDULED_TIME) rule.endMinute else null,
+                daysOfWeek = if (condition == ProfileRuleCondition.SCHEDULED_TIME) rule.daysOfWeek else emptySet()
             )
             list[index] = updated
             if (updated.condition == ProfileRuleCondition.WIFI_NETWORK) {
                 enterNetwork(updated, index, list, thenProfile)
+            } else if (updated.condition == ProfileRuleCondition.SCHEDULED_TIME) {
+                chooseSchedule(updated, index, list, thenProfile)
             } else if (thenProfile) chooseProfile(updated, index, list) else saveOrdered(list)
         }.show()
+    }
+
+    /** Sequential list dialogs remain fully usable with a TV remote and avoid touch-centric pickers. */
+    private fun chooseSchedule(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean) {
+        chooseTime("Start time", rule.startMinute ?: 18 * 60) { start ->
+            val choices = arrayOf("No end time", "Choose end time")
+            AlertDialog.Builder(this).setTitle("Scheduled period").setItems(choices) { _, selected ->
+                if (selected == 0) chooseDays(rule.copy(startMinute = start, endMinute = null), index, list, thenProfile)
+                else chooseTime("End time", rule.endMinute ?: 23 * 60) { end ->
+                    chooseDays(rule.copy(startMinute = start, endMinute = end), index, list, thenProfile)
+                }
+            }.setNegativeButton("Cancel", null).show()
+        }
+    }
+
+    private fun chooseTime(title: String, initial: Int, done: (Int) -> Unit) {
+        val hours = (0..23).map { String.format("%02d", it) }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("$title — hour").setSingleChoiceItems(hours, initial / 60) { dialog, hour ->
+            dialog.dismiss()
+            val minutes = (0..59).map { String.format("%02d", it) }.toTypedArray()
+            AlertDialog.Builder(this).setTitle("$title — minute").setSingleChoiceItems(minutes, initial % 60) { minuteDialog, minute ->
+                minuteDialog.dismiss(); done(hour * 60 + minute)
+            }.setNegativeButton("Cancel", null).show()
+        }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun chooseDays(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean) {
+        AlertDialog.Builder(this).setTitle("Days").setItems(arrayOf("Every day", "Weekdays", "Weekends", "Custom")) { _, selected ->
+            val preset = when (selected) { 0 -> ScheduleRules.everyDay; 1 -> ScheduleRules.weekdays; 2 -> ScheduleRules.weekends; else -> null }
+            if (preset != null) finishSchedule(rule.copy(daysOfWeek = preset), index, list, thenProfile)
+            else {
+                val values = intArrayOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY)
+                val checked = BooleanArray(values.size) { values[it] in rule.daysOfWeek }
+                AlertDialog.Builder(this).setTitle("Custom days").setMultiChoiceItems(arrayOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), checked) { _, which, value -> checked[which] = value }
+                    .setPositiveButton("Continue") { _, _ ->
+                        val days = values.filterIndexed { i, _ -> checked[i] }.toSet()
+                        if (days.isEmpty()) Toast.makeText(this, "Select at least one day", Toast.LENGTH_SHORT).show()
+                        else finishSchedule(rule.copy(daysOfWeek = days), index, list, thenProfile)
+                    }.setNegativeButton("Cancel", null).show()
+            }
+        }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun finishSchedule(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean) {
+        list[index] = rule
+        if (thenProfile) chooseProfile(rule, index, list) else saveOrdered(list)
     }
 
     private fun enterNetwork(rule: ProfileSwitchRule, index: Int, list: MutableList<ProfileSwitchRule>, thenProfile: Boolean) {

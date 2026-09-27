@@ -146,6 +146,31 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    fun scheduledAutomationRuleRoundTripsThroughBackup() {
+        val original = ProfileSwitchRule("night", ProfileRuleCondition.SCHEDULED_TIME, "streaming", priority = 4,
+            startMinute = 22 * 60, endMinute = 6 * 60,
+            daysOfWeek = setOf(java.util.Calendar.MONDAY, java.util.Calendar.WEDNESDAY, java.util.Calendar.FRIDAY))
+        config.saveProfileSwitchRules(listOf(original))
+        val exported = requireNotNull(config.exportConfigToJson())
+        config.saveProfileSwitchRules(emptyList())
+
+        assertTrue(config.importConfigFromJson(exported))
+        assertEquals(original, config.getProfileSwitchRules().single())
+    }
+
+    @Test
+    fun malformedScheduleIsIgnoredWithoutFailingImport() {
+        val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
+        backup.put("profile_switch_rules", JSONArray().put(JSONObject()
+            .put("id", "bad_time").put("condition", "SCHEDULED_TIME").put("profileId", "streaming")
+            .put("startMinute", 1440).put("daysOfWeek", JSONArray().put(99))))
+
+        assertTrue(config.importConfigFromJson(backup.toString()))
+        assertTrue(config.getProfileSwitchRules().isEmpty())
+        assertTrue(config.getLogs().any { it.contains("invalid schedule") })
+    }
+
+    @Test
     fun oldAutomationRuleWithoutNewFieldStillImports() {
         val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
         backup.put("profile_switch_rules", JSONArray().put(JSONObject()

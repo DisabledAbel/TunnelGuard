@@ -2,6 +2,8 @@ package com.tunnelguard.app
 
 import android.content.Context
 import android.content.Intent
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
@@ -9,6 +11,8 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.util.Calendar
+import java.util.TimeZone
 
 enum class ProfileRuleCondition(val label: String) {
     WIFI_CONNECTED("Wi-Fi Connected"),
@@ -16,7 +20,8 @@ enum class ProfileRuleCondition(val label: String) {
     UNKNOWN_WIFI_NETWORK("Unknown Wi-Fi Network"),
     ETHERNET_CONNECTED("Ethernet Connected"),
     VPN_CONNECTED("VPN Connected"),
-    VPN_DISCONNECTED("VPN Disconnected")
+    VPN_DISCONNECTED("VPN Disconnected"),
+    SCHEDULED_TIME("Scheduled Time")
 }
 
 /** Optional fields make rules written by older TunnelGuard versions source and storage compatible. */
@@ -26,13 +31,77 @@ data class ProfileSwitchRule(
     val profileId: String,
     val enabled: Boolean = true,
     val priority: Int = 0,
-    val networkIdentifier: String? = null
+    val networkIdentifier: String? = null,
+    /** Minutes after local midnight (0..1439), deliberately independent of display formatting. */
+    val startMinute: Int? = null,
+    /** Exclusive range end, or null for a one-time daily transition. */
+    val endMinute: Int? = null,
+    /** java.util.Calendar day constants, stored explicitly rather than as UI labels. */
+    val daysOfWeek: Set<Int> = emptySet()
 ) {
     fun summaryCondition(): String = when (condition) {
         ProfileRuleCondition.WIFI_NETWORK -> "${normalizeSsid(networkIdentifier) ?: "Unnamed"} Wi-Fi"
         ProfileRuleCondition.UNKNOWN_WIFI_NETWORK -> "Unknown Wi-Fi"
         ProfileRuleCondition.ETHERNET_CONNECTED -> "Ethernet"
+        ProfileRuleCondition.SCHEDULED_TIME -> ScheduleRules.summary(this)
         else -> condition.label
+    }
+
+    fun hasValidSchedule() = condition != ProfileRuleCondition.SCHEDULED_TIME ||
+        startMinute in 0..1439 && (endMinute == null || endMinute in 0..1439) &&
+        daysOfWeek.isNotEmpty() && daysOfWeek.all { it in Calendar.SUNDAY..Calendar.SATURDAY }
+}
+
+data class ProfileTimeState(val dayOfWeek: Int, val minuteOfDay: Int, val epochMillis: Long, val timeZoneId: String)
+
+/** Pure local wall-clock matching. Calendar construction is kept at the Android boundary. */
+object ScheduleRules {
+    val everyDay = (Calendar.SUNDAY..Calendar.SATURDAY).toSet()
+    val weekdays = setOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY)
+    val weekends = setOf(Calendar.SATURDAY, Calendar.SUNDAY)
+
+    fun matches(rule: ProfileSwitchRule, time: ProfileTimeState): Boolean {
+        if (!rule.hasValidSchedule()) return false
+        val start = rule.startMinute!!
+        val end = rule.endMinute
+        if (end == null) return time.dayOfWeek in rule.daysOfWeek && time.minuteOfDay == start
+        if (start == end) return time.dayOfWeek in rule.daysOfWeek // explicit 24-hour range
+        return if (start < end) {
+            time.dayOfWeek in rule.daysOfWeek && time.minuteOfDay >= start && time.minuteOfDay < end
+        } else {
+            (time.dayOfWeek in rule.daysOfWeek && time.minuteOfDay >= start) ||
+                (previousDay(time.dayOfWeek) in rule.daysOfWeek && time.minuteOfDay < end)
+        }
+    }
+
+    fun phaseSignature(rules: List<ProfileSwitchRule>, time: ProfileTimeState): String = rules.asSequence()
+        .filter { it.enabled && it.condition == ProfileRuleCondition.SCHEDULED_TIME && matches(it, time) }
+        .map { it.id }.sorted().joinToString(",")
+
+    fun summary(rule: ProfileSwitchRule): String {
+        if (!rule.hasValidSchedule()) return "Invalid schedule"
+        val days = when (rule.daysOfWeek) {
+            everyDay -> "Every day"
+            weekdays -> "Weekdays"
+            weekends -> "Weekends"
+            else -> rule.daysOfWeek.sorted().joinToString(", ") { shortDay(it) }
+        }
+        val range = formatMinute(rule.startMinute!!) + (rule.endMinute?.let { "–${formatMinute(it)}" } ?: "")
+        return "$days • $range"
+    }
+
+    fun formatMinute(value: Int): String {
+        val c = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, value / 60); set(Calendar.MINUTE, value % 60) }
+        return java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(c.time)
+    }
+    private fun shortDay(day: Int) = arrayOf("", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").getOrElse(day) { "?" }
+    private fun previousDay(day: Int) = if (day == Calendar.SUNDAY) Calendar.SATURDAY else day - 1
+}
+
+object ProfileTimeStateCollector {
+    fun collect(nowMillis: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): ProfileTimeState {
+        val c = Calendar.getInstance(zone).apply { timeInMillis = nowMillis }
+        return ProfileTimeState(c.get(Calendar.DAY_OF_WEEK), c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE), nowMillis, zone.id)
     }
 }
 
@@ -74,7 +143,7 @@ fun isValidSsidIdentifier(value: String?): Boolean {
 
 /** Pure deterministic rule selection; Android network discovery is intentionally kept outside. */
 object ProfileRuleEvaluator {
-    fun match(rules: List<ProfileSwitchRule>, state: ProfileNetworkState, validProfiles: Set<String>): ProfileSwitchRule? {
+    fun match(rules: List<ProfileSwitchRule>, state: ProfileNetworkState, validProfiles: Set<String>, time: ProfileTimeState = ProfileTimeStateCollector.collect()): ProfileSwitchRule? {
         val candidates = rules.filter { it.enabled && it.profileId in validProfiles }
         val usableSsid = if (state.wifiIdentity == WifiIdentityStatus.KNOWN) normalizeSsid(state.wifiSsid) else null
         val recognized = usableSsid != null && candidates.any {
@@ -89,6 +158,7 @@ object ProfileRuleEvaluator {
                 ProfileRuleCondition.ETHERNET_CONNECTED -> state.ethernet
                 ProfileRuleCondition.VPN_CONNECTED -> state.upstreamVpn == true
                 ProfileRuleCondition.VPN_DISCONNECTED -> state.upstreamVpn == false
+                ProfileRuleCondition.SCHEDULED_TIME -> ScheduleRules.matches(rule, time)
             }
         }.sortedWith(compareBy<ProfileSwitchRule> { it.priority }.thenBy { it.id }).firstOrNull()
     }
@@ -96,6 +166,7 @@ object ProfileRuleEvaluator {
     fun reason(rule: ProfileSwitchRule): String = when (rule.condition) {
         ProfileRuleCondition.WIFI_NETWORK -> "Wi-Fi network ${normalizeSsid(rule.networkIdentifier)}"
         ProfileRuleCondition.UNKNOWN_WIFI_NETWORK -> "unrecognized Wi-Fi network"
+        ProfileRuleCondition.SCHEDULED_TIME -> "Scheduled rule ${rule.id}"
         else -> rule.condition.label
     }
 }
@@ -149,13 +220,13 @@ object ProfileNetworkStateCollector {
 class ProfileAutomationStateTracker {
     private var lastObserved: String? = null
     private var manualOverride: String? = null
-    fun noteManualSelection(state: ProfileNetworkState) {
-        manualOverride = state.signature
-        lastObserved = state.signature
+    fun noteManualSelection(state: ProfileNetworkState, schedulePhase: String = "") {
+        manualOverride = state.signature + "|schedule=$schedulePhase"
+        lastObserved = manualOverride
     }
     fun clear() { lastObserved = null; manualOverride = null }
-    fun observe(state: ProfileNetworkState): ProfileAutomationResult? {
-        val signature = state.signature
+    fun observe(state: ProfileNetworkState, schedulePhase: String = ""): ProfileAutomationResult? {
+        val signature = state.signature + "|schedule=$schedulePhase"
         if (manualOverride == signature) return ProfileAutomationResult.ManualOverride
         if (lastObserved == signature) return ProfileAutomationResult.UnchangedState
         lastObserved = signature
@@ -181,7 +252,8 @@ object ProfileAutomationManager {
             return
         }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        tracker.noteManualSelection(readState(context, config, cm))
+        val time = ProfileTimeStateCollector.collect()
+        tracker.noteManualSelection(readState(context, config, cm), ScheduleRules.phaseSignature(config.getProfileSwitchRules(), time))
     }
     fun clearManualSelectionState() = tracker.clear()
     fun cancelPending() { cancelled = true; pending?.let(handler::removeCallbacks); pending = null }
@@ -200,20 +272,26 @@ object ProfileAutomationManager {
             tracker.clear()
             return ProfileAutomationResult.Disabled
         }
+        // App/service startup and every meaningful collector event repair the single pending alarm.
+        ProfileScheduleManager.schedule(context)
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val state = readState(context, config, cm)
+        val time = ProfileTimeStateCollector.collect()
         latestState = state
-        tracker.observe(state)?.let { return it }
+        tracker.observe(state, ScheduleRules.phaseSignature(config.getProfileSwitchRules(), time))?.let { return it }
         if (state.wifiIdentity == WifiIdentityStatus.UNAVAILABLE &&
             config.getProfileSwitchRules().any { it.enabled && it.condition == ProfileRuleCondition.WIFI_NETWORK }) {
             config.addLog("Wi-Fi identity unavailable; named-network rules skipped", "WARN")
         }
         val profiles = config.getProfiles()
-        val rule = ProfileRuleEvaluator.match(config.getProfileSwitchRules(), state, profiles.map { it.id }.toSet())
+        val rule = ProfileRuleEvaluator.match(config.getProfileSwitchRules(), state, profiles.map { it.id }.toSet(), time)
             ?: return config.ensureValidSelectedProfile()
         val reason = ProfileRuleEvaluator.reason(rule)
         if (rule.condition == ProfileRuleCondition.WIFI_NETWORK) {
             config.addLog("Network automation: SSID ${normalizeSsid(state.wifiSsid)} matched rule ${rule.id}")
+        }
+        if (rule.condition == ProfileRuleCondition.SCHEDULED_TIME) {
+            config.addLog("Schedule rule matched: ${ScheduleRules.summary(rule)} -> ${profiles.find { it.id == rule.profileId }?.name ?: rule.profileId}")
         }
         val previous = config.getSelectedProfileId()
         if (previous == rule.profileId) {
@@ -232,6 +310,51 @@ object ProfileAutomationManager {
 
     fun readState(context: Context, config: TunnelGuardConfig, cm: ConnectivityManager?) =
         ProfileNetworkStateCollector.collect(context, config, cm)
+}
+
+/** Calculates and registers only the next meaningful local-time boundary; DST is delegated to Calendar. */
+object ProfileScheduleManager {
+    const val ACTION_BOUNDARY = "com.tunnelguard.app.PROFILE_SCHEDULE_BOUNDARY"
+    fun nextBoundary(rules: List<ProfileSwitchRule>, nowMillis: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): Long? {
+        val scheduled = rules.filter { it.enabled && it.hasValidSchedule() && it.condition == ProfileRuleCondition.SCHEDULED_TIME }
+        if (scheduled.isEmpty()) return null
+        val now = Calendar.getInstance(zone).apply { timeInMillis = nowMillis }
+        var best: Long? = null
+        fun consider(dayOffset: Int, minute: Int) {
+            val candidate = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, dayOffset)
+                set(Calendar.HOUR_OF_DAY, minute / 60)
+                set(Calendar.MINUTE, minute % 60)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val value = candidate.timeInMillis
+            if (value > nowMillis && (best == null || value < best!!)) best = value
+        }
+        for (offset in 0..8) {
+            val day = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, offset) }.get(Calendar.DAY_OF_WEEK)
+            for (rule in scheduled) if (day in rule.daysOfWeek) {
+                consider(offset, rule.startMinute!!)
+                rule.endMinute?.let { end -> consider(offset + if (rule.startMinute > end) 1 else 0, end) }
+            }
+        }
+        return best
+    }
+
+    fun schedule(context: Context) {
+        val app = context.applicationContext
+        val alarm = app.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val intent = Intent(app, ProfileScheduleReceiver::class.java).setAction(ACTION_BOUNDARY)
+        val pending = PendingIntent.getBroadcast(app, 9017, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        alarm.cancel(pending)
+        val config = TunnelGuardConfig(app)
+        val next = if (config.isAutomaticProfileSwitchingEnabled()) nextBoundary(config.getProfileSwitchRules()) else null
+        config.setNextProfileScheduleBoundary(next ?: 0L)
+        next?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, it, pending)
+            else alarm.set(AlarmManager.RTC_WAKEUP, it, pending)
+        }
+    }
 }
 
 sealed class ProfileAutomationResult {

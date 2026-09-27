@@ -86,7 +86,13 @@ a usable SSID that does not match an enabled named-network rule; it never treats
 permission-restricted, blank, or Android `<unknown ssid>` value as an unrecognized network.
 
 The feature is off by default. Rules retain stable IDs and target profile IDs, so renaming a custom
-profile is safe. Lower priority numbers win; ties are resolved by rule ID. This lets a named rule be
+profile is safe. Rules may also use a local scheduled time, with every-day, weekday, weekend, or
+explicit day selections and an optional end time. Ranges are start-inclusive and end-exclusive;
+overnight ranges (for example, Monday 10 PM–6 AM) associate Tuesday's after-midnight portion with
+Monday. A rule without an end is a transition at that local minute.
+
+Network and schedule rules share one evaluator and priority list. Lower priority numbers win; ties are
+resolved by stable rule ID—there is no hidden preference for schedules. This lets a named rule be
 placed ahead of a generic Wi-Fi rule while keeping both available. Missing targets are disabled
 rather than redirected.
 
@@ -94,12 +100,18 @@ rather than redirected.
 <summary>Network changes, manual overrides, and boot behavior</summary>
 
 Network changes are stabilized for 1.5 seconds. A manual profile selection remains active until the
-next actual network-state change, including a change from one usable Wi-Fi SSID to another; repeated
-callbacks for the same network do not cancel it. Simulation Mode intentionally supplies the VPN-connected state to
+next actual network-state change or scheduled transition (entering/leaving a range or another rule
+becoming active); repeated callbacks while the same schedule and network state remain active do not
+cancel it. Simulation Mode intentionally supplies the VPN-connected state to
 automation. In normal mode TunnelGuard uses its existing upstream VPN detector, which excludes its
 own fail-closed tunnel. At boot, available state is evaluated before starting protection; otherwise
 the existing valid selection is retained (or an invalid selection falls back to the default), and the
-service callback evaluates again when network information arrives. Profile changes use `ACTION_UPDATE`,
+service callback evaluates again when network information arrives. Schedule rules are evaluated
+immediately at boot, including when boot occurs inside an active range. TunnelGuard uses the device's
+current local timezone and reschedules after time/timezone changes. It requests an inexact, doze-aware
+alarm only for the next boundary, so a transition may occur a few seconds late and no exact-alarm
+permission is required. Calendar-based boundary construction naturally follows daylight-saving days
+that are shorter or longer than 24 hours. Profile changes use `ACTION_UPDATE`,
 so the service immediately rebuilds the protected package routing while fail-closed remains authoritative.
 
 Wi-Fi names are evaluated locally and are never sent to a server; TunnelGuard does not read BSSIDs,
