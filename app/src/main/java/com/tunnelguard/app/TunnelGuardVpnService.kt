@@ -860,6 +860,7 @@ class TunnelGuardVpnService : VpnService() {
             config.addLog("No active-profile apps require VPN routing. Closing local tunnel interface.")
             config.setLastDisconnectReason("No apps require VPN routing")
             closeVpnInterface()
+            config.setVPNState(VPNState.DISCONNECTED)
             transitionTo(ServiceState.NO_VPN)
             refreshForegroundNotification()
             sendBroadcast(broadcastIntent)

@@ -129,8 +129,16 @@ class DiagnosticsActivity : AppCompatActivity() {
      * Refreshes the diagnostics display with current VPN, protection, profile, boot, device, version, and log information.
      */
     private fun refreshDiagnostics() {
+        val foregroundPackage = config.getForegroundPackageName(this)
+        val effectivePolicy = config.resolveEffectiveVpnPolicy(foregroundPackage, config.isEmergencyLockEnabled())
         if (!config.isSimulatedVpnEnabled()) {
-            val detection = config.detectRealVpnCapabilities(connectivityManager)
+            val requiredCountryCode = effectivePolicy.requiredCountryCode.takeIf {
+                effectivePolicy.requireCountryMatch
+            }
+            val detection = config.detectRealVpnCapabilities(
+                connectivityManager,
+                requiredCountryCode = requiredCountryCode
+            )
             val currentVpnState = when (detection) {
                 VpnDetectionResult.VPN_DETECTED -> VPNState.PROTECTED
                 VpnDetectionResult.VPN_NOT_DETECTED, VpnDetectionResult.VPN_UNKNOWN -> {
@@ -172,7 +180,6 @@ class DiagnosticsActivity : AppCompatActivity() {
             tvLastTransition.text = format.format(Date(lastTrans))
         }
         val activeProfile = config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
-        val effectivePolicy = config.resolveEffectiveVpnPolicy(config.getForegroundPackageName(this), config.isEmergencyLockEnabled())
         val vpnPackage = effectivePolicy.providerPackage
         val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
         val monitoring = if (ProtectionMonitorService.isMonitoringRunning) "running" else "stopped"
