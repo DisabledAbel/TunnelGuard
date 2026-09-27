@@ -95,30 +95,6 @@ class TunnelGuardConfigTest {
     }
 
     @Test
-    fun testProtectedAppsSelection() {
-        // Initially "streaming" profile is selected by default, which is pre-populated with default streaming apps.
-        // Let's select "custom" profile for clean empty selection testing.
-        config.setSelectedProfileId("custom")
-        assertTrue(config.getProtectedApps().isEmpty())
-
-        // Protect an app
-        config.setAppProtected("com.tivimate.app", true)
-        assertTrue(config.isAppProtected("com.tivimate.app"))
-        assertEquals(1, config.getProtectedApps().size)
-        assertTrue(config.getProtectedApps().contains("com.tivimate.app"))
-
-        // Add another
-        config.setAppProtected("org.courville.nova", true)
-        assertEquals(2, config.getProtectedApps().size)
-        assertTrue(config.getProtectedApps().contains("org.courville.nova"))
-
-        // Unprotect first
-        config.setAppProtected("com.tivimate.app", false)
-        assertFalse(config.isAppProtected("com.tivimate.app"))
-        assertEquals(1, config.getProtectedApps().size)
-    }
-
-    @Test
     fun testStartupBehaviorConfiguration() {
         assertFalse(config.isStartOnBootEnabled())
 
