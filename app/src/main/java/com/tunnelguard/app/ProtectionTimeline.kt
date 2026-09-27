@@ -94,7 +94,7 @@ class ProtectionTimelineRepository(
         val retained = items.filter { now - it.timestamp <= maximumAgeMs }.takeLast(maximumEvents)
         if (deduplicationKey != null) deduplicationTimes[deduplicationKey] = now
         prefs.edit().putString(KEY_EVENTS, encode(retained).toString()).putLong(KEY_SEQUENCE, sequence)
-            .putString(KEY_DEDUPLICATION_TIMES, JSONObject(deduplicationTimes).toString())
+            .putString(KEY_DEDUPLICATION_TIMES, JSONObject(deduplicationTimes as Map<String, Any>).toString())
             .remove(KEY_LAST_DEDUP).commit()
         event
     }
