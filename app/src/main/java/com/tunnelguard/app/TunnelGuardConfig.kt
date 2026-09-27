@@ -473,6 +473,10 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
         )
     }
 
+    /** Apps that must remain on the fail-closed local interface under the active policy. */
+    fun getVpnRequiredProtectedApps(emergencyLock: Boolean = isEmergencyLockEnabled()): Set<String> =
+        getProtectedApps().filterTo(mutableSetOf()) { resolveEffectiveVpnPolicy(it, emergencyLock).requireVpn }
+
     private fun sanitizeProfileVpnPolicy(policy: ProfileVpnPolicy) = policy.copy(
         providerPackage = ProfileVpnPolicy.normalizePackage(policy.providerPackage),
         country = ProfileVpnPolicy.normalizeCountry(policy.country)
@@ -480,15 +484,22 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
 
     private fun parseProfileVpnPolicy(json: JSONObject?): ProfileVpnPolicy {
         if (json == null) return ProfileVpnPolicy()
-        return try {
-            sanitizeProfileVpnPolicy(ProfileVpnPolicy(
-                requirement = ProfileVpnPolicy.RequirementMode.valueOf(json.optString("requirement", "INHERIT")),
-                providerPackage = json.optString("providerPackage").takeIf { it.isNotBlank() },
-                country = json.optString("country").takeIf { it.isNotBlank() },
-                autoConnect = ProfileVpnPolicy.ToggleMode.valueOf(json.optString("autoConnect", "INHERIT")),
-                countryValidation = ProfileVpnPolicy.ToggleMode.valueOf(json.optString("countryValidation", "INHERIT"))
-            ))
-        } catch (_: Exception) { ProfileVpnPolicy() }
+        val requirement = runCatching {
+            ProfileVpnPolicy.RequirementMode.valueOf(json.optString("requirement", "INHERIT"))
+        }.getOrDefault(ProfileVpnPolicy.RequirementMode.INHERIT)
+        val autoConnect = runCatching {
+            ProfileVpnPolicy.ToggleMode.valueOf(json.optString("autoConnect", "INHERIT"))
+        }.getOrDefault(ProfileVpnPolicy.ToggleMode.INHERIT)
+        val countryValidation = runCatching {
+            ProfileVpnPolicy.ToggleMode.valueOf(json.optString("countryValidation", "INHERIT"))
+        }.getOrDefault(ProfileVpnPolicy.ToggleMode.INHERIT)
+        return sanitizeProfileVpnPolicy(ProfileVpnPolicy(
+            requirement = requirement,
+            providerPackage = json.optString("providerPackage").takeIf { it.isNotBlank() && it != "null" },
+            country = json.optString("country").takeIf { it.isNotBlank() && it != "null" },
+            autoConnect = autoConnect,
+            countryValidation = countryValidation
+        ))
     }
 
     private fun profileVpnPolicyJson(policy: ProfileVpnPolicy) = JSONObject()

@@ -171,6 +171,41 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    fun malformedProfilePolicyFieldDoesNotDiscardValidOverrides() {
+        val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
+        val profile = JSONObject().put("id", "policy-test").put("name", "Policy Test")
+            .put("isSystem", false).put("apps", JSONArray().put("com.example.video"))
+            .put("vpnPolicy", JSONObject()
+                .put("requirement", "BROKEN")
+                .put("providerPackage", "com.example.vpn")
+                .put("country", "gb")
+                .put("autoConnect", "ENABLED")
+                .put("countryValidation", "DISABLED"))
+        backup.put("protection_profiles", JSONArray().put(profile)).put("selected_profile_id", "policy-test")
+
+        assertTrue(config.importConfigFromJson(backup.toString()))
+        val policy = config.getProfiles().single().vpnPolicy
+        assertEquals(ProfileVpnPolicy.RequirementMode.INHERIT, policy.requirement)
+        assertEquals("com.example.vpn", policy.providerPackage)
+        assertEquals("GB", policy.country)
+        assertEquals(ProfileVpnPolicy.ToggleMode.ENABLED, policy.autoConnect)
+        assertEquals(ProfileVpnPolicy.ToggleMode.DISABLED, policy.countryValidation)
+    }
+
+    @Test
+    fun vpnRequiredRoutingExcludesNotRequiredProfileButPreservesHigherPrecedence() {
+        config.setSelectedProfileId("custom")
+        config.setAppProtected("com.example.local", true)
+        config.setProfileVpnPolicy("custom", ProfileVpnPolicy(requirement = ProfileVpnPolicy.RequirementMode.NOT_REQUIRED))
+        assertTrue(config.getVpnRequiredProtectedApps().isEmpty())
+
+        config.setAppVpnCountry("com.example.local", "US")
+        assertEquals(setOf("com.example.local"), config.getVpnRequiredProtectedApps())
+        config.setAppVpnCountry("com.example.local", null)
+        assertEquals(setOf("com.example.local"), config.getVpnRequiredProtectedApps(emergencyLock = true))
+    }
+
+    @Test
     fun oldAutomationRuleWithoutNewFieldStillImports() {
         val backup = JSONObject(requireNotNull(config.exportConfigToJson()))
         backup.put("profile_switch_rules", JSONArray().put(JSONObject()

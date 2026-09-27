@@ -291,8 +291,7 @@ class TunnelGuardVpnService : VpnService() {
                             autoConnectTimeoutJob?.cancel()
                             autoConnectTimeoutJob = null
                             config.addLog("Auto-Connect attempt cancelled because its target or VPN configuration is no longer relevant.")
-                            if (!config.isAppProtected(attemptResult.attempt.targetPackage) &&
-                                config.getPendingVpnRedirectTarget() == attemptResult.attempt.targetPackage) {
+                            if (config.getPendingVpnRedirectTarget() == attemptResult.attempt.targetPackage) {
                                 config.clearPendingVpnRedirectTarget()
                             }
                         }
@@ -509,6 +508,7 @@ class TunnelGuardVpnService : VpnService() {
         val attempt = autoConnectCoordinator.activeAttempt ?: return AutoConnectCoordinator.Evaluation.None
         val policy = config.resolveEffectiveVpnPolicy(attempt.targetPackage, config.isEmergencyLockEnabled())
         val relevant = config.isAppMonitorEnabled() &&
+            policy.requireVpn &&
             policy.autoConnect &&
             config.isAppProtected(attempt.targetPackage) &&
             policy.providerPackage == attempt.vpnPackage &&
@@ -855,10 +855,10 @@ class TunnelGuardVpnService : VpnService() {
         }
 
         // Fetch selected applications for protection
-        val protectedApps = config.getProtectedApps()
+        val protectedApps = config.getVpnRequiredProtectedApps(isEmergencyLock)
         if (protectedApps.isEmpty()) {
-            config.addLog("No apps selected for protection. Closing local tunnel interface.")
-            config.setLastDisconnectReason("No apps selected for protection")
+            config.addLog("No active-profile apps require VPN routing. Closing local tunnel interface.")
+            config.setLastDisconnectReason("No apps require VPN routing")
             closeVpnInterface()
             transitionTo(ServiceState.NO_VPN)
             refreshForegroundNotification()
