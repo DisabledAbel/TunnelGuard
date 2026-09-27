@@ -94,6 +94,9 @@ class ProfilesActivity : AppCompatActivity() {
         val setDefaultIndex = 1
         options.add("Set as Default Profile")
 
+        val vpnSettingsIndex = options.size
+        options.add("VPN Settings")
+
         var renameIndex = -1
         var deleteIndex = -1
 
@@ -117,6 +120,7 @@ class ProfilesActivity : AppCompatActivity() {
                         config.setDefaultProfileId(profile.id)
                         Toast.makeText(this, "Default profile: ${profile.name}", Toast.LENGTH_SHORT).show()
                     }
+                    vpnSettingsIndex -> showVpnSettingsDialog(profile)
                     renameIndex -> {
                         showRenameProfileDialog(profile)
                     }
@@ -130,6 +134,37 @@ class ProfilesActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    private fun showVpnSettingsDialog(profile: TunnelGuardConfig.ProtectionProfile) {
+        val items = arrayOf("VPN Requirement", "VPN Provider", "Required Country", "Auto-Connect", "Country Validation")
+        AlertDialog.Builder(this).setTitle("${profile.name}: VPN Settings").setItems(items) { _, which ->
+            when (which) {
+                0 -> choose(profile, "VPN Requirement", arrayOf("Use Global Setting", "Required", "Not Required")) { i ->
+                    profile.vpnPolicy.copy(requirement = ProfileVpnPolicy.RequirementMode.entries[i]) }
+                1 -> chooseProvider(profile)
+                2 -> choose(profile, "Required Country", arrayOf("Use Global Setting", "Any", "US", "CA", "GB")) { i ->
+                    profile.vpnPolicy.copy(country = arrayOf(null, "ANY", "US", "CA", "GB")[i]) }
+                3 -> choose(profile, "Auto-Connect", arrayOf("Use Global Setting", "Enabled", "Disabled")) { i ->
+                    profile.vpnPolicy.copy(autoConnect = ProfileVpnPolicy.ToggleMode.entries[i]) }
+                4 -> choose(profile, "Country Validation", arrayOf("Use Global Setting", "Required", "Disabled")) { i ->
+                    profile.vpnPolicy.copy(countryValidation = ProfileVpnPolicy.ToggleMode.entries[i]) }
+            }
+        }.setNegativeButton("Close", null).show()
+    }
+
+    private fun choose(profile: TunnelGuardConfig.ProtectionProfile, title: String, labels: Array<String>, update: (Int) -> ProfileVpnPolicy) {
+        AlertDialog.Builder(this).setTitle(title).setItems(labels) { _, i ->
+            config.setProfileVpnPolicy(profile.id, update(i)); loadProfilesList(); triggerVpnServiceUpdate()
+        }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun chooseProvider(profile: TunnelGuardConfig.ProtectionProfile) {
+        val known = arrayOf("ch.protonvpn.android", "com.nordvpn.android", "com.surfshark.vpnclient.android", "com.expressvpn.vpn", "net.mullvad.mullvadvpn", "com.windscribe.vpn")
+        val installed = known.filter { packageManager.getLaunchIntentForPackage(it) != null }
+        val packages = listOf<String?>(null) + installed
+        val labels = listOf("Use Global VPN") + installed.map { com.tunnelguard.app.vpnprovider.VpnProviderRegistry.resolve(it).getDisplayName(this) }
+        choose(profile, "VPN Provider", labels.toTypedArray()) { i -> profile.vpnPolicy.copy(providerPackage = packages[i]) }
     }
 
     private fun showRenameProfileDialog(profile: TunnelGuardConfig.ProtectionProfile) {

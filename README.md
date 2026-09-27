@@ -1,5 +1,21 @@
 # TunnelGuard
 
+## Per-profile VPN policy
+
+Each protection profile can inherit the global VPN defaults or override whether VPN is required,
+the preferred provider, exit country, Auto-Connect, and country validation. Existing and older
+imported profiles inherit without copying global values. Policy precedence is **Emergency Lock**,
+then a per-app country override, profile overrides, global defaults, and finally safe defaults.
+
+An explicitly selected profile provider is never silently replaced when it is unavailable; a
+VPN-required profile remains fail-closed. `ANY` disables the country restriction, while an unknown
+country never satisfies required validation. Auto-Connect continues through the existing provider
+adapter/coordinator and stale attempts are cancelled when the effective provider changes.
+
+Android permits only one active `VpnService`. TunnelGuard can launch supported provider apps but
+cannot control undocumented third-party APIs or silently change a provider's country; those actions
+depend on the provider's documented Android capabilities.
+
 **TunnelGuard** is a security-focused Android TV and Google TV application designed to provide robust per-application VPN protection and enforce **fail-closed networking**.
 
 With TunnelGuard, users can select specific applications (such as TiviMate, media players, or custom apps) that must *only* access the internet when a VPN connection is active. If the VPN path is disconnected or becomes unavailable, TunnelGuard instantly blocks those protected applications from accessing the internet, preventing any normal, unencrypted connection leaks. Other unprotected applications (such as YouTube or Netflix) can continue to access the internet normally.

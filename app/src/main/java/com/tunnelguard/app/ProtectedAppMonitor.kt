@@ -47,6 +47,8 @@ class ProtectedAppMonitor(
             return MonitoringCheckResult.NoAction(null, wasVpnOn, policyChanged)
         }
 
+        val effectivePolicy = config.resolveEffectiveVpnPolicy(currentApp, config.isEmergencyLockEnabled())
+
         var isVpnOn = if (config.isSimulatedVpnEnabled()) {
             val state = config.getVPNState()
             state == VPNState.CONNECTED || state == VPNState.PROTECTED
@@ -57,6 +59,9 @@ class ProtectedAppMonitor(
         }
 
         val isProtected = config.isAppProtected(currentApp) && currentApp != context.packageName
+        if (isProtected && !effectivePolicy.requireVpn) {
+            return MonitoringCheckResult.NoAction(currentApp, true, policyChanged)
+        }
         if (isProtected) {
             val isSuppressed = TunnelGuardVpnService.isPackageSuppressed(currentApp)
             val shouldTrigger = TunnelGuardVpnService.shouldTriggerWarning(

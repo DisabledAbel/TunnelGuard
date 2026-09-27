@@ -172,7 +172,8 @@ class DiagnosticsActivity : AppCompatActivity() {
             tvLastTransition.text = format.format(Date(lastTrans))
         }
         val activeProfile = config.getProfiles().find { it.id == config.getSelectedProfileId() }?.name ?: "Invalid"
-        val vpnPackage = config.getVpnAppOfChoice()
+        val effectivePolicy = config.resolveEffectiveVpnPolicy(config.getForegroundPackageName(this), config.isEmergencyLockEnabled())
+        val vpnPackage = effectivePolicy.providerPackage
         val providerText = vpnPackage?.let { VpnProviderRegistry.resolve(it) }?.let { " • VPN: ${it.getDisplayName(this)} (${it.integrationLevel})" }.orEmpty()
         val monitoring = if (ProtectionMonitorService.isMonitoringRunning) "running" else "stopped"
         val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
@@ -186,7 +187,8 @@ class DiagnosticsActivity : AppCompatActivity() {
         }
         val matched = config.getLastAutomaticRuleId()?.let { " • Last rule: $it (${config.getLastAutomaticRuleReason()})" }.orEmpty()
         val scheduleText = "Schedule: ${if (scheduleRules.any { it.enabled }) "enabled" else "none"} • Now: ${java.text.DateFormat.getDateTimeInstance().format(Date())} ${TimeZone.getDefault().id} • Matching: ${currentSchedule?.id ?: "none"}"
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText"
+        val policyText = "VPN required: ${if (effectivePolicy.requireVpn) "Yes" else "No"} • Provider source: ${effectivePolicy.providerSource.name.lowercase()} • Required country: ${effectivePolicy.requiredCountryCode} (${effectivePolicy.countrySource.name.lowercase()}) • Auto-Connect: ${if (effectivePolicy.autoConnect) "Enabled" else "Disabled"}"
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • $policyText • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {

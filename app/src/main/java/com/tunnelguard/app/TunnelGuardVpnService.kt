@@ -317,9 +317,10 @@ class TunnelGuardVpnService : VpnService() {
                             synchronized(notificationLock) {
                                 notificationForegroundPackage = currentApp
                             }
-                            val vpnChoice = config.getVpnAppOfChoice()
+                            val effectivePolicy = config.resolveEffectiveVpnPolicy(currentApp, config.isEmergencyLockEnabled())
+                            val vpnChoice = effectivePolicy.providerPackage
 
-                            if (config.isAutoConnectVpnEnabled() && vpnChoice != null && manualRecoveryTarget != currentApp) {
+                            if (effectivePolicy.autoConnect && vpnChoice != null && manualRecoveryTarget != currentApp) {
                                 val activeAttempt = autoConnectCoordinator.activeAttempt
                                 if (activeAttempt?.targetPackage == currentApp && activeAttempt.vpnPackage == vpnChoice) {
                                     // One launch per attempt; the timeout path presents manual recovery UI.
@@ -506,10 +507,11 @@ class TunnelGuardVpnService : VpnService() {
 
     private fun evaluateAutoConnectAttempt(): AutoConnectCoordinator.Evaluation {
         val attempt = autoConnectCoordinator.activeAttempt ?: return AutoConnectCoordinator.Evaluation.None
+        val policy = config.resolveEffectiveVpnPolicy(attempt.targetPackage, config.isEmergencyLockEnabled())
         val relevant = config.isAppMonitorEnabled() &&
-            config.isAutoConnectVpnEnabled() &&
+            policy.autoConnect &&
             config.isAppProtected(attempt.targetPackage) &&
-            config.getVpnAppOfChoice() == attempt.vpnPackage &&
+            policy.providerPackage == attempt.vpnPackage &&
             config.getPendingVpnRedirectTarget() == attempt.targetPackage
         val satisfied = if (!relevant) false else if (config.isSimulatedVpnEnabled()) {
             config.getVPNState() in setOf(VPNState.CONNECTED, VPNState.PROTECTED)
