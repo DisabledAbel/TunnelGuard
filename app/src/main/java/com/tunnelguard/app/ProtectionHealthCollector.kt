@@ -29,8 +29,9 @@ class ProtectionHealthCollector(private val context: Context, private val config
         val profileId = config.getSelectedProfileId()
         val profileName = config.getProfiles().firstOrNull { it.id == profileId }?.name ?: profileId
         val apps = config.getProtectedApps()
-        val vpnPackage = config.getVpnAppOfChoice()
         val foreground = config.getForegroundPackageName(context)
+        val effectivePolicy = config.resolveEffectiveVpnPolicy(foreground, config.isEmergencyLockEnabled())
+        val vpnPackage = effectivePolicy.providerPackage
         val foregroundPolicy = config.getForegroundVpnPolicy(foreground)
         val requiredCountry = foregroundPolicy.requiredCountry
         val country = when {
@@ -61,7 +62,7 @@ class ProtectionHealthCollector(private val context: Context, private val config
             config.hasSystemAlertWindowPermission(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
             config.hasNotificationPermission(), config.isIpv6ProtectionActive(),
             config.detectDnsStatus(connectivity, TunnelGuardVpnService.isServiceRunning),
-            config.isStartOnBootEnabled(), config.getLastBootFailure(), config.isAutoConnectVpnEnabled(),
+            config.isStartOnBootEnabled(), config.getLastBootFailure(), effectivePolicy.autoConnect,
             !vpnPackage.isNullOrBlank(), vpnInstalled, country,
             config.getAppVersionName().isNotBlank(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
             installGranted, batteryRestricted, vpnLaunchable

@@ -48,7 +48,8 @@ class TunnelGuardConfig(private val context: Context) {
         val id: String,
         val name: String,
         val appPackages: Set<String>,
-        val isSystem: Boolean = false
+        val isSystem: Boolean = false,
+        val vpnPolicy: ProfileVpnPolicy = ProfileVpnPolicy()
     )
 
     /**
@@ -226,7 +227,7 @@ class TunnelGuardConfig(private val context: Context) {
                 for (j in 0 until appsArr.length()) {
                     apps.add(appsArr.getString(j))
                 }
-                list.add(ProtectionProfile(id, name, apps, isSystem))
+                list.add(ProtectionProfile(id, name, apps, isSystem, parseProfileVpnPolicy(obj.optJSONObject("vpnPolicy"))))
             }
         } catch (e: Exception) {
             addLog("Error parsing profiles: ${e.message}")
@@ -244,6 +245,7 @@ class TunnelGuardConfig(private val context: Context) {
             val appsArr = JSONArray()
             profile.appPackages.forEach { appsArr.put(it) }
             obj.put("apps", appsArr)
+            obj.put("vpnPolicy", profileVpnPolicyJson(profile.vpnPolicy))
             arr.put(obj)
         }
         prefs.edit().putString("protection_profiles", arr.toString()).apply()
@@ -456,6 +458,46 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
         saveProfileSwitchRules(getProfileSwitchRules().map { if (it.profileId == id) it.copy(enabled = false) else it })
     }
 
+    fun setProfileVpnPolicy(profileId: String, policy: ProfileVpnPolicy) {
+        saveProfiles(getProfiles().map { if (it.id == profileId) it.copy(vpnPolicy = sanitizeProfileVpnPolicy(policy)) else it })
+        addLog("Active profile VPN policy changed: $profileId")
+    }
+
+    fun resolveEffectiveVpnPolicy(packageName: String? = null, emergencyLock: Boolean = false): EffectiveVpnPolicy {
+        val profile = getProfiles().find { it.id == getSelectedProfileId() }
+        return EffectiveVpnPolicyResolver.resolve(
+            profile?.vpnPolicy,
+            EffectiveVpnPolicyResolver.Globals(true, getVpnAppOfChoice(), getCountryVpnTargetCountry(),
+                isAutoConnectVpnEnabled(), isCountryVpnSettingEnabled()),
+            packageName?.let(::getAppVpnCountry), emergencyLock
+        )
+    }
+
+    private fun sanitizeProfileVpnPolicy(policy: ProfileVpnPolicy) = policy.copy(
+        providerPackage = ProfileVpnPolicy.normalizePackage(policy.providerPackage),
+        country = ProfileVpnPolicy.normalizeCountry(policy.country)
+    )
+
+    private fun parseProfileVpnPolicy(json: JSONObject?): ProfileVpnPolicy {
+        if (json == null) return ProfileVpnPolicy()
+        return try {
+            sanitizeProfileVpnPolicy(ProfileVpnPolicy(
+                requirement = ProfileVpnPolicy.RequirementMode.valueOf(json.optString("requirement", "INHERIT")),
+                providerPackage = json.optString("providerPackage").takeIf { it.isNotBlank() },
+                country = json.optString("country").takeIf { it.isNotBlank() },
+                autoConnect = ProfileVpnPolicy.ToggleMode.valueOf(json.optString("autoConnect", "INHERIT")),
+                countryValidation = ProfileVpnPolicy.ToggleMode.valueOf(json.optString("countryValidation", "INHERIT"))
+            ))
+        } catch (_: Exception) { ProfileVpnPolicy() }
+    }
+
+    private fun profileVpnPolicyJson(policy: ProfileVpnPolicy) = JSONObject()
+        .put("requirement", policy.requirement.name)
+        .put("providerPackage", policy.providerPackage ?: JSONObject.NULL)
+        .put("country", policy.country ?: JSONObject.NULL)
+        .put("autoConnect", policy.autoConnect.name)
+        .put("countryValidation", policy.countryValidation.name)
+
     /**
      * Retrieves packages that expose TV or standard launcher activities.
      *
@@ -603,8 +645,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
     /** Returns the app override, the enabled global policy, or ANY when no country is required. */
     fun getEffectiveVpnCountry(packageName: String?): String {
         val appRequirement = packageName?.let(::getAppVpnCountry)
-        return appRequirement
-            ?: if (isCountryVpnSettingEnabled()) getCountryVpnTargetCountry().uppercase().trim() else "ANY"
+        return resolveEffectiveVpnPolicy(packageName).requiredCountryCode
     }
 
     /**
@@ -612,11 +653,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
      * with a known app that has no override.
      */
     fun getForegroundVpnPolicy(packageName: String?): ForegroundVpnPolicy {
-        val global = if (isCountryVpnSettingEnabled()) {
-            getCountryVpnTargetCountry().uppercase().trim()
-        } else {
-            "ANY"
-        }
+        val global = resolveEffectiveVpnPolicy(packageName, isEmergencyLockEnabled()).requiredCountryCode
         if (packageName == null) {
             val protected = getProtectedApps()
             val hasOverrides = getAppVpnCountries().keys.any(protected::contains)
@@ -1004,7 +1041,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
                             addLog("Ignored invalid package name on import: $appPkg", "WARN")
                         }
                     }
-                    validatedProfiles.add(ProtectionProfile(id, name, validatedApps, isSystem))
+                    validatedProfiles.add(ProtectionProfile(id, name, validatedApps, isSystem, parseProfileVpnPolicy(pObj.optJSONObject("vpnPolicy"))))
                 }
             }
 
