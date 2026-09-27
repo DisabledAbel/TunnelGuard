@@ -63,8 +63,9 @@ Emergency Lock always suppresses exceptions; a timed exception continues countin
 if it remains unexpired when the lock is removed. Timers use persisted wall-clock and same-boot monotonic
 deadlines plus an inexact wakeup alarm, so late alarms expire at reconciliation and clock changes cannot
 extend access. As a conservative rule all overrides are cleared at reboot; **Until app closes** is
-process-local and is also cleared after process recovery or when foreground monitoring observes that the
-app was left. Temporary runtime records are separate from configuration export/import and Android backup,
+available only when foreground monitoring and its permissions are active. It must reach the foreground
+within 30 seconds, has a four-hour safety limit, and is also cleared after process recovery or when
+foreground monitoring observes that the app was left. Temporary runtime records are separate from configuration export/import and Android backup,
 so they are never transferred to another device. Use overrides intentionally.
 
 ### Onboarding

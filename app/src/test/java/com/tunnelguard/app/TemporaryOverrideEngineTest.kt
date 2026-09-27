@@ -40,6 +40,25 @@ class TemporaryOverrideEngineTest {
         assertNull(engine.active("app.video", false))
     }
 
+    @Test fun `until close expires if target never reaches foreground`() {
+        val clock = Clock()
+        val engine = TemporaryOverrideEngine(clock)
+        engine.startUntilClosed("app.video", "test")
+        clock.advance(TemporaryOverrideEngine.FOREGROUND_START_TIMEOUT_MS)
+        assertNull(engine.active("app.video", false))
+    }
+
+    @Test fun `until close has a maximum lifetime after foreground starts`() {
+        val clock = Clock()
+        val engine = TemporaryOverrideEngine(clock)
+        engine.startUntilClosed("app.video", "test")
+        engine.onForegroundChanged("app.video")
+        clock.advance(TemporaryOverrideEngine.UNTIL_CLOSE_MAX_LIFETIME_MS - 1)
+        assertNotNull(engine.active("app.video", false))
+        clock.advance(1)
+        assertNull(engine.active("app.video", false))
+    }
+
     @Test fun `multiple packages remain independent`() {
         val clock = Clock()
         val engine = TemporaryOverrideEngine(clock)
