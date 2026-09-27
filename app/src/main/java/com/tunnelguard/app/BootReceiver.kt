@@ -11,6 +11,8 @@ class BootReceiver : BroadcastReceiver() {
      */
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            // Conservative reboot policy: no exception survives a new foreground/session epoch.
+            TemporaryOverrideManager.clearForBoot(context)
             val config = TunnelGuardConfig(context)
             ProfileAutomationManager.resume()
             ProfileAutomationManager.onNetworkChanged(context, immediate = true)

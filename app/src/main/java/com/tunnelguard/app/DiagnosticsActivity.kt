@@ -195,7 +195,14 @@ class DiagnosticsActivity : AppCompatActivity() {
         val matched = config.getLastAutomaticRuleId()?.let { " • Last rule: $it (${config.getLastAutomaticRuleReason()})" }.orEmpty()
         val scheduleText = "Schedule: ${if (scheduleRules.any { it.enabled }) "enabled" else "none"} • Now: ${java.text.DateFormat.getDateTimeInstance().format(Date())} ${TimeZone.getDefault().id} • Matching: ${currentSchedule?.id ?: "none"}"
         val policyText = "VPN required: ${if (effectivePolicy.requireVpn) "Yes" else "No"} • Provider source: ${effectivePolicy.providerSource.name.lowercase()} • Required country: ${effectivePolicy.requiredCountryCode} (${effectivePolicy.countrySource.name.lowercase()}) • Auto-Connect: ${if (effectivePolicy.autoConnect) "Enabled" else "Disabled"}"
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • $policyText • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText"
+        val emergency = config.isEmergencyLockEnabled()
+        val overrides = TemporaryOverrideManager.getStoredOverrides(this)
+        val overrideText = overrides.joinToString("; ") { value ->
+            val lifetime = value.expiresWallTimeMs?.let { "${((it - System.currentTimeMillis()).coerceAtLeast(0)) / 1000}s remaining" }
+                ?: "until app closes"
+            "${value.packageName} ${value.type.name.lowercase()} $lifetime${if (emergency) " (suppressed by Emergency Lock)" else ""}"
+        }.ifBlank { "none" }
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • $policyText • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText\nTemporary overrides (${overrides.size}): $overrideText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {
@@ -253,6 +260,13 @@ class DiagnosticsActivity : AppCompatActivity() {
         val providerSummary = if (provider == null) "Not configured" else
             "${provider.getDisplayName(this)}\nPackage: $providerPackage\nSource: ${effectivePolicy.providerSource.name.lowercase()}\nIntegration: ${provider.integrationLevel}\nCountry Request Support: ${if (provider.capabilities.supportsCountryRequest) "Yes" else "No"}\nAuto-Connect: ${if (effectivePolicy.autoConnect) "Enabled" else "Disabled"} (${effectivePolicy.autoConnectSource.name.lowercase()})"
         val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
+        val emergencyLock = config.isEmergencyLockEnabled()
+        val overrideReport = TemporaryOverrideManager.getStoredOverrides(this).joinToString("\n") { value ->
+            val lifetime = value.expiresWallTimeMs?.let {
+                "expires ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it))}, ${((it - System.currentTimeMillis()).coerceAtLeast(0)) / 1000}s remaining"
+            } ?: "until app closes"
+            "${value.packageName}: ${value.type.name}, $lifetime, source=${value.source}, suppressedByEmergencyLock=$emergencyLock"
+        }.ifBlank { "None" }
         val report = """
             === TUNNELGUARD DIAGNOSTICS REPORT ===
             App Version: ${config.getAppVersionName()}
@@ -262,6 +276,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             Protection State: ${securityState.name}
             VPN Provider: $providerSummary
             Protected Apps Count: ${config.getProtectedApps().size}
+            Temporary Overrides: $overrideReport
             Start on Boot: ${config.isStartOnBootEnabled()}
             Last Transition: $transStr
             IPv4 Protection: ${tvIpv4Status.text}

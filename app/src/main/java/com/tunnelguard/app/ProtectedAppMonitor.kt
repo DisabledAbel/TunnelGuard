@@ -43,6 +43,7 @@ class ProtectedAppMonitor(
             ForegroundPolicyObservation(detectedApp, foregroundPolicy)
         )
         val currentApp = detectedApp ?: lastForegroundApp
+        TemporaryOverrideManager.onForegroundChanged(context, detectedApp)
         if (currentApp == null) {
             return MonitoringCheckResult.NoAction(null, wasVpnOn, policyChanged)
         }
@@ -59,6 +60,10 @@ class ProtectedAppMonitor(
         }
 
         val isProtected = config.isAppProtected(currentApp) && currentApp != context.packageName
+        if (isProtected && TemporaryOverrideManager.getActiveOverride(
+                context, currentApp, config.isEmergencyLockEnabled()) != null) {
+            return MonitoringCheckResult.NoAction(currentApp, true, policyChanged)
+        }
         if (isProtected && !effectivePolicy.requireVpn) {
             return MonitoringCheckResult.NoAction(currentApp, true, policyChanged)
         }

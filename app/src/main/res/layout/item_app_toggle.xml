@@ -42,6 +42,14 @@
             android:textSize="14sp"
             android:text="com.example.app" />
 
+        <TextView
+            android:id="@+id/tv_override_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_connecting"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
 
     </LinearLayout>
 
@@ -51,5 +59,15 @@
         android:layout_height="wrap_content"
         android:focusable="false"
         android:clickable="false" />
+
+    <Button
+        android:id="@+id/btn_temporary_allow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:minHeight="48dp"
+        android:text="Temporary Allow"
+        android:focusable="true"
+        android:background="@drawable/tv_button_selector" />
 
 </LinearLayout>

@@ -3,7 +3,7 @@ package com.tunnelguard.app
 import java.util.Locale
 
 enum class ForegroundNotificationType {
-    STARTING, EMPTY, PROTECTED, BLOCKING, CONNECTING, COUNTRY_MISMATCH, EMERGENCY_LOCK, PROBLEM
+    STARTING, EMPTY, PROTECTED, BLOCKING, CONNECTING, COUNTRY_MISMATCH, EMERGENCY_LOCK, TEMPORARY_OVERRIDE, PROBLEM
 }
 
 data class ForegroundNotificationState(
@@ -22,7 +22,9 @@ data class ForegroundNotificationFacts(
     val blocking: Boolean = false,
     val emergencyLock: Boolean = false,
     val autoConnecting: Boolean = false,
-    val problem: String? = null
+    val problem: String? = null,
+    val overrideLabel: String? = null,
+    val overrideRemaining: String? = null
 )
 
 /** Pure rendering policy for the foreground-service notification. */
@@ -46,6 +48,10 @@ object ForegroundNotificationStateSelector {
         }
         if (facts.emergencyLock) {
             return state(ForegroundNotificationType.EMERGENCY_LOCK, "Emergency Lock", "Blocking $count protected ${apps(count)}", facts, count)
+        }
+        facts.overrideLabel?.let { label ->
+            return state(ForegroundNotificationType.TEMPORARY_OVERRIDE, "Temporary Override Active",
+                "$label temporarily allowed${facts.overrideRemaining?.let { " • $it" }.orEmpty()}", facts, count)
         }
         val mismatch = facts.upstreamEvaluation as? UpstreamVpnEvaluation.CountryMismatch
         if (mismatch != null) {
