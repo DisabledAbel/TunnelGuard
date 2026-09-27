@@ -762,6 +762,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
     fun setVPNState(state: VPNState) {
         val normalizedState = if (state == VPNState.CONNECTED) VPNState.PROTECTED else state
         val oldStateName = prefs.getString(KEY_VPN_STATUS, VPNState.DISCONNECTED.name)
+            ?: VPNState.DISCONNECTED.name
         if (normalizedState.name != oldStateName) {
             updateLastStateTransitionTime(System.currentTimeMillis())
         }

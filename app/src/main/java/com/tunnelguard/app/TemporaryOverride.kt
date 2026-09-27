@@ -179,6 +179,8 @@ object TemporaryOverrideManager {
                     packageName = packageName, deduplicationKey = "override-suppressed:$packageName")
             } else if (!emergencyLock) {
                 suppressionLogged.remove(packageName)
+            } else {
+                Unit
             }
         }
         return engine!!.active(packageName, emergencyLock)
