@@ -249,6 +249,16 @@ class TunnelGuardVpnService : VpnService() {
                       config.hasSystemAlertWindowPermission()
 
         if (!enabled) {
+            if (config.isAppMonitorEnabled() && !config.hasUsageStatsPermission(this)) {
+                ProtectionTimelineRepository(this).record(ProtectionEventType.USAGE_ACCESS_MISSING,
+                    ProtectionEventSeverity.WARNING, "Usage access missing",
+                    "Foreground protected-app monitoring requires Usage Access.", deduplicationKey = "permission:usage-missing")
+            }
+            if (config.isAppMonitorEnabled() && !config.hasSystemAlertWindowPermission()) {
+                ProtectionTimelineRepository(this).record(ProtectionEventType.OVERLAY_PERMISSION_MISSING,
+                    ProtectionEventSeverity.WARNING, "Overlay permission missing",
+                    "VPN warning overlays cannot be shown until permission is restored.", deduplicationKey = "permission:overlay-missing")
+            }
             stopMonitoring()
             return
         }
@@ -361,6 +371,10 @@ class TunnelGuardVpnService : VpnService() {
                                     is VpnLaunchResult.Unavailable -> {
                                         cancelAutoConnectAttempt()
                                         config.addLog("VPN provider launch failed: ${launch.reason}.", "WARN")
+                                        ProtectionTimelineRepository(this@TunnelGuardVpnService).record(
+                                            ProtectionEventType.PROVIDER_UNAVAILABLE, ProtectionEventSeverity.WARNING,
+                                            "VPN provider unavailable", launch.reason, packageName = currentApp,
+                                            vpnProvider = vpnChoice)
                                         launchWarningActivity(currentApp)
                                     }
                                     is VpnLaunchResult.UnsupportedAction -> {
@@ -549,6 +563,11 @@ class TunnelGuardVpnService : VpnService() {
         // Every non-stop command revalidates Android's single-VPN authorization. This also lets a
         // user-approved ACTION_START/ACTION_UPDATE clear a prior revocation, not only RECOVER.
         if (VpnService.prepare(this) == null) {
+            if (vpnControlRevoked || ProtectionTimelineRepository(this).getEvents().firstOrNull()?.type == ProtectionEventType.VPN_PERMISSION_REVOKED) {
+                ProtectionTimelineRepository(this).record(ProtectionEventType.VPN_PERMISSION_RESTORED,
+                    ProtectionEventSeverity.INFO, "VPN permission restored",
+                    "TunnelGuard can establish local fail-closed routing again.", deduplicationKey = "permission:restored")
+            }
             vpnControlRevoked = false
         } else {
             // A foreground-service start must be promoted before any early return. This revoked
@@ -658,6 +677,10 @@ class TunnelGuardVpnService : VpnService() {
         vpnControlRevoked = true
         closeVpnInterface()
         config.setVPNState(VPNState.DISCONNECTED)
+        ProtectionTimelineRepository(this).record(ProtectionEventType.VPN_PERMISSION_REVOKED,
+            ProtectionEventSeverity.ERROR, "VPN permission revoked",
+            "Android revoked TunnelGuard's local VPN control; protection recovery is being evaluated.",
+            deduplicationKey = "permission:revoked")
         ProtectionMonitorService.start(this)
         synchronized(notificationLock) {
             notificationProblem = "VPN control changed; checking protection"
@@ -816,6 +839,11 @@ class TunnelGuardVpnService : VpnService() {
                 notificationForegroundPackage = foregroundApp?.takeIf(config::isAppProtected)
             }
             val prevState = config.getVPNState()
+            if (evaluation is UpstreamVpnEvaluation.Valid && prevState != VPNState.PROTECTED && evaluation.detectedCountry != null) {
+                ProtectionTimelineRepository(this).record(ProtectionEventType.COUNTRY_VERIFIED, ProtectionEventSeverity.INFO,
+                    "VPN country verified", "The VPN exit country satisfies the active policy.",
+                    packageName = foregroundApp, country = evaluation.detectedCountry)
+            }
             currentVpnState = when (evaluation) {
                 is UpstreamVpnEvaluation.Valid -> VPNState.PROTECTED
                 is UpstreamVpnEvaluation.CountryMismatch, UpstreamVpnEvaluation.ForegroundUnknown,
@@ -880,11 +908,19 @@ class TunnelGuardVpnService : VpnService() {
         // Never compete for Android's single VPN slot when an unsuitable external VPN is active.
         if (isEmergencyLock) {
             config.addLog("Emergency Lock is ACTIVE. Forcing local blackhole block interface.")
+            ProtectionTimelineRepository(this).record(ProtectionEventType.EMERGENCY_LOCK_ENFORCED,
+                ProtectionEventSeverity.INFO, "Emergency Lock enforcement active",
+                "Local fail-closed routing is being enforced for protected apps.",
+                deduplicationKey = "emergency:enforced")
         } else if (shouldEnterVpnConflict(upstreamEvaluation, isEmergencyLock)) {
             // Android only permits one VPN owner. Do not attempt to establish TunnelGuard's local
             // interface while the unsuitable external VPN owns that slot; state remains invalid
             // and the monitor drives the existing warning/redirect workflow.
             closeVpnInterface()
+            ProtectionTimelineRepository(this).record(ProtectionEventType.VPN_CONFLICT,
+                ProtectionEventSeverity.WARNING, "VPN conflict detected",
+                "An upstream VPN owns Android's VPN slot but does not satisfy the active policy.",
+                deduplicationKey = "vpn:conflict")
             transitionTo(ServiceState.VPN_CONFLICT)
             refreshForegroundNotification()
             sendBroadcast(broadcastIntent)
@@ -1014,6 +1050,10 @@ class TunnelGuardVpnService : VpnService() {
 
         lastEstablishedApps = protectedApps.toSet()
         lastEmergencyLock = isEmergencyLock
+        ProtectionTimelineRepository(this).record(ProtectionEventType.ROUTING_REBUILT, ProtectionEventSeverity.INFO,
+            "Protection routing rebuilt", "Local blocking routes were established for ${protectedApps.size} protected apps.",
+            metadata = mapOf("packageCount" to protectedApps.size.toString(), "reason" to "policy evaluation",
+                "ipv4" to "active", "ipv6" to if (config.isIpv6ProtectionActive()) "active" else "unavailable"))
         if (!simulated) {
             config.setVPNState(VPNState.BLOCKED)
             val successBroadcastIntent = Intent("com.tunnelguard.app.STATE_CHANGED").apply {
@@ -1041,7 +1081,21 @@ class TunnelGuardVpnService : VpnService() {
             else -> null
         }
         if (message != lastCountryFailureLog) {
-            message?.let(config::addLogWarning)
+            message?.let {
+                config.addLogWarning(it)
+                when (evaluation) {
+                    is UpstreamVpnEvaluation.CountryMismatch -> ProtectionTimelineRepository(this).record(
+                        if (evaluation.detected == null) ProtectionEventType.COUNTRY_UNKNOWN else ProtectionEventType.COUNTRY_MISMATCH,
+                        ProtectionEventSeverity.WARNING,
+                        if (evaluation.detected == null) "VPN country unknown" else "VPN country mismatch", it,
+                        packageName = packageName, country = evaluation.detected,
+                        metadata = mapOf("requiredCountry" to evaluation.required,
+                            "detectedCountry" to (evaluation.detected ?: "unknown")))
+                    UpstreamVpnEvaluation.ForegroundUnknown -> ProtectionTimelineRepository(this).record(
+                        ProtectionEventType.COUNTRY_UNKNOWN, ProtectionEventSeverity.WARNING, "VPN country could not be verified", it)
+                    else -> Unit
+                }
+            }
             lastCountryFailureLog = message
         }
     }

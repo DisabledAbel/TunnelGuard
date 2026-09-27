@@ -319,8 +319,20 @@
                 android:layout_marginBottom="12dp"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusDown="@+id/btn_refresh_diag"
+                android:nextFocusDown="@+id/btn_protection_timeline"
                 android:text="Run Protection Health Check"
+                android:textColor="@color/text_primary" />
+
+            <Button
+                android:id="@+id/btn_protection_timeline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/tv_button_selector"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btn_health_check"
+                android:nextFocusDown="@+id/btn_refresh_diag"
+                android:text="Open Protection Timeline"
                 android:textColor="@color/text_primary" />
 
             <Button
@@ -329,7 +341,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/tv_button_selector"
                 android:focusable="true"
-                android:nextFocusUp="@+id/btn_health_check"
+                android:nextFocusUp="@+id/btn_protection_timeline"
                 android:nextFocusDown="@+id/btn_copy_logs"
                 android:text="Refresh Diagnostics"
                 android:textColor="@color/text_primary"

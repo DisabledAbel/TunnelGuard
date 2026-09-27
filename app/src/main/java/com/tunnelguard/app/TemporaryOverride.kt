@@ -141,6 +141,9 @@ object TemporaryOverrideManager {
         initialize(context)
         engine!!.startTimed(packageName, minutes * 60_000L, source)
         TunnelGuardConfig(context).addLog("Temporary override started: $packageName for $minutes minutes")
+        ProtectionTimelineRepository(context).record(ProtectionEventType.OVERRIDE_STARTED, ProtectionEventSeverity.WARNING,
+            "Temporary override started", "$packageName is exempt for $minutes minutes.", packageName = packageName,
+            metadata = mapOf("durationMinutes" to minutes.toString(), "source" to source))
         persistAndNotify(context)
     }
 
@@ -148,6 +151,9 @@ object TemporaryOverrideManager {
         initialize(context)
         engine!!.startUntilClosed(packageName, source)
         TunnelGuardConfig(context).addLog("Temporary override started: $packageName until app closes")
+        ProtectionTimelineRepository(context).record(ProtectionEventType.OVERRIDE_STARTED, ProtectionEventSeverity.WARNING,
+            "Temporary override started", "$packageName is exempt until it leaves the foreground.", packageName = packageName,
+            metadata = mapOf("mode" to "until_app_closes", "source" to source))
         persistAndNotify(context)
     }
 
@@ -155,6 +161,9 @@ object TemporaryOverrideManager {
         initialize(context)
         if (engine!!.cancel(packageName)) {
             TunnelGuardConfig(context).addLog("Temporary override $reason: $packageName")
+            ProtectionTimelineRepository(context).record(ProtectionEventType.OVERRIDE_CANCELLED, ProtectionEventSeverity.INFO,
+                "Temporary override cancelled", "$packageName is protected normally again.", packageName = packageName,
+                metadata = mapOf("reason" to reason))
             persistAndNotify(context)
         }
     }
@@ -165,6 +174,9 @@ object TemporaryOverrideManager {
         synchronized(suppressionLogged) {
             if (stored && emergencyLock && suppressionLogged.add(packageName)) {
                 TunnelGuardConfig(context).addLog("Temporary override suppressed by Emergency Lock: $packageName")
+                ProtectionTimelineRepository(context).record(ProtectionEventType.OVERRIDE_SUPPRESSED, ProtectionEventSeverity.WARNING,
+                    "Override suppressed by Emergency Lock", "$packageName remains protected while Emergency Lock is enabled.",
+                    packageName = packageName, deduplicationKey = "override-suppressed:$packageName")
             } else if (!emergencyLock) {
                 suppressionLogged.remove(packageName)
             }
@@ -188,6 +200,8 @@ object TemporaryOverrideManager {
         }
         removedPackages.forEach {
             TunnelGuardConfig(context).addLog("Temporary override cleared after app left foreground: $it")
+            ProtectionTimelineRepository(context).record(ProtectionEventType.OVERRIDE_APP_CLOSED, ProtectionEventSeverity.INFO,
+                "Override ended when app closed", "$it is protected normally again.", packageName = it)
         }
         if (removedPackages.isNotEmpty()) persistAndNotify(context)
         else if (currentDeadline != null && currentDeadline != previousDeadline) schedule()
@@ -203,7 +217,11 @@ object TemporaryOverrideManager {
     private fun pruneAndPersist(logExpired: Boolean) {
         val expired = engine!!.reconcile()
         if (expired.isNotEmpty()) {
-            if (logExpired) expired.forEach { TunnelGuardConfig(appContext).addLog("Temporary override expired: $it") }
+            if (logExpired) expired.forEach {
+                TunnelGuardConfig(appContext).addLog("Temporary override expired: $it")
+                ProtectionTimelineRepository(appContext).record(ProtectionEventType.OVERRIDE_EXPIRED, ProtectionEventSeverity.INFO,
+                    "Temporary override expired", "$it is protected normally again.", packageName = it)
+            }
             persistAndNotify(appContext)
         }
     }

@@ -266,8 +266,16 @@ class TunnelGuardConfig(private val context: Context) {
      * @param id The identifier of the profile to select.
      */
     fun setSelectedProfileId(id: String) {
+        val previous = getSelectedProfileId()
         prefs.edit().putString("selected_profile_id", id).putString("profile_selection_source", "Manual selection").apply()
         addLog("Selected profile changed to: $id")
+        if (previous != id) {
+            val profiles = getProfiles()
+            ProtectionTimelineRepository(context).record(ProtectionEventType.PROFILE_MANUAL, ProtectionEventSeverity.INFO,
+                "Profile manually selected", "${profiles.find { it.id == id }?.name ?: id} is now active.",
+                profileId = id, profileName = profiles.find { it.id == id }?.name,
+                previousState = previous, newState = id, metadata = mapOf("trigger" to "manual"))
+        }
     }
 
     /**
@@ -277,11 +285,25 @@ class TunnelGuardConfig(private val context: Context) {
      * @param rule The profile-switching rule that triggered the selection.
      */
     fun setSelectedProfileIdAutomatically(id: String, rule: ProfileSwitchRule, reason: String = ProfileRuleEvaluator.reason(rule)) {
+        val previous = getSelectedProfileId()
         prefs.edit().putString("selected_profile_id", id)
             .putString("profile_selection_source", "Rule: ${rule.condition.label}")
             .putString("last_automatic_rule_id", rule.id)
             .putString("last_automatic_rule_reason", reason)
             .putLong("last_automatic_profile_switch", System.currentTimeMillis()).apply()
+        if (previous != id) {
+            val profiles = getProfiles()
+            val type = when (rule.condition) {
+                ProfileRuleCondition.SCHEDULED_TIME -> ProtectionEventType.PROFILE_SCHEDULED
+                ProfileRuleCondition.WIFI_NETWORK, ProfileRuleCondition.UNKNOWN_WIFI_NETWORK,
+                ProfileRuleCondition.WIFI_CONNECTED, ProfileRuleCondition.ETHERNET_CONNECTED -> ProtectionEventType.PROFILE_NETWORK
+                else -> ProtectionEventType.PROFILE_AUTOMATIC
+            }
+            ProtectionTimelineRepository(context).record(type, ProtectionEventSeverity.INFO,
+                "Profile automatically selected", "${profiles.find { it.id == id }?.name ?: id} is now active: $reason.",
+                profileId = id, profileName = profiles.find { it.id == id }?.name, previousState = previous,
+                newState = id, metadata = mapOf("trigger" to reason, "ruleId" to rule.id))
+        }
     }
 
     fun recordAutomaticRuleMatch(rule: ProfileSwitchRule, reason: String) {
@@ -397,9 +419,13 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
      */
     fun ensureValidSelectedProfile(): ProfileAutomationResult {
         if (getProfiles().any { it.id == getSelectedProfileId() }) return ProfileAutomationResult.NoMatchingRule
+        val invalid = getSelectedProfileId()
         val fallback = getDefaultProfileId().takeIf { id -> getProfiles().any { it.id == id } } ?: "streaming"
         setSelectedProfileIdAutomatically(fallback, ProfileSwitchRule("fallback", ProfileRuleCondition.VPN_DISCONNECTED, fallback))
         addLog("Invalid active profile replaced by default profile: $fallback", "WARN")
+        ProtectionTimelineRepository(context).record(ProtectionEventType.INVALID_PROFILE, ProtectionEventSeverity.WARNING,
+            "Invalid profile target", "Profile $invalid was unavailable; TunnelGuard selected $fallback.",
+            profileId = invalid, previousState = invalid, newState = fallback)
         return ProfileAutomationResult.NoMatchingRule
     }
 
@@ -572,6 +598,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
             // Cannot edit "everything" profile apps directly since it dynamically returns all launcher apps.
             return
         }
+        val previous = getProtectedApps()
         val profiles = getProfiles().map {
             if (it.id == activeId) {
                 it.copy(appPackages = apps)
@@ -580,6 +607,10 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
             }
         }
         saveProfiles(profiles)
+        if (previous != apps) ProtectionTimelineRepository(context).record(
+            ProtectionEventType.PROTECTED_PACKAGES_CHANGED, ProtectionEventSeverity.INFO,
+            "Protected apps changed", "${apps.size} apps are protected by the active profile.",
+            profileId = activeId, metadata = mapOf("previousCount" to previous.size.toString(), "packageCount" to apps.size.toString()))
     }
 
     /**
@@ -744,6 +775,41 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
             prefs.edit().putLong("vpn_connection_start_time", 0L).apply()
             setActiveVpnCountryCode(null)
         }
+        if (normalizedState.name != oldStateName) recordVpnTimelineTransition(oldStateName, normalizedState)
+    }
+
+    private fun recordVpnTimelineTransition(oldState: String, state: VPNState) {
+        val timeline = ProtectionTimelineRepository(context)
+        val common = mapOf("state" to state.name)
+        when (state) {
+            VPNState.PROTECTED -> {
+                timeline.record(ProtectionEventType.VPN_DETECTED, ProtectionEventSeverity.INFO, "Upstream VPN detected",
+                    "The active VPN satisfies the current protection policy.", previousState = oldState, newState = state.name,
+                    deduplicationKey = "vpn:${state.name}")
+                if (oldState == VPNState.BLOCKED.name) timeline.record(ProtectionEventType.BLOCKING_STOPPED,
+                    ProtectionEventSeverity.INFO, "Fail-closed blocking released", "Protected apps can use the verified VPN again.",
+                    previousState = oldState, newState = state.name)
+            }
+            VPNState.DISCONNECTED -> timeline.record(ProtectionEventType.VPN_LOST, ProtectionEventSeverity.WARNING,
+                "Upstream VPN lost", "The upstream VPN connection is no longer available.", previousState = oldState,
+                newState = state.name, metadata = common, deduplicationKey = "vpn:${state.name}")
+            VPNState.BLOCKED -> {
+                if (oldState == VPNState.PROTECTED.name || oldState == VPNState.CONNECTED.name) timeline.record(
+                    ProtectionEventType.VPN_LOST, ProtectionEventSeverity.WARNING, "Upstream VPN lost",
+                    "The upstream VPN no longer satisfies policy.", previousState = oldState, newState = state.name)
+                val loss = timeline.getEvents().firstOrNull { it.type == ProtectionEventType.VPN_LOST }
+                val duration = loss?.let { ProtectionTimelineRepository.observedDurationMs(it.timestamp, System.currentTimeMillis()) }
+                timeline.record(ProtectionEventType.BLOCKING_STARTED, ProtectionEventSeverity.INFO,
+                    "Fail-closed blocking activated", "Protected app traffic is routed to the local block interface.",
+                    previousState = oldState, newState = state.name,
+                    metadata = common + (duration?.let { mapOf("recoveryDurationMs" to it.toString()) } ?: emptyMap()),
+                    deduplicationKey = "blocking:${state.name}")
+            }
+            VPNState.ERROR -> timeline.record(ProtectionEventType.RECOVERY_FAILED, ProtectionEventSeverity.ERROR,
+                "Protection recovery failed", "TunnelGuard could not establish the requested protection state.",
+                previousState = oldState, newState = state.name, deduplicationKey = "vpn:${state.name}")
+            else -> Unit
+        }
     }
 
     fun isForcedUpdatesEnabled(): Boolean {
@@ -827,6 +893,11 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
             updateLastStateTransitionTime(System.currentTimeMillis())
         }
         prefs.edit().putBoolean(KEY_PROTECTION_ENABLED, enabled).apply()
+        if (old && !enabled && getVPNState() == VPNState.BLOCKED && !isEmergencyLockEnabled()) {
+            ProtectionTimelineRepository(context).record(ProtectionEventType.BLOCKING_STOPPED,
+                ProtectionEventSeverity.INFO, "Fail-closed blocking stopped",
+                "Protection was disabled by the user.", previousState = "BLOCKED", newState = "INACTIVE")
+        }
     }
 
     /**
@@ -861,6 +932,11 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
         }
         prefs.edit().putBoolean("emergency_lock_enabled", enabled).apply()
         addLog("Emergency Lock set to: $enabled")
+        if (old != enabled) ProtectionTimelineRepository(context).record(
+            if (enabled) ProtectionEventType.EMERGENCY_LOCK_ENABLED else ProtectionEventType.EMERGENCY_LOCK_DISABLED,
+            ProtectionEventSeverity.INFO, if (enabled) "Emergency Lock enabled" else "Emergency Lock disabled",
+            if (enabled) "Protected app traffic will remain blocked." else "Normal protection policy resumed.",
+            previousState = old.toString(), newState = enabled.toString())
     }
 
     /**
@@ -1151,8 +1227,13 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
     }
 
     fun setVpnAppOfChoice(packageName: String?) {
+        val previous = getVpnAppOfChoice()
         prefs.edit().putString("vpn_app_of_choice", packageName).apply()
         addLog("VPN App of Choice set to: $packageName")
+        if (previous != packageName) ProtectionTimelineRepository(context).record(
+            ProtectionEventType.VPN_PROVIDER_CHANGED, ProtectionEventSeverity.INFO, "VPN provider changed",
+            if (packageName == null) "The preferred VPN provider was cleared." else "The preferred VPN provider changed.",
+            vpnProvider = packageName, previousState = previous, newState = packageName)
     }
 
     fun isAutoConnectVpnEnabled(): Boolean {

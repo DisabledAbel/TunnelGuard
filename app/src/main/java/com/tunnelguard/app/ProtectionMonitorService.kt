@@ -118,6 +118,14 @@ class ProtectionMonitorService : Service() {
         config.addLog("Protection observer: $reason; upstream VPN present=$upstreamPresent.")
         ProfileAutomationManager.onNetworkChanged(this)
         if (TunnelGuardVpnService.isTunnelEstablished) {
+            if (recoveryInFlight) {
+                val timeline = ProtectionTimelineRepository(this)
+                val started = timeline.getEvents().firstOrNull { it.type == ProtectionEventType.RECOVERY_STARTED }
+                val duration = started?.let { ProtectionTimelineRepository.observedDurationMs(it.timestamp, System.currentTimeMillis()) }
+                timeline.record(ProtectionEventType.RECOVERY_COMPLETED, ProtectionEventSeverity.INFO,
+                    "Protection recovery completed", "The local fail-closed block is active again.",
+                    metadata = duration?.let { mapOf("recoveryDurationMs" to it.toString()) } ?: emptyMap())
+            }
             recoveryInFlight = false
             recoveryAttempts = 0
             TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_ACTIVE)
@@ -149,6 +157,9 @@ class ProtectionMonitorService : Service() {
             TunnelGuardVpnService.updateServiceState(ServiceState.PERMISSION_REQUIRED)
             config.setVPNState(VPNState.ERROR)
             config.setLastDisconnectReason("VPN permission is required to restore local blocking")
+            ProtectionTimelineRepository(this).record(ProtectionEventType.VPN_PERMISSION_REVOKED,
+                ProtectionEventSeverity.ERROR, "VPN permission revoked",
+                "VPN permission is required to restore local blocking.", deduplicationKey = "permission:revoked")
             updateNotification("Unprotected: open TunnelGuard and select protection to restore permission")
             broadcastState()
             return
@@ -160,6 +171,11 @@ class ProtectionMonitorService : Service() {
             if (!recoveryInFlight && !TunnelGuardVpnService.isTunnelEstablished) {
                 recoveryInFlight = true
                 recoveryAttempts++
+                ProtectionTimelineRepository(this).record(ProtectionEventType.RECOVERY_STARTED,
+                    ProtectionEventSeverity.WARNING, "Fail-closed recovery started",
+                    "TunnelGuard is restoring the local block after an interruption.",
+                    metadata = mapOf("attempt" to recoveryAttempts.toString()),
+                    deduplicationKey = "recovery:start:$recoveryAttempts")
                 TunnelGuardVpnService.updateServiceState(ServiceState.TUNNELGUARD_STARTING)
                 val recover = Intent(this, TunnelGuardVpnService::class.java)
                     .setAction(TunnelGuardVpnService.ACTION_RECOVER)
