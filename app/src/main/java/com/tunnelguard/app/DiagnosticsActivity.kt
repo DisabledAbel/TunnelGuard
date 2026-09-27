@@ -42,6 +42,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var btnRefresh: Button
     private lateinit var btnHealthCheck: Button
     private lateinit var btnTimeline: Button
+    private lateinit var btnPolicyTester: Button
     private lateinit var btnCopy: Button
     private lateinit var btnExport: Button
     private lateinit var btnClear: Button
@@ -78,6 +79,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         btnRefresh = findViewById(R.id.btn_refresh_diag)
         btnHealthCheck = findViewById(R.id.btn_health_check)
         btnTimeline = findViewById(R.id.btn_protection_timeline)
+        btnPolicyTester = findViewById(R.id.btn_policy_tester)
         btnCopy = findViewById(R.id.btn_copy_logs)
         btnExport = findViewById(R.id.btn_export_logs_diag)
         btnClear = findViewById(R.id.btn_clear_logs_diag)
@@ -96,6 +98,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         }
         btnHealthCheck.setOnClickListener { startActivity(Intent(this, ProtectionHealthActivity::class.java)) }
         btnTimeline.setOnClickListener { startActivity(Intent(this, ProtectionTimelineActivity::class.java)) }
+        btnPolicyTester.setOnClickListener { startActivity(Intent(this, PolicyTesterActivity::class.java)) }
 
         btnCopy.setOnClickListener {
             copyDiagnosticsToClipboard()

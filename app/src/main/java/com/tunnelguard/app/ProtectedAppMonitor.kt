@@ -61,21 +61,30 @@ class ProtectedAppMonitor(
 
         val effectivePolicy = config.resolveEffectiveVpnPolicy(currentApp, config.isEmergencyLockEnabled())
 
-        var isVpnOn = if (config.isSimulatedVpnEnabled()) {
+        val upstreamObservation = if (config.isSimulatedVpnEnabled()) {
             val state = config.getVPNState()
-            state == VPNState.CONNECTED || state == VPNState.PROTECTED
+            if (state == VPNState.CONNECTED || state == VPNState.PROTECTED) UpstreamVpnEvaluation.Valid()
+            else UpstreamVpnEvaluation.Missing
         } else if (vpnDetector is DefaultVpnDetector) {
-            vpnDetector.evaluateUpstreamVpn(connectivityManager, foregroundPolicy).isValid
+            vpnDetector.evaluateUpstreamVpn(connectivityManager, foregroundPolicy)
         } else {
-            vpnDetector.detectVpnState(connectivityManager) == VpnDetectionResult.VPN_DETECTED
+            when (vpnDetector.detectVpnState(connectivityManager)) {
+                VpnDetectionResult.VPN_DETECTED -> UpstreamVpnEvaluation.Valid()
+                VpnDetectionResult.VPN_NOT_DETECTED -> UpstreamVpnEvaluation.Missing
+                VpnDetectionResult.VPN_UNKNOWN -> UpstreamVpnEvaluation.Unknown
+            }
         }
+        val isVpnOn = upstreamObservation.isValid
 
         val isProtected = config.isAppProtected(currentApp) && currentApp != context.packageName
-        if (isProtected && TemporaryOverrideManager.getActiveOverride(
-                context, currentApp, config.isEmergencyLockEnabled()) != null) {
-            return MonitoringCheckResult.NoAction(currentApp, true, policyChanged)
-        }
-        if (isProtected && !effectivePolicy.requireVpn) {
+        val emergencyLock = config.isEmergencyLockEnabled()
+        val hasOverride = TemporaryOverrideManager.getActiveOverride(context, currentApp, emergencyLock) != null
+        val enforcementDecision = PolicyDecisionResolver.resolve(PolicyDecisionInput(
+            isProtected, effectivePolicy, upstreamObservation,
+            emergencyLock, hasOverride
+        )).decision
+        if (enforcementDecision == PolicyDecision.ALLOWED ||
+            enforcementDecision == PolicyDecision.TEMPORARILY_ALLOWED) {
             return MonitoringCheckResult.NoAction(currentApp, true, policyChanged)
         }
         if (isProtected) {
