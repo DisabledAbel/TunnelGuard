@@ -244,7 +244,9 @@ class ProfileAutomationStateTracker {
 /** Process coordinator called by the VPN service's single network callback. */
 object ProfileAutomationManager {
     const val DEBOUNCE_MS = 1500L
-    private val handler = Handler(Looper.getMainLooper())
+    // Keep class initialization free of Android looper access. Configuration import/deletion can
+    // clear automation state without posting work (including in local JVM tests and backup tools).
+    private val handler by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { Handler(Looper.getMainLooper()) }
     private val tracker = ProfileAutomationStateTracker()
     private var pending: Runnable? = null
     private var cancelled = false
@@ -352,7 +354,7 @@ object ProfileScheduleManager {
     }
 
     fun schedule(context: Context) {
-        val app = context.applicationContext
+        val app = context.applicationContext ?: context
         val alarm = app.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(app, ProfileScheduleReceiver::class.java).setAction(ACTION_BOUNDARY)
         val pending = PendingIntent.getBroadcast(app, 9017, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
