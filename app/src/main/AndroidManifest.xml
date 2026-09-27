@@ -103,12 +103,17 @@
             android:exported="false"
             android:theme="@style/Theme.TunnelGuard" />
 
-        <!-- TunnelGuard VpnService declaration with FGS Type SystemExempted -->
+        <!--
+          Active VPN apps are an Android-documented systemExempted case. This service is bound with
+          BIND_VPN_SERVICE and owns the VpnService.Builder interface used for fail-closed routing.
+          Lint cannot infer that runtime qualification and otherwise assumes the exact-alarm case.
+        -->
         <service
             android:name=".TunnelGuardVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:foregroundServiceType="systemExempted"
-            android:exported="false">
+            android:exported="false"
+            tools:ignore="ForegroundServicePermission">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
