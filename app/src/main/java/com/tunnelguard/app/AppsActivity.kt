@@ -11,6 +11,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -32,6 +33,7 @@ class AppsActivity : AppCompatActivity() {
 
     private var allAppsList = listOf<AppItem>()
     private var filteredList = listOf<AppItem>()
+    private var countdownJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +54,7 @@ class AppsActivity : AppCompatActivity() {
                     allApps.add(app.packageName)
                 } else {
                     allApps.remove(app.packageName)
+                    TemporaryOverrideManager.cancel(this, app.packageName, "cleared because protection was removed")
                 }
                 config.setProtectedApps(allApps)
                 Toast.makeText(this, "Switched to Custom profile to modify protected apps.", Toast.LENGTH_SHORT).show()
@@ -68,7 +71,7 @@ class AppsActivity : AppCompatActivity() {
                 }
                 startService(serviceIntent)
             }
-        })
+        }, ::showTemporaryAllowDialog)
         rvAppsList.adapter = adapter
 
         // Search edit text text changed listener
@@ -152,6 +155,61 @@ class AppsActivity : AppCompatActivity() {
         adapter.updateList(filteredList)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
+        countdownJob?.cancel()
+        countdownJob = lifecycleScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(1_000)
+                if (::adapter.isInitialized && TemporaryOverrideManager.getStoredOverrides(this@AppsActivity).isNotEmpty()) {
+                    adapter.notifyItemRangeChanged(0, adapter.itemCount, "countdown")
+                }
+            }
+        }
+    }
+
+    override fun onPause() {
+        countdownJob?.cancel()
+        countdownJob = null
+        super.onPause()
+    }
+
+    private fun showTemporaryAllowDialog(app: AppItem) {
+        if (!app.isProtected) {
+            Toast.makeText(this, "Protect this app before creating a temporary allow.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val active = TemporaryOverrideManager.getStoredOverrides(this).any { it.packageName == app.packageName }
+        val choices = arrayOf("5 minutes", "15 minutes", "30 minutes", "1 hour", "Until app closes", "Cancel active override")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Temporary Allow • ${app.name}")
+            .setMessage("This allows only this app to bypass TunnelGuard's normal blocking. It does not verify VPN security or country. Emergency Lock still wins.")
+            .setItems(choices) { _, which ->
+                if (which == 5) {
+                    if (active) TemporaryOverrideManager.cancel(this, app.packageName)
+                    adapter.notifyDataSetChanged()
+                } else {
+                    val label = choices[which]
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Confirm temporary allow")
+                        .setMessage("TunnelGuard will temporarily stop blocking ${app.name} for $label. Its normal protection rules return automatically.")
+                        .setNegativeButton("Back", null)
+                        .setPositiveButton("Allow temporarily") { _, _ ->
+                            if (which < 4) TemporaryOverrideManager.startTimed(this, app.packageName,
+                                TemporaryOverrideManager.durationsMinutes[which])
+                            else {
+                                TemporaryOverrideManager.startUntilAppCloses(this, app.packageName)
+                                packageManager.getLaunchIntentForPackage(app.packageName)?.let {
+                                    startActivity(it)
+                                }
+                            }
+                            adapter.notifyDataSetChanged()
+                        }.show()
+                }
+            }.setNegativeButton("Close", null).show()
+    }
+
     data class AppItem(
         val name: String,
         val packageName: String,
@@ -162,7 +220,8 @@ class AppsActivity : AppCompatActivity() {
     private class AppsAdapter(
         private val context: Context,
         private var items: List<AppItem>,
-        private val onToggle: (AppItem, Boolean) -> Unit
+        private val onToggle: (AppItem, Boolean) -> Unit,
+        private val onTemporaryAllow: (AppItem) -> Unit
     ) : RecyclerView.Adapter<AppsAdapter.ViewHolder>() {
 
         class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
@@ -170,6 +229,8 @@ class AppsActivity : AppCompatActivity() {
             val name: TextView = v.findViewById(R.id.tv_app_name)
             val pkg: TextView = v.findViewById(R.id.tv_app_package)
             val checkBox: CheckBox = v.findViewById(R.id.cb_app_protect)
+            val overrideStatus: TextView = v.findViewById(R.id.tv_override_status)
+            val temporaryAllow: Button = v.findViewById(R.id.btn_temporary_allow)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -183,6 +244,15 @@ class AppsActivity : AppCompatActivity() {
             holder.name.text = item.name
             holder.pkg.text = item.packageName
             holder.checkBox.isChecked = item.isProtected
+            holder.temporaryAllow.visibility = if (item.isProtected) View.VISIBLE else View.GONE
+            val override = TemporaryOverrideManager.getStoredOverrides(context).find { it.packageName == item.packageName }
+            holder.overrideStatus.visibility = if (override == null) View.GONE else View.VISIBLE
+            holder.overrideStatus.text = override?.expiresWallTimeMs?.let {
+                val seconds = ((it - System.currentTimeMillis()).coerceAtLeast(0)) / 1000
+                "Temporary allow • %d:%02d remaining".format(seconds / 60, seconds % 60)
+            } ?: if (override != null) "Temporary allow • Until app closes" else ""
+            holder.temporaryAllow.text = if (override == null) "Temporary Allow" else "Manage Override"
+            holder.temporaryAllow.setOnClickListener { onTemporaryAllow(item) }
 
             // Entire item is clickable for easy TV remote navigation
             holder.itemView.setOnClickListener {

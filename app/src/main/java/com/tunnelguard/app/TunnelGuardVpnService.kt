@@ -714,6 +714,10 @@ class TunnelGuardVpnService : VpnService() {
             val foregroundPackage = notificationForegroundPackage
                 ?: config.getPendingVpnRedirectTarget()
                 ?: config.getForegroundPackageName(this)?.takeIf(config::isAppProtected)
+            val displayedOverride = if (config.isEmergencyLockEnabled()) null else {
+                foregroundPackage?.let { TemporaryOverrideManager.getActiveOverride(this, it, false) }
+                    ?: TemporaryOverrideManager.getStoredOverrides(this).firstOrNull()
+            }
             val facts = ForegroundNotificationFacts(
                 protectedAppCount = config.getProtectedApps().size,
                 foregroundAppLabel = foregroundPackage?.let(::applicationLabel),
@@ -721,7 +725,12 @@ class TunnelGuardVpnService : VpnService() {
                 blocking = vpnInterface != null || config.getVPNState() == VPNState.BLOCKED,
                 emergencyLock = config.isEmergencyLockEnabled(),
                 autoConnecting = autoConnectCoordinator.activeAttempt != null,
-                problem = notificationProblem
+                problem = notificationProblem,
+                overrideLabel = displayedOverride?.let { applicationLabel(it.packageName) },
+                overrideRemaining = displayedOverride?.let { override ->
+                    override.expiresWallTimeMs?.let { "${((it - System.currentTimeMillis()).coerceAtLeast(0) + 59_999) / 60_000} min remaining" }
+                        ?: "Until app closes"
+                }
             )
             val state = ForegroundNotificationStateSelector.select(facts)
             if (!notificationChangeTracker.shouldNotify(state)) return

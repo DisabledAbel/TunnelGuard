@@ -50,6 +50,23 @@ Android strictly permits **only one active `VpnService` at a time**.
 
 ## Features
 
+### Temporary per-app allow overrides
+
+From **Manage Protected Apps**, choose **Temporary Allow** for a protected app and explicitly confirm
+5, 15, 30, or 60 minutes, or **Until app closes**. The app stays in its profile and every other
+protected app keeps its normal policy. Active exceptions are shown in the app list, dashboard, ongoing
+notification, and diagnostics, and can be cancelled immediately.
+
+An override only stops TunnelGuard's local blocking for that package. It does **not** verify a VPN,
+country, secure connection, or privacy, and the app may use the regular network while allowed.
+Emergency Lock always suppresses exceptions; a timed exception continues counting and may resume only
+if it remains unexpired when the lock is removed. Timers use persisted wall-clock and same-boot monotonic
+deadlines plus an inexact wakeup alarm, so late alarms expire at reconciliation and clock changes cannot
+extend access. As a conservative rule all overrides are cleared at reboot; **Until app closes** is
+process-local and is also cleared after process recovery or when foreground monitoring observes that the
+app was left. Temporary runtime records are separate from configuration export/import and Android backup,
+so they are never transferred to another device. Use overrides intentionally.
+
 ### Onboarding
 
 - Explains what TunnelGuard does, "fail-closed" mechanics, the one active VPN constraint, and explicit user enablement.

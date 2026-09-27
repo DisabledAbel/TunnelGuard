@@ -475,7 +475,10 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
 
     /** Apps that must remain on the fail-closed local interface under the active policy. */
     fun getVpnRequiredProtectedApps(emergencyLock: Boolean = isEmergencyLockEnabled()): Set<String> =
-        getProtectedApps().filterTo(mutableSetOf()) { resolveEffectiveVpnPolicy(it, emergencyLock).requireVpn }
+        getProtectedApps().filterTo(mutableSetOf()) {
+            resolveEffectiveVpnPolicy(it, emergencyLock).requireVpn &&
+                TemporaryOverrideManager.getActiveOverride(context, it, emergencyLock) == null
+        }
 
     private fun sanitizeProfileVpnPolicy(policy: ProfileVpnPolicy) = policy.copy(
         providerPackage = ProfileVpnPolicy.normalizePackage(policy.providerPackage),
@@ -588,6 +591,7 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
             apps.add(packageName)
         } else {
             apps.remove(packageName)
+            TemporaryOverrideManager.cancel(context, packageName, "cleared because protection was removed")
         }
         setProtectedApps(apps)
     }

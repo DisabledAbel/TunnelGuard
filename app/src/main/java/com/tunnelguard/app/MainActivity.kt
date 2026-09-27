@@ -527,7 +527,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 2. Update Protection status display using the SecurityState
-        tvProtectionStatus.text = "● STATUS: ${securityState.name}"
+        val overrideCount = TemporaryOverrideManager.getStoredOverrides(this).size
+        tvProtectionStatus.text = if (overrideCount > 0) {
+            "● STATUS: ${securityState.name} • $overrideCount TEMPORARY ${if (overrideCount == 1) "OVERRIDE" else "OVERRIDES"} ACTIVE"
+        } else "● STATUS: ${securityState.name}"
         when (securityState) {
             SecurityState.PROTECTED -> {
                 tvProtectionStatus.setTextColor(resources.getColor(R.color.status_active))
