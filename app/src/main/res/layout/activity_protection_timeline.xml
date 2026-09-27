@@ -15,6 +15,7 @@
             <Button android:id="@+id/filter_overrides" style="@style/TimelineButton" android:text="Overrides" />
             <Button android:id="@+id/filter_warnings" style="@style/TimelineButton" android:text="Errors / Warnings" />
             <Button android:id="@+id/timeline_export" style="@style/TimelineButton" android:text="Export JSON" />
+            <Button android:id="@+id/timeline_copy" style="@style/TimelineButton" android:text="Copy JSON" />
             <Button android:id="@+id/timeline_clear" style="@style/TimelineButton" android:text="Clear history" />
             <Button android:id="@+id/timeline_back" style="@style/TimelineButton" android:text="Back" />
         </LinearLayout>

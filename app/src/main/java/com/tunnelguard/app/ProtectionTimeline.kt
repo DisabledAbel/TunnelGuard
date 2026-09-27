@@ -81,15 +81,21 @@ class ProtectionTimelineRepository(
     ): ProtectionEvent? = synchronized(LOCK) {
         val now = clock.now()
         val items = readLocked(now).toMutableList()
-        if (deduplicationKey != null && prefs.getString(KEY_LAST_DEDUP, null) == deduplicationKey) return null
+        val deduplicationTimes = readDeduplicationTimes()
+        deduplicationTimes.entries.removeAll { now - it.value !in 0 until DEDUPLICATION_WINDOW_MS }
+        if (deduplicationKey != null && deduplicationTimes[deduplicationKey]?.let {
+                now - it in 0 until DEDUPLICATION_WINDOW_MS
+            } == true) return null
         val sequence = prefs.getLong(KEY_SEQUENCE, 0L) + 1
         val event = ProtectionEvent("$now-$sequence-${UUID.randomUUID()}", now, sequence, type, severity,
             title, message, packageName, profileId, profileName, vpnProvider, country, previousState,
             newState, correlationId, metadata)
         items += event
         val retained = items.filter { now - it.timestamp <= maximumAgeMs }.takeLast(maximumEvents)
+        if (deduplicationKey != null) deduplicationTimes[deduplicationKey] = now
         prefs.edit().putString(KEY_EVENTS, encode(retained).toString()).putLong(KEY_SEQUENCE, sequence)
-            .putString(KEY_LAST_DEDUP, deduplicationKey).commit()
+            .putString(KEY_DEDUPLICATION_TIMES, JSONObject(deduplicationTimes).toString())
+            .remove(KEY_LAST_DEDUP).commit()
         event
     }
 
@@ -99,7 +105,7 @@ class ProtectionTimelineRepository(
     }
 
     fun clear() = synchronized(LOCK) {
-        prefs.edit().remove(KEY_EVENTS).remove(KEY_LAST_DEDUP).commit()
+        prefs.edit().remove(KEY_EVENTS).remove(KEY_DEDUPLICATION_TIMES).remove(KEY_LAST_DEDUP).commit()
         Unit
     }
 
@@ -128,10 +134,15 @@ class ProtectionTimelineRepository(
             val array = JSONArray(raw)
             buildList { for (i in 0 until array.length()) runCatching { decode(array.getJSONObject(i)) }.getOrNull()?.let(::add) }
         }.getOrDefault(emptyList())
-        val retained = parsed.filter { it.timestamp <= now && now - it.timestamp <= maximumAgeMs }.takeLast(maximumEvents)
+        val retained = parsed.filter { now - it.timestamp <= maximumAgeMs }.takeLast(maximumEvents)
         if (retained.size != parsed.size) prefs.edit().putString(KEY_EVENTS, encode(retained).toString()).commit()
         return retained
     }
+
+    private fun readDeduplicationTimes(): MutableMap<String, Long> = runCatching {
+        val json = JSONObject(prefs.getString(KEY_DEDUPLICATION_TIMES, "{}") ?: "{}")
+        buildMap { json.keys().forEach { key -> put(key, json.getLong(key)) } }.toMutableMap()
+    }.getOrDefault(mutableMapOf())
 
     companion object {
         const val MAX_EVENTS = 500
@@ -141,6 +152,8 @@ class ProtectionTimelineRepository(
         private const val KEY_EVENTS = "events_v1"
         private const val KEY_SEQUENCE = "sequence"
         private const val KEY_LAST_DEDUP = "last_deduplication_key"
+        private const val KEY_DEDUPLICATION_TIMES = "deduplication_times_v1"
+        const val DEDUPLICATION_WINDOW_MS = 5_000L
         private val LOCK = Any()
         private val PROFILE_TYPES = setOf(ProtectionEventType.PROFILE_MANUAL, ProtectionEventType.PROFILE_AUTOMATIC,
             ProtectionEventType.PROFILE_SCHEDULED, ProtectionEventType.PROFILE_NETWORK, ProtectionEventType.INVALID_PROFILE)

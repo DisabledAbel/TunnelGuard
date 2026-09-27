@@ -128,6 +128,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         refreshDiagnostics()
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshDiagnostics()
+    }
+
     /**
      * Refreshes the diagnostics display with current VPN, protection, profile, boot, device, version, and log information.
      */

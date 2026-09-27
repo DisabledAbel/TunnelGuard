@@ -795,15 +795,15 @@ fun getNextProfileScheduleBoundary() = prefs.getLong("next_profile_schedule_boun
                 "Upstream VPN lost", "The upstream VPN connection is no longer available.", previousState = oldState,
                 newState = state.name, metadata = common, deduplicationKey = "vpn:${state.name}")
             VPNState.BLOCKED -> {
-                if (oldState == VPNState.PROTECTED.name || oldState == VPNState.CONNECTED.name) timeline.record(
+                val loss = if (oldState == VPNState.PROTECTED.name || oldState == VPNState.CONNECTED.name) timeline.record(
                     ProtectionEventType.VPN_LOST, ProtectionEventSeverity.WARNING, "Upstream VPN lost",
                     "The upstream VPN no longer satisfies policy.", previousState = oldState, newState = state.name)
-                val loss = timeline.getEvents().firstOrNull { it.type == ProtectionEventType.VPN_LOST }
+                else null
                 val duration = loss?.let { ProtectionTimelineRepository.observedDurationMs(it.timestamp, System.currentTimeMillis()) }
                 timeline.record(ProtectionEventType.BLOCKING_STARTED, ProtectionEventSeverity.INFO,
                     "Fail-closed blocking activated", "Protected app traffic is routed to the local block interface.",
                     previousState = oldState, newState = state.name,
-                    metadata = common + (duration?.let { mapOf("recoveryDurationMs" to it.toString()) } ?: emptyMap()),
+                    metadata = common + (duration?.let { mapOf("blockingTransitionDurationMs" to it.toString()) } ?: emptyMap()),
                     deduplicationKey = "blocking:${state.name}")
             }
             VPNState.ERROR -> timeline.record(ProtectionEventType.RECOVERY_FAILED, ProtectionEventSeverity.ERROR,

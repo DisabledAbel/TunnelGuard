@@ -49,7 +49,7 @@ class ProtectedAppMonitor(
             if (lastForegroundApp != null && config.isAppProtected(lastForegroundApp)) timeline.record(
                 ProtectionEventType.APP_BACKGROUND, ProtectionEventSeverity.INFO, "Protected app left foreground",
                 "$lastForegroundApp is no longer in the foreground.", packageName = lastForegroundApp,
-                deduplicationKey = "foreground:$detectedApp")
+                deduplicationKey = "background:$lastForegroundApp")
             if (config.isAppProtected(detectedApp)) timeline.record(
                 ProtectionEventType.APP_FOREGROUND, ProtectionEventSeverity.INFO, "Protected app entered foreground",
                 "$detectedApp is now in the foreground.", packageName = detectedApp,

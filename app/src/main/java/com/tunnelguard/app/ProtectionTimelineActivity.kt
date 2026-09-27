@@ -1,6 +1,9 @@
 package com.tunnelguard.app
 
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -36,6 +39,11 @@ class ProtectionTimelineActivity : AppCompatActivity() {
         findViewById<Button>(R.id.timeline_export).setOnClickListener {
             repository.exportToFile(this)?.let { file -> Toast.makeText(this, "Timeline exported to:\n${file.absolutePath}", Toast.LENGTH_LONG).show() }
                 ?: Toast.makeText(this, "Timeline export failed", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<Button>(R.id.timeline_copy).setOnClickListener {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("TunnelGuard Protection Timeline", repository.exportJson()))
+            Toast.makeText(this, "Timeline JSON copied to clipboard", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.timeline_clear).setOnClickListener {
             AlertDialog.Builder(this).setTitle("Clear Protection Timeline?")
@@ -88,7 +96,7 @@ class ProtectionTimelineActivity : AppCompatActivity() {
             .inflate(R.layout.item_protection_event, parent, false))
         override fun onBindViewHolder(holder: Holder, position: Int) {
             val event = events[position]
-            holder.time.text = DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(event.timestamp))
+            holder.time.text = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(event.timestamp))
             holder.status.text = "${event.type.category.name} • ${event.severity.name}"
             holder.title.text = event.title
             holder.message.text = event.message
