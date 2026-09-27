@@ -181,22 +181,27 @@ class AppsActivity : AppCompatActivity() {
             return
         }
         val active = TemporaryOverrideManager.getStoredOverrides(this).any { it.packageName == app.packageName }
-        val choices = arrayOf("5 minutes", "15 minutes", "30 minutes", "1 hour", "Until app closes", "Cancel active override")
+        val foregroundMonitoringAvailable = config.isAppMonitorEnabled() &&
+            config.hasUsageStatsPermission(this) && config.hasSystemAlertWindowPermission()
+        val choices = mutableListOf("5 minutes", "15 minutes", "30 minutes", "1 hour")
+        if (foregroundMonitoringAvailable) choices += "Until app closes"
+        choices += "Cancel active override"
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Temporary Allow • ${app.name}")
             .setMessage("This allows only this app to bypass TunnelGuard's normal blocking. It does not verify VPN security or country. Emergency Lock still wins.")
-            .setItems(choices) { _, which ->
-                if (which == 5) {
+            .setItems(choices.toTypedArray()) { _, which ->
+                val selection = choices[which]
+                if (selection == "Cancel active override") {
                     if (active) TemporaryOverrideManager.cancel(this, app.packageName)
                     adapter.notifyDataSetChanged()
                 } else {
-                    val label = choices[which]
+                    val label = selection
                     androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("Confirm temporary allow")
                         .setMessage("TunnelGuard will temporarily stop blocking ${app.name} for $label. Its normal protection rules return automatically.")
                         .setNegativeButton("Back", null)
                         .setPositiveButton("Allow temporarily") { _, _ ->
-                            if (which < 4) TemporaryOverrideManager.startTimed(this, app.packageName,
+                            if (selection != "Until app closes") TemporaryOverrideManager.startTimed(this, app.packageName,
                                 TemporaryOverrideManager.durationsMinutes[which])
                             else {
                                 TemporaryOverrideManager.startUntilAppCloses(this, app.packageName)

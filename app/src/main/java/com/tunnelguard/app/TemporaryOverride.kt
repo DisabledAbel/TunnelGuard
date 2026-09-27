@@ -34,6 +34,11 @@ object AndroidOverrideClock : OverrideClock {
 
 /** Pure, synchronized authority for override lifetime and Emergency Lock precedence. */
 class TemporaryOverrideEngine(private val clock: OverrideClock) {
+    companion object {
+        const val FOREGROUND_START_TIMEOUT_MS = 30_000L
+        const val UNTIL_CLOSE_MAX_LIFETIME_MS = 4 * 60 * 60_000L
+    }
+
     private val records = linkedMapOf<String, TemporaryOverride>()
     private val foregroundSessionsStarted = mutableSetOf<String>()
 
@@ -53,9 +58,15 @@ class TemporaryOverrideEngine(private val clock: OverrideClock) {
         return value
     }
 
-    @Synchronized fun startUntilClosed(packageName: String, source: String): TemporaryOverride {
+    @Synchronized fun startUntilClosed(
+        packageName: String,
+        source: String,
+        startupTimeoutMs: Long = FOREGROUND_START_TIMEOUT_MS
+    ): TemporaryOverride {
+        require(startupTimeoutMs > 0)
         val value = TemporaryOverride(packageName, TemporaryOverrideType.UNTIL_APP_CLOSES,
-            clock.wallTimeMillis(), clock.elapsedRealtime(), source = source)
+            clock.wallTimeMillis(), clock.elapsedRealtime(),
+            clock.wallTimeMillis() + startupTimeoutMs, clock.elapsedRealtime() + startupTimeoutMs, source)
         records[packageName] = value
         return value
     }
@@ -73,8 +84,15 @@ class TemporaryOverrideEngine(private val clock: OverrideClock) {
     @Synchronized fun allStored(): List<TemporaryOverride> { reconcile(); return records.values.toList() }
 
     @Synchronized fun onForegroundChanged(packageName: String?): List<String> {
-        records.values.filter { it.type == TemporaryOverrideType.UNTIL_APP_CLOSES && it.packageName == packageName }
-            .forEach { foregroundSessionsStarted.add(it.packageName) }
+        reconcile()
+        records[packageName]?.takeIf { it.type == TemporaryOverrideType.UNTIL_APP_CLOSES }?.let {
+            if (foregroundSessionsStarted.add(it.packageName)) {
+                records[it.packageName] = it.copy(
+                    expiresWallTimeMs = it.createdWallTimeMs + UNTIL_CLOSE_MAX_LIFETIME_MS,
+                    expiresElapsedTimeMs = it.createdElapsedTimeMs + UNTIL_CLOSE_MAX_LIFETIME_MS
+                )
+            }
+        }
         val removed = records.values.filter {
             it.type == TemporaryOverrideType.UNTIL_APP_CLOSES && it.packageName != packageName &&
                 foregroundSessionsStarted.contains(it.packageName)
@@ -87,7 +105,7 @@ class TemporaryOverrideEngine(private val clock: OverrideClock) {
         val nowWall = clock.wallTimeMillis()
         val nowElapsed = clock.elapsedRealtime()
         val expired = records.values.filter { value ->
-            value.type == TemporaryOverrideType.TIMED && (
+            (
                 nowElapsed < value.createdElapsedTimeMs ||
                     nowWall >= requireNotNull(value.expiresWallTimeMs) ||
                     nowElapsed >= requireNotNull(value.expiresElapsedTimeMs)
@@ -156,11 +174,19 @@ object TemporaryOverrideManager {
     }
 
     fun onForegroundChanged(context: Context, foregroundPackage: String?) {
-        val removedPackages = initialize(context).engine!!.onForegroundChanged(foregroundPackage)
+        val activeEngine = initialize(context).engine!!
+        val previousDeadline = foregroundPackage?.let { packageName ->
+            activeEngine.allStored().find { it.packageName == packageName }?.expiresElapsedTimeMs
+        }
+        val removedPackages = activeEngine.onForegroundChanged(foregroundPackage)
+        val currentDeadline = foregroundPackage?.let { packageName ->
+            activeEngine.allStored().find { it.packageName == packageName }?.expiresElapsedTimeMs
+        }
         removedPackages.forEach {
             TunnelGuardConfig(context).addLog("Temporary override cleared after app left foreground: $it")
         }
         if (removedPackages.isNotEmpty()) persistAndNotify(context)
+        else if (currentDeadline != null && currentDeadline != previousDeadline) schedule()
     }
 
     fun clearForBoot(context: Context) {
