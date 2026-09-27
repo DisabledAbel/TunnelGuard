@@ -2,6 +2,7 @@ package com.tunnelguard.app
 
 import android.content.Context
 import android.content.Intent
+import android.net.VpnService
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -160,10 +161,17 @@ class ProfilesActivity : AppCompatActivity() {
     }
 
     private fun chooseProvider(profile: TunnelGuardConfig.ProtectionProfile) {
-        val known = arrayOf("ch.protonvpn.android", "com.nordvpn.android", "com.surfshark.vpnclient.android", "com.expressvpn.vpn", "net.mullvad.mullvadvpn", "com.windscribe.vpn")
-        val installed = known.filter { packageManager.getLaunchIntentForPackage(it) != null }
+        // A selectable provider must expose Android's VPN service contract and a launcher activity.
+        // The generic provider adapter safely supports apps not explicitly known by the registry.
+        val installed = packageManager.queryIntentServices(Intent(VpnService.SERVICE_INTERFACE), 0)
+            .mapNotNull { it.serviceInfo?.packageName }
+            .filter { it != packageName && packageManager.getLaunchIntentForPackage(it) != null }
+            .distinct()
+            .sortedBy { com.tunnelguard.app.vpnprovider.VpnProviderRegistry.resolve(it).getDisplayName(this).lowercase() }
         val packages = listOf<String?>(null) + installed
-        val labels = listOf("Use Global VPN") + installed.map { com.tunnelguard.app.vpnprovider.VpnProviderRegistry.resolve(it).getDisplayName(this) }
+        val labels = listOf("Use Global VPN") + installed.map {
+            "${com.tunnelguard.app.vpnprovider.VpnProviderRegistry.resolve(it).getDisplayName(this)} ($it)"
+        }
         choose(profile, "VPN Provider", labels.toTypedArray()) { i -> profile.vpnPolicy.copy(providerPackage = packages[i]) }
     }
 

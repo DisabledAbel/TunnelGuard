@@ -239,10 +239,12 @@ class DiagnosticsActivity : AppCompatActivity() {
             connectivityManager
         )
 
-        val providerPackage = config.getVpnAppOfChoice()
+        val foregroundPackage = config.getForegroundPackageName(this)
+        val effectivePolicy = config.resolveEffectiveVpnPolicy(foregroundPackage, config.isEmergencyLockEnabled())
+        val providerPackage = effectivePolicy.providerPackage
         val provider = providerPackage?.let(VpnProviderRegistry::resolve)
         val providerSummary = if (provider == null) "Not configured" else
-            "${provider.getDisplayName(this)}\nPackage: $providerPackage\nIntegration: ${provider.integrationLevel}\nCountry Request Support: ${if (provider.capabilities.supportsCountryRequest) "Yes" else "No"}\nAuto-Connect: ${if (config.isAutoConnectVpnEnabled()) "Enabled" else "Disabled"}"
+            "${provider.getDisplayName(this)}\nPackage: $providerPackage\nSource: ${effectivePolicy.providerSource.name.lowercase()}\nIntegration: ${provider.integrationLevel}\nCountry Request Support: ${if (provider.capabilities.supportsCountryRequest) "Yes" else "No"}\nAuto-Connect: ${if (effectivePolicy.autoConnect) "Enabled" else "Disabled"} (${effectivePolicy.autoConnectSource.name.lowercase()})"
         val automationNetwork = ProfileNetworkStateCollector.collect(this, config, connectivityManager)
         val report = """
             === TUNNELGUARD DIAGNOSTICS REPORT ===
