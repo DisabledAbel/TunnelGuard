@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:background="@color/background_dark" android:padding="24dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Protection Timeline" android:textColor="@color/text_primary" android:textSize="28sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+        android:text="Structured, local protection history • newest first" android:textColor="@color/text_secondary" android:textSize="14sp" />
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/filter_all" style="@style/TimelineButton" android:text="All" />
+            <Button android:id="@+id/filter_vpn" style="@style/TimelineButton" android:text="VPN" />
+            <Button android:id="@+id/filter_protection" style="@style/TimelineButton" android:text="Protection" />
+            <Button android:id="@+id/filter_profiles" style="@style/TimelineButton" android:text="Profiles" />
+            <Button android:id="@+id/filter_overrides" style="@style/TimelineButton" android:text="Overrides" />
+            <Button android:id="@+id/filter_warnings" style="@style/TimelineButton" android:text="Errors / Warnings" />
+            <Button android:id="@+id/timeline_export" style="@style/TimelineButton" android:text="Export JSON" />
+            <Button android:id="@+id/timeline_clear" style="@style/TimelineButton" android:text="Clear history" />
+            <Button android:id="@+id/timeline_back" style="@style/TimelineButton" android:text="Back" />
+        </LinearLayout>
+    </HorizontalScrollView>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="12dp">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/timeline_list" android:layout_width="match_parent"
+            android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="24dp" />
+        <TextView android:id="@+id/timeline_empty" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_gravity="center" android:text="No events in this filter." android:textColor="@color/text_secondary" android:textSize="18sp" />
+    </FrameLayout>
+</LinearLayout>

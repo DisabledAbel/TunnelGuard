@@ -11,6 +11,10 @@ class BootReceiver : BroadcastReceiver() {
      */
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            val timeline = ProtectionTimelineRepository(context)
+            timeline.record(ProtectionEventType.BOOT_STARTED, ProtectionEventSeverity.INFO,
+                "TunnelGuard started after device boot", "Boot protection settings are being evaluated.",
+                deduplicationKey = "boot:${System.currentTimeMillis() / 60000}")
             // Conservative reboot policy: no exception survives a new foreground/session epoch.
             TemporaryOverrideManager.clearForBoot(context)
             val config = TunnelGuardConfig(context)
@@ -25,6 +29,8 @@ class BootReceiver : BroadcastReceiver() {
                     if (!vpnPrepared) {
                         config.addLog("Boot completed: Cannot start TunnelGuard because VPN permission is not granted.", "ERROR")
                         config.setLastBootFailure("VPN permission not granted.")
+                        timeline.record(ProtectionEventType.BOOT_RECOVERY_FAILED, ProtectionEventSeverity.ERROR,
+                            "Protection could not be restored after boot", "VPN permission is not granted.")
                         return
                     }
 
@@ -43,9 +49,13 @@ class BootReceiver : BroadcastReceiver() {
                     } else {
                         context.startService(serviceIntent)
                     }
+                    timeline.record(ProtectionEventType.BOOT_RECOVERED, ProtectionEventSeverity.INFO,
+                        "Boot protection recovery requested", "TunnelGuard requested protection startup after boot.")
                 } catch (e: Exception) {
                     config.addLog("Boot completed exception during startup: ${e.message}", "ERROR")
                     config.setLastBootFailure(e.message ?: "Unknown BootReceiver exception")
+                    timeline.record(ProtectionEventType.BOOT_RECOVERY_FAILED, ProtectionEventSeverity.ERROR,
+                        "Protection could not be restored after boot", e.message ?: "Unknown startup error")
                 }
             }
         }

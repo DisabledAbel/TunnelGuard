@@ -44,6 +44,17 @@ class ProtectedAppMonitor(
         )
         val currentApp = detectedApp ?: lastForegroundApp
         TemporaryOverrideManager.onForegroundChanged(context, detectedApp)
+        if (detectedApp != null && detectedApp != lastForegroundApp) {
+            val timeline = ProtectionTimelineRepository(context)
+            if (lastForegroundApp != null && config.isAppProtected(lastForegroundApp)) timeline.record(
+                ProtectionEventType.APP_BACKGROUND, ProtectionEventSeverity.INFO, "Protected app left foreground",
+                "$lastForegroundApp is no longer in the foreground.", packageName = lastForegroundApp,
+                deduplicationKey = "foreground:$detectedApp")
+            if (config.isAppProtected(detectedApp)) timeline.record(
+                ProtectionEventType.APP_FOREGROUND, ProtectionEventSeverity.INFO, "Protected app entered foreground",
+                "$detectedApp is now in the foreground.", packageName = detectedApp,
+                deduplicationKey = "foreground:$detectedApp")
+        }
         if (currentApp == null) {
             return MonitoringCheckResult.NoAction(null, wasVpnOn, policyChanged)
         }

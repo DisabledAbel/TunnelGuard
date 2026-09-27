@@ -41,6 +41,7 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     private lateinit var btnRefresh: Button
     private lateinit var btnHealthCheck: Button
+    private lateinit var btnTimeline: Button
     private lateinit var btnCopy: Button
     private lateinit var btnExport: Button
     private lateinit var btnClear: Button
@@ -76,6 +77,7 @@ class DiagnosticsActivity : AppCompatActivity() {
 
         btnRefresh = findViewById(R.id.btn_refresh_diag)
         btnHealthCheck = findViewById(R.id.btn_health_check)
+        btnTimeline = findViewById(R.id.btn_protection_timeline)
         btnCopy = findViewById(R.id.btn_copy_logs)
         btnExport = findViewById(R.id.btn_export_logs_diag)
         btnClear = findViewById(R.id.btn_clear_logs_diag)
@@ -93,6 +95,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             refreshDiagnostics()
         }
         btnHealthCheck.setOnClickListener { startActivity(Intent(this, ProtectionHealthActivity::class.java)) }
+        btnTimeline.setOnClickListener { startActivity(Intent(this, ProtectionTimelineActivity::class.java)) }
 
         btnCopy.setOnClickListener {
             copyDiagnosticsToClipboard()
@@ -202,7 +205,10 @@ class DiagnosticsActivity : AppCompatActivity() {
                 ?: "until app closes"
             "${value.packageName} ${value.type.name.lowercase()} $lifetime${if (emergency) " (suppressed by Emergency Lock)" else ""}"
         }.ifBlank { "none" }
-        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • $policyText • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText\nTemporary overrides (${overrides.size}): $overrideText"
+        val timeline = ProtectionTimelineRepository(this).summary()
+        val timelineText = "Timeline: ${timeline.count} events • Last: ${timeline.lastEvent?.title ?: "none"}" +
+            (timeline.lastRecoveryDurationMs?.let { " • Last observed recovery: ${it} ms" } ?: "")
+        tvAutomationStatus.text = "${if (config.isAutomaticProfileSwitchingEnabled()) "Enabled" else "Disabled"} • Transport: ${automationNetwork.transportDescription()} • $wifiIdentity • Active: $activeProfile • $policyText • ${config.getProfileSelectionSource()}$matched • ${config.getProfileSwitchRules().size} rules • $scheduleText • VPN monitoring: $monitoring$providerText\nTemporary overrides (${overrides.size}): $overrideText\n$timelineText"
 
         val bootFailure = config.getLastBootFailure()
         if (config.isStartOnBootEnabled()) {

@@ -16,4 +16,12 @@
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:backgroundDimAmount">0.8</item>
     </style>
+    <style name="TimelineButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:background">@drawable/tv_button_selector</item>
+        <item name="android:focusable">true</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
 </resources>

@@ -46,9 +46,32 @@ Android strictly permits **only one active `VpnService` at a time**.
 
 - **VPN active (or simulated connected):** TunnelGuard stays out of the way (`closeVpnInterface()`). This allows your protected apps to use the standard network path (e.g. routed through simulated/real gateways).
 - **VPN disconnected:** TunnelGuard instantly activates its local `VpnService` interface. Using Android's official `addAllowedApplication(packageName)` API, Android routes all outgoing traffic of your selected (protected) apps *exclusively* into TunnelGuard's local TUN interface. Since TunnelGuard acts as a local packet sink (blackhole) and **does not forward packets**, all network traffic from the protected apps is instantly dropped (fail-closed block).
-- This design achieves 100% reliable, system-level, non-root per-app internet blocking.
+- While established, this provides system-level, non-root per-app blocking. Android's one-VPN
+  handoff can still create an observational gap before TunnelGuard is allowed to restore the route;
+  the app does not claim perfect leak detection or zero leakage during that transition.
 
 ## Features
+
+### Protection Timeline
+
+Open **System & Protection Diagnostics → Protection Timeline** for a remote-friendly, newest-first
+history of meaningful VPN, fail-closed routing, profile, Emergency Lock, temporary override,
+foreground-app, permission, boot, and recovery transitions. Events are emitted directly by the
+components that own those state changes; the timeline never attempts to reconstruct state by parsing
+the separate debug log. Filters cover VPN, protection, profiles, overrides, and warnings/errors, and
+selecting an event shows its available structured context.
+
+The timeline is stored only on the device in a dedicated preferences file and survives activity,
+service, and process recreation. It retains at most 500 events and removes events older than 30 days.
+History can be cleared independently, without changing profiles, protected apps, VPN configuration,
+Emergency Lock, or overrides. JSON export uses a versioned schema and contains the structured event
+fields shown in the app; it does not contain traffic payloads, URLs, browsing history, DNS queries,
+credentials, VPN/Wi-Fi passwords, MAC addresses, or BSSIDs. Package names may be present because they
+are required for per-app policy. Nothing is uploaded and no analytics or cloud logging is used.
+
+When TunnelGuard observes a recovery start and completion, it may show their elapsed wall-clock
+transition time in milliseconds. This is an observational diagnostic measurement only. It does not
+prove zero leakage or uninterrupted enforcement during Android's one-VPN handoff interval.
 
 ### Temporary per-app allow overrides
 
