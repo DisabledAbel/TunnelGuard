@@ -156,9 +156,11 @@ object TemporaryOverrideManager {
     }
 
     fun onForegroundChanged(context: Context, foregroundPackage: String?) {
-        initialize(context).engine!!.onForegroundChanged(foregroundPackage).forEach {
+        val removedPackages = initialize(context).engine!!.onForegroundChanged(foregroundPackage)
+        removedPackages.forEach {
             TunnelGuardConfig(context).addLog("Temporary override cleared after app left foreground: $it")
-        }.also { if (it.isNotEmpty()) persistAndNotify(context) }
+        }
+        if (removedPackages.isNotEmpty()) persistAndNotify(context)
     }
 
     fun clearForBoot(context: Context) {
