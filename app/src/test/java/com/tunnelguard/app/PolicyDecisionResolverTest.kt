@@ -25,13 +25,20 @@ class PolicyDecisionResolverTest {
         decision(upstream = UpstreamVpnEvaluation.CountryMismatch("US", "CA")).decision)
     @Test fun unknownCountryFailsClosed() = assertEquals(PolicyDecision.COUNTRY_UNKNOWN,
         decision(upstream = UpstreamVpnEvaluation.CountryMismatch("US", null)).decision)
-    @Test fun unavailableProviderIsExplicit() = assertEquals(PolicyDecision.VPN_PROVIDER_UNAVAILABLE, decision(provider = false).decision)
+    @Test fun unavailableProviderIsExplicitWhenUpstreamIsInvalid() = assertEquals(
+        PolicyDecision.VPN_PROVIDER_UNAVAILABLE,
+        decision(upstream = UpstreamVpnEvaluation.Missing, provider = false).decision
+    )
+    @Test fun validUpstreamWinsWhenConfiguredProviderIsUnavailable() = assertEquals(
+        PolicyDecision.PROTECTED,
+        decision(upstream = UpstreamVpnEvaluation.Valid("US"), provider = false).decision
+    )
     @Test fun unknownUpstreamFailsClosed() = assertEquals(PolicyDecision.BLOCKED_FAIL_CLOSED,
         decision(upstream = UpstreamVpnEvaluation.Unknown).decision)
     @Test fun missingPolicyIsUnavailable() = assertEquals(PolicyDecision.POLICY_UNAVAILABLE, decision(effective = null).decision)
     @Test fun temporaryOverrideAllows() = assertEquals(PolicyDecision.TEMPORARILY_ALLOWED, decision(override = true).decision)
     @Test fun emergencySuppressesOverride() = assertEquals(PolicyDecision.EMERGENCY_LOCKED,
-        decision(emergency = true, override = true).decision)
+        decision(upstream = UpstreamVpnEvaluation.Missing, emergency = true, override = true, provider = false).decision)
 
     @Test fun policySourcesAndExportAreReadable() {
         val result = PolicyTestResult("app.pkg", "Example", true, true, "stream", "Streaming",
