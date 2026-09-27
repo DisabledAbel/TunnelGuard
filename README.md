@@ -109,8 +109,10 @@ the existing valid selection is retained (or an invalid selection falls back to 
 service callback evaluates again when network information arrives. Schedule rules are evaluated
 immediately at boot, including when boot occurs inside an active range. TunnelGuard uses the device's
 current local timezone and reschedules after time/timezone changes. It requests an inexact, doze-aware
-alarm only for the next boundary, so a transition may occur a few seconds late and no exact-alarm
-permission is required. Calendar-based boundary construction naturally follows daylight-saving days
+alarm only for the next boundary, so a transition may occur after its scheduled minute and no exact-alarm
+permission is required. The pending boundary is persisted until evaluation, ensuring a delayed one-time
+transition is applied once and then advanced rather than missed or replayed after a later app start.
+Calendar-based boundary construction naturally follows daylight-saving days
 that are shorter or longer than 24 hours. Profile changes use `ACTION_UPDATE`,
 so the service immediately rebuilds the protected package routing while fail-closed remains authoritative.
 

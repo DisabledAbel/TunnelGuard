@@ -127,6 +127,19 @@ class ProfileAutomationTest {
         assertFalse(ScheduleRules.matches(rule, at(Calendar.MONDAY, 18, 1)))
     }
 
+    @Test fun persistedSingleTimeBoundaryMatchesAfterInexactAlarmDelay() {
+        val rule = schedule(18 * 60)
+        val zone = TimeZone.getTimeZone("UTC")
+        val boundary = Calendar.getInstance(zone).apply {
+            set(2024, Calendar.JANUARY, 1, 18, 0, 0) // Monday
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val late = ProfileTimeStateCollector.collect(boundary + 7 * 60_000L, zone)
+        assertFalse(ScheduleRules.matches(rule, late))
+        assertTrue(ScheduleRules.matches(rule, late, boundary))
+        assertFalse(ScheduleRules.matches(schedule(19 * 60), late, boundary))
+    }
+
     @Test fun weekdayWeekendAndCustomDaysMatch() {
         assertTrue(ScheduleRules.matches(schedule(8 * 60, 9 * 60, ScheduleRules.weekdays), at(Calendar.MONDAY, 8)))
         assertFalse(ScheduleRules.matches(schedule(8 * 60, 9 * 60, ScheduleRules.weekdays), at(Calendar.SUNDAY, 8)))
@@ -184,6 +197,20 @@ class ProfileAutomationTest {
         assertEquals(Calendar.MARCH, result.get(Calendar.MONTH))
         assertEquals(10, result.get(Calendar.DAY_OF_MONTH))
         assertTrue(next > now.timeInMillis)
+    }
+
+    @Test fun nextBoundaryIncludesEndOfOvernightRuleStartedYesterday() {
+        val zone = TimeZone.getTimeZone("UTC")
+        val now = Calendar.getInstance(zone).apply {
+            set(2024, Calendar.JANUARY, 2, 2, 0, 0) // Tuesday
+            set(Calendar.MILLISECOND, 0)
+        }
+        val mondayNight = schedule(22 * 60, 6 * 60, setOf(Calendar.MONDAY))
+        val next = Calendar.getInstance(zone).apply {
+            timeInMillis = ProfileScheduleManager.nextBoundary(listOf(mondayNight), now.timeInMillis, zone)!!
+        }
+        assertEquals(Calendar.TUESDAY, next.get(Calendar.DAY_OF_WEEK))
+        assertEquals(6, next.get(Calendar.HOUR_OF_DAY))
     }
 
     private fun wifi(ssid: String) = ProfileNetworkState(true, false, false, WifiIdentityStatus.KNOWN, ssid)
