@@ -31,6 +31,52 @@ class TunnelGuardConfigRobolectricTest {
     }
 
     @Test
+    fun testProtectedAppsSelection() {
+        // Initially "streaming" profile is selected by default, which is pre-populated with default streaming apps.
+        // Let's select "custom" profile for clean empty selection testing.
+        config.setSelectedProfileId("custom")
+        assertTrue(config.getProtectedApps().isEmpty())
+
+        // Protect an app
+        config.setAppProtected("com.tivimate.app", true)
+        assertTrue(config.isAppProtected("com.tivimate.app"))
+        assertEquals(1, config.getProtectedApps().size)
+        assertTrue(config.getProtectedApps().contains("com.tivimate.app"))
+
+        // Add another
+        config.setAppProtected("org.courville.nova", true)
+        assertEquals(2, config.getProtectedApps().size)
+        assertTrue(config.getProtectedApps().contains("org.courville.nova"))
+
+        // Unprotect first
+        config.setAppProtected("com.tivimate.app", false)
+        assertFalse(config.isAppProtected("com.tivimate.app"))
+        assertEquals(1, config.getProtectedApps().size)
+    }
+
+    @Test
+    fun removingProtectionClearsOnlyThatAppsTemporaryOverride() {
+        config.setSelectedProfileId("custom")
+        val removedPackage = "com.tivimate.app"
+        val retainedPackage = "org.courville.nova"
+        config.setAppProtected(removedPackage, true)
+        config.setAppProtected(retainedPackage, true)
+        TemporaryOverrideManager.startTimed(context, removedPackage, 5)
+        TemporaryOverrideManager.startTimed(context, retainedPackage, 15)
+        assertNotNull(TemporaryOverrideManager.getActiveOverride(context, removedPackage, false))
+
+        config.setAppProtected(removedPackage, false)
+
+        assertEquals(setOf(retainedPackage), config.getProtectedApps())
+        assertNull(TemporaryOverrideManager.getActiveOverride(context, removedPackage, false))
+        assertNotNull(TemporaryOverrideManager.getActiveOverride(context, retainedPackage, false))
+        assertEquals(listOf(retainedPackage), TemporaryOverrideManager.getStoredOverrides(context).map { it.packageName })
+
+        config.setAppProtected(removedPackage, true)
+        assertEquals(setOf(removedPackage), config.getVpnRequiredProtectedApps())
+    }
+
+    @Test
     fun testUsageStatsPermissionCheckQAllowed() {
         val spyContext = spy(context)
         val mockAppOpsManager = mock(AppOpsManager::class.java)

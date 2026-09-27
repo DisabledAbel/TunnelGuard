@@ -138,19 +138,22 @@ object TemporaryOverrideManager {
 
     fun startTimed(context: Context, packageName: String, minutes: Int, source: String = "Manage protected apps") {
         require(minutes in durationsMinutes)
-        initialize(context).engine!!.startTimed(packageName, minutes * 60_000L, source)
+        initialize(context)
+        engine!!.startTimed(packageName, minutes * 60_000L, source)
         TunnelGuardConfig(context).addLog("Temporary override started: $packageName for $minutes minutes")
         persistAndNotify(context)
     }
 
     fun startUntilAppCloses(context: Context, packageName: String, source: String = "Manage protected apps") {
-        initialize(context).engine!!.startUntilClosed(packageName, source)
+        initialize(context)
+        engine!!.startUntilClosed(packageName, source)
         TunnelGuardConfig(context).addLog("Temporary override started: $packageName until app closes")
         persistAndNotify(context)
     }
 
     fun cancel(context: Context, packageName: String, reason: String = "cancelled") {
-        if (initialize(context).engine!!.cancel(packageName)) {
+        initialize(context)
+        if (engine!!.cancel(packageName)) {
             TunnelGuardConfig(context).addLog("Temporary override $reason: $packageName")
             persistAndNotify(context)
         }
@@ -174,7 +177,8 @@ object TemporaryOverrideManager {
     }
 
     fun onForegroundChanged(context: Context, foregroundPackage: String?) {
-        val activeEngine = initialize(context).engine!!
+        initialize(context)
+        val activeEngine = engine!!
         val previousDeadline = foregroundPackage?.let { packageName ->
             activeEngine.allStored().find { it.packageName == packageName }?.expiresElapsedTimeMs
         }
