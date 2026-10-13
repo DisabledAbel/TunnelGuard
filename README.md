@@ -4,7 +4,15 @@
 
 With TunnelGuard, users can select specific applications (such as TiviMate, media players, or custom apps) that must *only* access the internet when a VPN connection is active. If the VPN path is disconnected or becomes unavailable, TunnelGuard instantly blocks those protected applications from accessing the internet, preventing any normal, unencrypted connection leaks. Other unprotected applications (such as YouTube or Netflix) can continue to access the internet normally.
 
-[Requirements](#supported-android-versions) · [How It Works](#how-protection-works) · [Features](#features) · [VPN Providers](#vpn-provider-integration) · [Technical Details](#technical-details) · [Limitations](#known-limitations) · [License](#license)
+[Download](#download) · [Requirements](#supported-android-versions) · [How It Works](#how-protection-works) · [Features](#features) · [VPN Providers](#vpn-provider-integration) · [Technical Details](#technical-details) · [Limitations](#known-limitations) · [License](#license)
+
+## Download
+
+Enter this code in the **Downloader** app on your Android TV or Google TV:
+
+```text
+2993008
+```
 
 ## Supported Android Versions
 
